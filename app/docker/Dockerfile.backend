@@ -1,0 +1,16 @@
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY im-common/pom.xml im-common/
+COPY im-server/pom.xml im-server/
+RUN mvn dependency:go-offline -B
+COPY im-common/src im-common/src/
+COPY im-server/src im-server/src/
+RUN mvn package -DskipTests -B
+
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /app/im-server/target/*.jar app.jar
+RUN mkdir -p /app/upload
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
