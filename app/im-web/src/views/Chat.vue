@@ -68,6 +68,7 @@
               <div class="conv-avatar">
                 <img v-if="conv.avatar" :src="conv.avatar" alt="" />
                 <span v-else>{{ (conv.name || '群')[0] }}</span>
+                <span v-if="onlineUsers[conv.members?.[0]?.userId]" class="online-dot"></span>
               </div>
               <div class="conv-info">
                 <div class="conv-top">
@@ -96,6 +97,7 @@
             <div class="conv-avatar">
               <img v-if="conv.avatar" :src="conv.avatar" alt="" />
               <span v-else>{{ (conv.name || '群')[0] }}</span>
+              <span v-if="onlineUsers[conv.members?.[0]?.userId]" class="online-dot"></span>
             </div>
             <div class="conv-info">
               <div class="conv-top">
@@ -417,6 +419,7 @@ const chatStore = useChatStore()
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
+const onlineUsers = ref<Record<string, boolean>>({})
 
 let wsManager: WebSocketManager | null = null
 
@@ -677,7 +680,16 @@ function handleWsMessage(msg: WsMessage) {
       break
     }
     case 'ONLINE_STATUS': {
-      // Handle online status updates
+      const data = msg.data
+      if (data && typeof data === 'object') {
+        if (data.userId !== undefined) {
+          onlineUsers.value[String(data.userId)] = !!data.online
+        } else {
+          for (const [uid, online] of Object.entries(data)) {
+            onlineUsers.value[uid] = !!online
+          }
+        }
+      }
       break
     }
     case 'PONG': {
@@ -1070,12 +1082,24 @@ watch(
   color: #fff;
   font-size: 16px;
   overflow: hidden;
+  position: relative;
 }
 
 .conv-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.online-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: #4caf50;
+  border: 2px solid #fff;
+  border-radius: 50%;
 }
 
 .conv-info {

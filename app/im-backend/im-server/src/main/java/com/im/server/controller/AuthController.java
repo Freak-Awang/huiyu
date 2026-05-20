@@ -30,4 +30,10 @@ public class AuthController {
         authService.logout(token);
         return Result.ok();
     }
+
+    @PostMapping("/refresh")
+    public Result<LoginResponse> refresh(@RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        return Result.success(authService.refresh(token));
+    }
 }

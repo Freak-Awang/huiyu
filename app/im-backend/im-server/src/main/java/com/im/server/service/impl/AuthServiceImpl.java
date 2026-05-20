@@ -65,4 +65,27 @@ public class AuthServiceImpl implements AuthService {
             TimeUnit.MILLISECONDS
         );
     }
+
+    @Override
+    public LoginResponse refresh(String token) {
+        if (!jwtUtil.validateToken(token)) {
+            throw new BusinessException(401, "Token invalid or expired");
+        }
+        if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + token))) {
+            throw new BusinessException(401, "Token has been revoked");
+        }
+        Long userId = jwtUtil.getUserIdFromToken(token);
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || user.getStatus() != 1) {
+            throw new BusinessException(401, "User not found or disabled");
+        }
+        String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        LoginResponse response = new LoginResponse();
+        response.setToken(newToken);
+        response.setUserId(user.getId());
+        response.setNickname(user.getNickname());
+        response.setAvatar(user.getAvatar());
+        response.setRole(user.getRole());
+        return response;
+    }
 }

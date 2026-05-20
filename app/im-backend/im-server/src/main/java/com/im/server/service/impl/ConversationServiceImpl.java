@@ -187,6 +187,10 @@ public class ConversationServiceImpl implements ConversationService {
             throw new RuntimeException("Operator is not a member of this conversation");
         }
 
+        if (!"owner".equals(operatorMember.getRole()) && !"admin".equals(operatorMember.getRole())) {
+            throw new RuntimeException("Only the owner or admin can add members");
+        }
+
         for (Long userId : userIds) {
             ImConversationMember existing = conversationMemberMapper.selectOne(
                     new LambdaQueryWrapper<ImConversationMember>()
