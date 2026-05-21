@@ -27,17 +27,18 @@ export const useAuthStore = defineStore('auth', () => {
     const data = res.data
     token.value = data.token
     localStorage.setItem('token', data.token)
-    if (data.user) {
+    const u = data.user || data
+    if (u.userId || u.id) {
       user.value = {
-        userId: data.user.userId || data.user.id,
-        username: data.user.username,
-        nickname: data.user.nickname,
-        avatar: data.user.avatar || '',
-        role: data.user.role || '',
-        email: data.user.email,
-        phone: data.user.phone,
-        deptId: data.user.deptId,
-        deptName: data.user.deptName,
+        userId: String(u.userId || u.id),
+        username: u.username || username,
+        nickname: u.nickname || '',
+        avatar: u.avatar || '',
+        role: u.role || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        deptId: u.deptId ? String(u.deptId) : '',
+        deptName: u.deptName || '',
       }
     }
   }
@@ -59,17 +60,18 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = savedToken
     try {
       const res = await getProfile()
-      const data = res.data
+      const body = res.data
+      const data = body.data || body
       user.value = {
-        userId: data.userId,
-        username: data.username,
-        nickname: data.nickname,
+        userId: String(data.userId || data.id || ''),
+        username: data.username || '',
+        nickname: data.nickname || '',
         avatar: data.avatar || '',
         role: data.role || '',
-        email: data.email,
-        phone: data.phone,
-        deptId: data.deptId,
-        deptName: data.deptName,
+        email: data.email || '',
+        phone: data.phone || '',
+        deptId: data.deptId ? String(data.deptId) : '',
+        deptName: data.deptName || '',
       }
     } catch {
       token.value = ''

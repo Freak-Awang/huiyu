@@ -17,9 +17,19 @@ export const useAuthStore = defineStore('auth', () => {
         const res = await loginApi({ username, password })
         const data = res.data
         token.value = data.token
-        user.value = data.user
+        user.value = data.user || {
+            id: data.userId,
+            username: username,
+            nickname: data.nickname,
+            email: '',
+            phone: '',
+            avatar: data.avatar || '',
+            role: data.role,
+            deptId: data.deptId,
+            status: 1,
+        }
         localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('user', JSON.stringify(user.value))
     }
 
     async function logout() {

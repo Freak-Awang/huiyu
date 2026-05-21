@@ -17,7 +17,15 @@ client.interceptors.request.use((config) => {
 })
 
 client.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const body = response.data
+        if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+            if (body.code === 200) {
+                response.data = body.data
+            }
+        }
+        return response
+    },
     (error) => {
         if (error.response) {
             const { status, data } = error.response
