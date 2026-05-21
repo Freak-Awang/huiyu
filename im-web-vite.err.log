@@ -6,3 +6,16 @@
 [2m17:10:58[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
 [2m17:10:58[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
 [2m17:11:06[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:18:58[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:18:58[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:19:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:20:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:20:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:20:52[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:22:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:22:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:22:38[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m17:26:38[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mWebSocket error: {"isTrusted":true}
+[2m17:30:41[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mWebSocket error: {"isTrusted":true}
+[2m17:34:45[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mWebSocket error: {"isTrusted":true}
+[2m17:38:49[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mWebSocket error: {"isTrusted":true}

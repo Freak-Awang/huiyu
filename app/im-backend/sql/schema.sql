@@ -3,6 +3,8 @@
 -- MySQL 8.0
 -- ============================================
 
+SET NAMES utf8mb4;
+
 -- 用户表
 CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
