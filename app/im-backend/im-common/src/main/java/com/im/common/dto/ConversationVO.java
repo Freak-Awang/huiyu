@@ -26,6 +26,8 @@ public class ConversationVO {
 
     private Integer isPinned;
 
+    private Integer isMuted;
+
     private Integer memberCount;
 
     private List<MemberVO> members;

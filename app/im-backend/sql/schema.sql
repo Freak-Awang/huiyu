@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS im_conversation_member (
     user_id BIGINT NOT NULL COMMENT '用户ID',
     role VARCHAR(32) NOT NULL DEFAULT 'member' COMMENT '角色: owner/admin/member',
     is_pinned TINYINT NOT NULL DEFAULT 0 COMMENT '是否置顶: 0=否, 1=是',
+    is_muted TINYINT NOT NULL DEFAULT 0 COMMENT '是否免打扰: 0=否, 1=是',
     last_read_time DATETIME DEFAULT NULL COMMENT '最后已读时间',
     join_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
     UNIQUE KEY uk_conv_user (conversation_id, user_id),

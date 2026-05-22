@@ -13,11 +13,18 @@ export interface Message {
   clientMsgId?: string
   createdAt: string
   status?: string
+  replyTo?: MessageReply | null
 }
 
 export interface MessageMention {
   userId: string
   nickname: string
+}
+
+export interface MessageReply {
+  messageId: string
+  senderName: string
+  text: string
 }
 
 export interface MessagePage {
@@ -73,6 +80,7 @@ export function normalizeMessage(raw: RawMessage): Message {
     clientMsgId: raw.clientMsgId || undefined,
     createdAt: timestamp,
     status: raw.status || undefined,
+    replyTo: parsedText.replyTo,
   }
 }
 
@@ -88,16 +96,24 @@ function parseStickerDisplayName(content: string): string {
   return '表情加载失败'
 }
 
-export function buildTextMessageContent(text: string, mentions: MessageMention[] = []): string {
+export function buildTextMessageContent(
+  text: string,
+  mentions: MessageMention[] = [],
+  replyTo?: MessageReply | null,
+): string {
   return JSON.stringify({
     text,
     mentions: normalizeMentions(mentions),
+    replyTo: replyTo || null,
   })
 }
 
-function parseTextContent(messageType: string, content: string): { text: string; mentions: MessageMention[] } {
+function parseTextContent(
+  messageType: string,
+  content: string,
+): { text: string; mentions: MessageMention[]; replyTo: MessageReply | null } {
   if (messageType !== 'TEXT') {
-    return { text: content, mentions: [] }
+    return { text: content, mentions: [], replyTo: null }
   }
   try {
     const parsed = JSON.parse(content)
@@ -105,12 +121,25 @@ function parseTextContent(messageType: string, content: string): { text: string;
       return {
         text: parsed.text,
         mentions: normalizeMentions(parsed.mentions),
+        replyTo: normalizeReply(parsed.replyTo),
       }
     }
   } catch {
     // Old text messages were stored as plain strings.
   }
-  return { text: content, mentions: [] }
+  return { text: content, mentions: [], replyTo: null }
+}
+
+function normalizeReply(raw: unknown): MessageReply | null {
+  if (!raw || typeof raw !== 'object') return null
+  const reply = raw as { messageId?: string | number; senderName?: string; text?: string }
+  const messageId = String(reply.messageId ?? '')
+  if (!messageId) return null
+  return {
+    messageId,
+    senderName: reply.senderName || '',
+    text: reply.text || '',
+  }
 }
 
 function normalizeMentions(raw: unknown): MessageMention[] {
@@ -149,4 +178,29 @@ export function getMessages(convId: string, beforeMessageId?: string, pageSize?:
 
 export function markRead(convId: string) {
   return http.post(`/api/messages/read/${convId}`)
+}
+
+export function recallMessage(messageId: string) {
+  return http.post<RawMessage>(`/api/messages/recall/${messageId}`).then((res) => ({
+    ...res,
+    data: normalizeMessage(res.data),
+  }))
+}
+
+export function searchMessages(convId: string, keyword: string, pageSize = 20) {
+  return http.get<RawMessagePage>(`/api/messages/${convId}/search`, {
+    params: { keyword, pageSize },
+  }).then((res) => {
+    const page = res.data || {}
+    const records = page.records || page.data || []
+    return {
+      ...res,
+      data: {
+        records: records.map(normalizeMessage),
+        total: page.total || 0,
+        page: page.page || 1,
+        pageSize: page.pageSize || pageSize,
+      } satisfies MessagePage,
+    }
+  })
 }

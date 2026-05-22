@@ -13,6 +13,7 @@ export interface Conversation {
   updatedAt: string
   unreadCount: number
   mentionUnreadCount: number
+  muted: boolean
 }
 
 export interface ConversationMember {
@@ -42,6 +43,8 @@ export interface RawConversation {
   unreadCount?: number | null
   mentionUnreadCount?: number | null
   isPinned?: number | boolean | null
+  isMuted?: number | boolean | null
+  muted?: boolean | null
   pinned?: boolean | null
   memberCount?: number | null
   members?: Array<ConversationMember & { userId: number | string }>
@@ -91,6 +94,7 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     updatedAt: raw.updatedAt || raw.updateTime || lastMessageTime || '',
     unreadCount: raw.unreadCount || 0,
     mentionUnreadCount: raw.mentionUnreadCount || 0,
+    muted: Boolean(raw.muted ?? raw.isMuted),
   }
 }
 
@@ -125,7 +129,9 @@ export function createConversation(data: CreateConversationParams) {
 }
 
 export function addMembers(convId: string, userIds: string[]) {
-  return http.post(`/api/conversations/${convId}/members`, { userIds })
+  return http.post(`/api/conversations/${convId}/members`, {
+    userIds: userIds.map((id) => Number(id)),
+  })
 }
 
 export function removeMember(convId: string, userId: string) {
@@ -134,4 +140,8 @@ export function removeMember(convId: string, userId: string) {
 
 export function pinConversation(convId: string, pinned: boolean) {
   return http.put(`/api/conversations/${convId}/pin`, null, { params: { pinned } })
+}
+
+export function muteConversation(convId: string, muted: boolean) {
+  return http.put(`/api/conversations/${convId}/mute`, null, { params: { muted } })
 }

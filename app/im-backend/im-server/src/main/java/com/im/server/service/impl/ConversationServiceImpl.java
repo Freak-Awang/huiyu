@@ -132,6 +132,7 @@ public class ConversationServiceImpl implements ConversationService {
             member1.setRole("member");
             member1.setJoinTime(LocalDateTime.now());
             member1.setIsPinned(0);
+            member1.setIsMuted(0);
             conversationMemberMapper.insert(member1);
 
             ImConversationMember member2 = new ImConversationMember();
@@ -140,6 +141,7 @@ public class ConversationServiceImpl implements ConversationService {
             member2.setRole("member");
             member2.setJoinTime(LocalDateTime.now());
             member2.setIsPinned(0);
+            member2.setIsMuted(0);
             conversationMemberMapper.insert(member2);
 
             return buildConversationVO(conversation, userId);
@@ -175,6 +177,7 @@ public class ConversationServiceImpl implements ConversationService {
             ownerMember.setRole("owner");
             ownerMember.setJoinTime(LocalDateTime.now());
             ownerMember.setIsPinned(0);
+            ownerMember.setIsMuted(0);
             conversationMemberMapper.insert(ownerMember);
 
             for (Long memberId : memberIds) {
@@ -188,6 +191,7 @@ public class ConversationServiceImpl implements ConversationService {
                 member.setRole("member");
                 member.setJoinTime(LocalDateTime.now());
                 member.setIsPinned(0);
+                member.setIsMuted(0);
                 conversationMemberMapper.insert(member);
             }
 
@@ -205,6 +209,12 @@ public class ConversationServiceImpl implements ConversationService {
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw new RuntimeException("Conversation not found");
+        }
+        if (conversation.getType() == null || conversation.getType() != 2) {
+            throw new RuntimeException("Only group conversations can add members");
+        }
+        if (userIds == null || userIds.isEmpty()) {
+            throw new RuntimeException("User ids are required");
         }
 
         ImConversationMember operatorMember = conversationMemberMapper.selectOne(
@@ -234,8 +244,10 @@ public class ConversationServiceImpl implements ConversationService {
             member.setRole("member");
             member.setJoinTime(LocalDateTime.now());
             member.setIsPinned(0);
+            member.setIsMuted(0);
             conversationMemberMapper.insert(member);
         }
+        notifyConversationUpdated(conversationId);
     }
 
     @Override
@@ -277,6 +289,8 @@ public class ConversationServiceImpl implements ConversationService {
                             .eq(ImConversationMember::getConversationId, conversationId));
             if (remainingCount == null || remainingCount == 0) {
                 conversationMapper.deleteById(conversationId);
+            } else {
+                notifyConversationUpdated(conversationId);
             }
         }
     }
@@ -292,6 +306,20 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         member.setIsPinned(pinned ? 1 : 0);
+        conversationMemberMapper.updateById(member);
+    }
+
+    @Override
+    public void muteConversation(Long conversationId, Long userId, boolean muted) {
+        ImConversationMember member = conversationMemberMapper.selectOne(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId)
+                        .eq(ImConversationMember::getUserId, userId));
+        if (member == null) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
+        member.setIsMuted(muted ? 1 : 0);
         conversationMemberMapper.updateById(member);
     }
 
@@ -355,6 +383,30 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    private void notifyConversationUpdated(Long conversationId) {
+        ImConversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            return;
+        }
+        List<ImConversationMember> members = conversationMemberMapper.selectList(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId));
+        for (ImConversationMember member : members) {
+            if (!sessionManager.isOnline(member.getUserId())) {
+                continue;
+            }
+            try {
+                ObjectNode message = objectMapper.createObjectNode();
+                message.put("cmd", "CONVERSATION_UPDATED");
+                message.set("data", objectMapper.valueToTree(buildConversationVO(conversation, member.getUserId())));
+                sessionManager.sendToUser(member.getUserId(), objectMapper.writeValueAsString(message));
+            } catch (Exception e) {
+                log.error("Failed to push conversation updated event: conversationId={}, userId={}",
+                        conversationId, member.getUserId(), e);
+            }
+        }
+    }
+
     private ConversationVO buildConversationVO(ImConversation conversation, Long userId) {
         ConversationVO vo = new ConversationVO();
         vo.setConversationId(conversation.getId());
@@ -371,6 +423,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, conversation.getId())
                         .eq(ImConversationMember::getUserId, userId));
         vo.setIsPinned(selfMember != null ? selfMember.getIsPinned() : 0);
+        vo.setIsMuted(selfMember != null && selfMember.getIsMuted() != null ? selfMember.getIsMuted() : 0);
         if (selfMember != null && conversation.getType() != null && conversation.getType() == 2) {
             LocalDateTime since = selfMember.getLastReadTime() != null
                     ? selfMember.getLastReadTime()

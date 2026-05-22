@@ -16,5 +16,7 @@ public interface ConversationService {
 
     void pinConversation(Long conversationId, Long userId, boolean pinned);
 
+    void muteConversation(Long conversationId, Long userId, boolean muted);
+
     ConversationVO getById(Long id, Long userId);
 }

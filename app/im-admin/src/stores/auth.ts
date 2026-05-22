@@ -3,9 +3,11 @@ import { ref, computed } from 'vue'
 import { login as loginApi, logout as logoutApi, type LoginResult } from '../api/auth'
 import router from '../router'
 
+type AdminUser = NonNullable<LoginResult['user']>
+
 export const useAuthStore = defineStore('auth', () => {
     const token = ref<string>(localStorage.getItem('token') || '')
-    const user = ref<LoginResult['user'] | null>(
+    const user = ref<AdminUser | null>(
         JSON.parse(localStorage.getItem('user') || 'null'),
     )
 
@@ -18,14 +20,14 @@ export const useAuthStore = defineStore('auth', () => {
         const data = res.data
         token.value = data.token
         user.value = data.user || {
-            id: data.userId,
+            id: data.userId || 0,
             username: username,
-            nickname: data.nickname,
+            nickname: data.nickname || username,
             email: '',
             phone: '',
             avatar: data.avatar || '',
-            role: data.role,
-            deptId: data.deptId,
+            role: data.role || '',
+            deptId: data.deptId || 0,
             status: 1,
         }
         localStorage.setItem('token', data.token)

@@ -7,7 +7,12 @@ export interface LoginParams {
 
 export interface LoginResult {
     token: string
-    user: {
+    userId?: number
+    nickname?: string
+    avatar?: string
+    role?: string
+    deptId?: number
+    user?: {
         id: number
         username: string
         nickname: string

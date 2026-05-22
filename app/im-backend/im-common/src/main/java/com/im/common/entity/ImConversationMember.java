@@ -16,6 +16,7 @@ public class ImConversationMember {
     private Long userId;
     private String role;
     private Integer isPinned;
+    private Integer isMuted;
     private LocalDateTime lastReadTime;
     private LocalDateTime joinTime;
 }

@@ -1,0 +1,45 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            app/im-web/package-lock.json
+            app/im-admin/package-lock.json
+
+      - name: Backend tests
+        working-directory: app/im-backend
+        run: mvn test
+
+      - name: Install IM web dependencies
+        working-directory: app/im-web
+        run: npm ci
+
+      - name: Build IM web
+        working-directory: app/im-web
+        run: npm run build
+
+      - name: Install admin dependencies
+        working-directory: app/im-admin
+        run: npm ci
+
+      - name: Build admin
+        working-directory: app/im-admin
+        run: npm run build

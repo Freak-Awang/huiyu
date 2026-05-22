@@ -104,11 +104,10 @@ export const useChatStore = defineStore('chat', () => {
   function addMessage(msg: Message) {
     const convMessagesRaw = messages.value.get(msg.conversationId)
     const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
-    const exists = msg.clientMsgId
-      ? convMessages.find((m) => m.clientMsgId === msg.clientMsgId)
-      : msg.messageId
-        ? convMessages.find((m) => m.messageId === msg.messageId)
-        : undefined
+    const exists = convMessages.find((m) =>
+      (msg.clientMsgId && m.clientMsgId === msg.clientMsgId) ||
+      (msg.messageId && m.messageId === msg.messageId)
+    )
     if (exists) {
       Object.assign(exists, msg)
       return
@@ -174,7 +173,17 @@ export const useChatStore = defineStore('chat', () => {
     for (const [, convMessages] of messages.value) {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
       if (msg) {
-        msg.messageId = serverMsgId
+        msg.messageId = String(serverMsgId || msg.messageId || '')
+        msg.status = status
+        break
+      }
+    }
+  }
+
+  function setMessageStatus(clientMsgId: string, status: string) {
+    for (const [, convMessages] of messages.value) {
+      const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
+      if (msg) {
         msg.status = status
         break
       }
@@ -202,5 +211,6 @@ export const useChatStore = defineStore('chat', () => {
     getUnreadCount,
     getMentionUnreadCount,
     updateMessageStatus,
+    setMessageStatus,
   }
 })

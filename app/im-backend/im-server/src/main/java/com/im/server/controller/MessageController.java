@@ -36,6 +36,21 @@ public class MessageController {
         return Result.success(messageService.getMessages(userId, conversationId, beforeMessageId, pageSize));
     }
 
+    @GetMapping("/{conversationId}/search")
+    public Result<com.im.common.result.PageResult<MessageVO>> searchMessages(
+            @PathVariable Long conversationId,
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        Long userId = getCurrentUserId();
+        return Result.success(messageService.searchMessages(userId, conversationId, keyword, pageSize));
+    }
+
+    @PostMapping("/recall/{messageId}")
+    public Result<MessageVO> recallMessage(@PathVariable Long messageId) {
+        Long userId = getCurrentUserId();
+        return Result.success(messageService.recallMessage(userId, messageId));
+    }
+
     @PostMapping("/read/{conversationId}")
     public Result<Void> markRead(@PathVariable Long conversationId) {
         Long userId = getCurrentUserId();

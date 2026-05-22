@@ -9,5 +9,9 @@ public interface MessageService {
 
     PageResult<MessageVO> getMessages(Long userId, Long conversationId, Long beforeMessageId, int pageSize);
 
+    PageResult<MessageVO> searchMessages(Long userId, Long conversationId, String keyword, int pageSize);
+
     ImMessage sendMessage(Long senderId, SendMessageRequest request);
+
+    MessageVO recallMessage(Long userId, Long messageId);
 }

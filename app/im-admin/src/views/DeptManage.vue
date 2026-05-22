@@ -14,7 +14,7 @@
         default-expand-all
         :expand-on-click-node="true"
       >
-        <template #default="{ node, data }">
+        <template #default="{ data }">
           <div class="tree-node">
             <el-icon class="tree-node-icon"><Folder /></el-icon>
             <span class="tree-node-label">{{ data.name }}</span>

@@ -237,12 +237,43 @@
             <span v-else class="chat-header-meta">私聊</span>
           </div>
           <div class="chat-header-actions">
+            <input
+              v-model="chatSearchKeyword"
+              class="chat-search-input"
+              placeholder="搜索聊天记录"
+              @keyup.enter="runChatSearch"
+            />
+            <button class="action-btn" title="搜索" @click="runChatSearch">🔎</button>
             <button
               class="action-btn"
               :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
               @click="togglePin"
             >📌</button>
+            <button
+              class="action-btn"
+              :title="chatStore.currentConversation.muted ? '取消免打扰' : '免打扰'"
+              @click="toggleMute"
+            >{{ chatStore.currentConversation.muted ? '🔕' : '🔔' }}</button>
           </div>
+        </div>
+
+        <div v-if="showSearchResults" class="chat-search-results">
+          <div class="search-results-header">
+            <span>搜索结果</span>
+            <button class="dialog-close" @click="showSearchResults = false">✕</button>
+          </div>
+          <button
+            v-for="result in chatSearchResults"
+            :key="result.messageId"
+            type="button"
+            class="search-result-row"
+            @click="showSearchResults = false"
+          >
+            <span>{{ result.senderName }}</span>
+            <span>{{ result.displayContent || result.content }}</span>
+            <span>{{ formatTime(result.createdAt) }}</span>
+          </button>
+          <div v-if="chatSearchResults.length === 0" class="empty-hint">无搜索结果</div>
         </div>
 
         <div class="message-area" ref="messageAreaRef" @scroll="onMessageScroll">
@@ -260,8 +291,14 @@
               <div class="message-body">
                 <div class="message-sender">{{ msg.senderName }}</div>
                 <div class="message-content">
-                  <template v-if="msg.messageType === 'TEXT'">
+                  <template v-if="msg.status === 'RECALLED'">
+                    <div class="text-bubble recalled-bubble">消息已撤回</div>
+                  </template>
+                  <template v-else-if="msg.messageType === 'TEXT'">
                     <div class="text-bubble">
+                      <div v-if="msg.replyTo" class="reply-preview">
+                        {{ msg.replyTo.senderName }}：{{ msg.replyTo.text }}
+                      </div>
                       <span
                         v-for="(segment, index) in renderTextSegments(msg)"
                         :key="index"
@@ -297,13 +334,44 @@
                     </div>
                   </template>
                 </div>
-                <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
+                <div class="message-time">
+                  {{ formatTime(msg.createdAt) }}
+                  <span v-if="msg.status === 'SENDING'"> · 发送中</span>
+                  <button
+                    v-if="msg.status !== 'RECALLED'"
+                    type="button"
+                    class="message-action-link"
+                    @click="startReply(msg)"
+                  >
+                    回复
+                  </button>
+                  <button
+                    v-if="canRecallMessage(msg)"
+                    type="button"
+                    class="message-action-link"
+                    @click="recallCurrentMessage(msg)"
+                  >
+                    撤回
+                  </button>
+                  <button
+                    v-if="msg.status === 'FAILED'"
+                    type="button"
+                    class="message-retry"
+                    @click="retryMessage(msg)"
+                  >
+                    发送失败，重试
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <div class="input-area">
+          <div v-if="replyTarget" class="reply-target">
+            <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
+            <button type="button" @click="replyTarget = null">✕</button>
+          </div>
           <div class="input-toolbar">
             <button
               ref="emojiButtonRef"
@@ -445,6 +513,25 @@
           class="member-search"
           placeholder="搜索成员..."
         />
+        <div v-if="canManageCurrentGroup" class="member-add-box">
+          <input
+            v-model="memberAddKeyword"
+            class="member-search member-add-input"
+            placeholder="搜索并添加成员..."
+            @input="onSearchAddMember"
+          />
+          <div v-if="memberAddResults.length" class="member-add-results">
+            <button
+              v-for="user in memberAddResults"
+              :key="user.userId || user.id"
+              type="button"
+              class="member-add-result"
+              @click="addGroupMember(user)"
+            >
+              {{ user.nickname || user.username }}
+            </button>
+          </div>
+        </div>
         <div class="member-list">
           <div
             v-for="member in filteredGroupMembers"
@@ -459,6 +546,14 @@
               <span class="member-name">{{ getMemberName(member) }}</span>
               <span class="member-role">{{ formatMemberRole(member.role) }}</span>
             </div>
+            <button
+              v-if="canRemoveGroupMember(member)"
+              type="button"
+              class="member-remove-btn"
+              @click="removeGroupMember(member)"
+            >
+              {{ member.userId === authStore.currentUser?.userId ? '退出' : '移除' }}
+            </button>
           </div>
           <div v-if="filteredGroupMembers.length === 0" class="empty-hint">暂无成员</div>
         </div>
@@ -570,16 +665,22 @@ import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
 import {
+  addMembers,
   createConversation,
+  muteConversation,
   normalizeConversation,
   pinConversation,
+  removeMember,
   type ConversationMember,
 } from '../api/conversation'
 import {
   buildTextMessageContent,
   normalizeMessage,
+  recallMessage,
+  searchMessages,
   type Message,
   type MessageMention,
+  type MessageReply,
 } from '../api/message'
 import { uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
@@ -602,7 +703,6 @@ const onlineUsers = ref<Record<string, boolean>>({})
 const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
-const canSendMessage = computed(() => !!chatStore.currentConversation && wsConnected.value)
 
 // Filtered conversations
 const filteredConversations = computed(() => {
@@ -717,6 +817,7 @@ const emojiPanelRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const draftMentions = ref<MessageMention[]>([])
+const replyTarget = ref<MessageReply | null>(null)
 const showMentionPicker = ref(false)
 const mentionSearch = ref('')
 const mentionSelectedIndex = ref(0)
@@ -727,6 +828,11 @@ const recentEmojis = ref<string[]>([])
 const recentStickers = ref<Sticker[]>([])
 const showMembersDrawer = ref(false)
 const memberSearch = ref('')
+const memberAddKeyword = ref('')
+const memberAddResults = ref<any[]>([])
+const chatSearchKeyword = ref('')
+const chatSearchResults = ref<Message[]>([])
+const showSearchResults = ref(false)
 let loadingOlderMessages = false
 const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 const RECENT_STICKERS_KEY = 'im_recent_stickers'
@@ -747,6 +853,16 @@ const filteredGroupMembers = computed(() => {
   return sortedGroupMembers.value.filter((member) =>
     getMemberName(member).toLowerCase().includes(keyword)
   )
+})
+
+const currentGroupMember = computed(() => {
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  return sortedGroupMembers.value.find((member) => member.userId === currentUserId)
+})
+
+const canManageCurrentGroup = computed(() => {
+  const role = currentGroupMember.value?.role
+  return role === 'owner' || role === 'admin'
 })
 
 const mentionCandidates = computed(() => {
@@ -784,11 +900,38 @@ async function togglePin() {
   }
 }
 
+async function toggleMute() {
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  const newMuted = !conv.muted
+  try {
+    await muteConversation(conv.conversationId, newMuted)
+    conv.muted = newMuted
+  } catch {
+    // ignore
+  }
+}
+
+async function runChatSearch() {
+  const conv = chatStore.currentConversation
+  const keyword = chatSearchKeyword.value.trim()
+  if (!conv || !keyword) return
+  try {
+    const res = await searchMessages(conv.conversationId, keyword, 20)
+    chatSearchResults.value = res.data.records
+    showSearchResults.value = true
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '搜索聊天记录失败')
+  }
+}
+
 async function openMembersDrawer() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
   showMembersDrawer.value = true
   memberSearch.value = ''
+  memberAddKeyword.value = ''
+  memberAddResults.value = []
   await chatStore.refreshConversation(conv.conversationId)
 }
 
@@ -800,6 +943,70 @@ function formatMemberRole(role?: string): string {
   if (role === 'owner') return '群主'
   if (role === 'admin') return '管理员'
   return '成员'
+}
+
+function canRemoveGroupMember(member: ConversationMember): boolean {
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  if (!currentUserId) return false
+  if (member.role === 'owner') return false
+  if (member.userId === currentUserId) return true
+  return canManageCurrentGroup.value
+}
+
+let addMemberSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+function onSearchAddMember() {
+  if (addMemberSearchTimer) clearTimeout(addMemberSearchTimer)
+  addMemberSearchTimer = setTimeout(async () => {
+    const kw = memberAddKeyword.value.trim()
+    if (!kw) {
+      memberAddResults.value = []
+      return
+    }
+    try {
+      const res = await searchUsers(kw, 1, 20)
+      const existingIds = new Set(sortedGroupMembers.value.map((member) => member.userId))
+      memberAddResults.value = (res.data || []).filter(
+        (user: any) => !existingIds.has(String(user.userId || user.id))
+      )
+    } catch {
+      memberAddResults.value = []
+    }
+  }, 300)
+}
+
+async function addGroupMember(user: any) {
+  const conv = chatStore.currentConversation
+  const userId = String(user.userId || user.id || '')
+  if (!conv || !userId) return
+  try {
+    await addMembers(conv.conversationId, [userId])
+    await chatStore.refreshConversation(conv.conversationId)
+    memberAddKeyword.value = ''
+    memberAddResults.value = []
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '添加成员失败')
+  }
+}
+
+async function removeGroupMember(member: ConversationMember) {
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  const isSelf = member.userId === String(authStore.currentUser?.userId ?? '')
+  const confirmed = window.confirm(isSelf ? '确定退出该群聊吗？' : `确定移除“${getMemberName(member)}”吗？`)
+  if (!confirmed) return
+  try {
+    await removeMember(conv.conversationId, member.userId)
+    if (isSelf) {
+      showMembersDrawer.value = false
+      chatStore.currentConversation = null
+      await chatStore.fetchConversations()
+      return
+    }
+    await chatStore.refreshConversation(conv.conversationId)
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '移除成员失败')
+  }
 }
 
 function onMessageInput(event: Event) {
@@ -977,27 +1184,10 @@ function sendSticker(sticker: Sticker) {
     alert('请先选择会话')
     return
   }
-  if (!wsConnected.value || !wsManager.isConnected()) {
-    alert('WebSocket 未连接，暂时无法发送表情')
-    return
-  }
 
   const clientMsgId = generateId()
   const content = buildStickerContent(sticker)
-  const sent = wsManager.send('MESSAGE_SEND', {
-    conversationId: conv.conversationId,
-    messageType: 'STICKER',
-    content,
-    clientMsgId,
-  })
-  if (!sent) {
-    alert('表情发送失败，请稍后重试')
-    return
-  }
-
-  rememberSticker(sticker)
-  closeEmojiPanel()
-  chatStore.addMessage({
+  const localMessage: Message = {
     messageId: '',
     conversationId: conv.conversationId,
     senderId: authStore.currentUser.userId,
@@ -1009,7 +1199,12 @@ function sendSticker(sticker: Sticker) {
     mentions: [],
     clientMsgId,
     createdAt: new Date().toISOString(),
-  })
+    status: 'SENDING',
+  }
+  chatStore.addMessage(localMessage)
+  sendOutgoingMessage(localMessage)
+  rememberSticker(sticker)
+  closeEmojiPanel()
   scrollToBottom()
 }
 
@@ -1102,32 +1297,80 @@ async function onMessageScroll() {
 }
 
 // Send message
+function sendOutgoingMessage(msg: Message) {
+  if (!wsManager || !wsConnected.value || !wsManager.isConnected()) {
+    if (msg.clientMsgId) {
+      chatStore.setMessageStatus(msg.clientMsgId, 'FAILED')
+    }
+    return false
+  }
+  if (msg.clientMsgId) {
+    chatStore.setMessageStatus(msg.clientMsgId, 'SENDING')
+  }
+  const sent = wsManager.send('MESSAGE_SEND', {
+    conversationId: msg.conversationId,
+    messageType: msg.messageType,
+    content: msg.content,
+    clientMsgId: msg.clientMsgId,
+  })
+  if (!sent && msg.clientMsgId) {
+    chatStore.setMessageStatus(msg.clientMsgId, 'FAILED')
+  }
+  return sent
+}
+
+function retryMessage(msg: Message) {
+  if (!msg.clientMsgId) return
+  sendOutgoingMessage(msg)
+}
+
+function messageReplyText(msg: Message): string {
+  if (msg.status === 'RECALLED') return '消息已撤回'
+  if (msg.displayContent) return msg.displayContent
+  if (msg.messageType === 'IMAGE') return '[图片]'
+  if (msg.messageType === 'FILE') return '[文件]'
+  if (msg.messageType === 'STICKER') return '[表情]'
+  return msg.content || ''
+}
+
+function startReply(msg: Message) {
+  if (!msg.messageId || msg.status === 'RECALLED') return
+  replyTarget.value = {
+    messageId: msg.messageId,
+    senderName: msg.senderName,
+    text: messageReplyText(msg).slice(0, 80),
+  }
+  messageInputRef.value?.focus()
+}
+
+function canRecallMessage(msg: Message): boolean {
+  if (!msg.messageId || msg.status === 'RECALLED' || msg.status === 'FAILED') return false
+  if (msg.senderId !== authStore.currentUser?.userId) return false
+  const createdAt = new Date(msg.createdAt).getTime()
+  return Number.isFinite(createdAt) && Date.now() - createdAt <= 2 * 60 * 1000
+}
+
+async function recallCurrentMessage(msg: Message) {
+  if (!msg.messageId) return
+  try {
+    const res = await recallMessage(msg.messageId)
+    chatStore.addMessage(res.data)
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '撤回失败')
+  }
+}
+
 function handleSendText() {
   const text = messageText.value.trim()
   if (!text) return
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
-  if (!wsConnected.value || !wsManager.isConnected()) {
-    alert('WebSocket 未连接，暂时无法发送消息')
-    return
-  }
 
   const clientMsgId = generateId()
   const mentions = pruneDraftMentions()
-  const content = buildTextMessageContent(text, mentions)
-  const sent = wsManager.send('MESSAGE_SEND', {
-    conversationId: conv.conversationId,
-    messageType: 'TEXT',
-    content,
-    clientMsgId,
-  })
-  if (!sent) {
-    alert('消息发送失败，请稍后重试')
-    return
-  }
+  const content = buildTextMessageContent(text, mentions, replyTarget.value)
 
-  // Optimistic add
-  chatStore.addMessage({
+  const localMessage: Message = {
     messageId: '',
     conversationId: conv.conversationId,
     senderId: authStore.currentUser.userId,
@@ -1137,12 +1380,17 @@ function handleSendText() {
     content,
     displayContent: text,
     mentions,
+    replyTo: replyTarget.value,
     clientMsgId,
     createdAt: new Date().toISOString(),
-  })
+    status: 'SENDING',
+  }
+  chatStore.addMessage(localMessage)
+  sendOutgoingMessage(localMessage)
 
   messageText.value = ''
   draftMentions.value = []
+  replyTarget.value = null
   closeMentionPicker()
   closeEmojiPanel()
   scrollToBottom()
@@ -1150,8 +1398,8 @@ function handleSendText() {
 
 async function onSendImage(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!canSendMessage.value) {
-    alert('WebSocket 未连接，暂时无法发送消息')
+  if (!chatStore.currentConversation || !authStore.currentUser) {
+    alert('请先选择会话')
     input.value = ''
     return
   }
@@ -1169,8 +1417,8 @@ async function onSendImage(e: Event) {
 
 async function onSendFile(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!canSendMessage.value) {
-    alert('WebSocket 未连接，暂时无法发送消息')
+  if (!chatStore.currentConversation || !authStore.currentUser) {
+    alert('请先选择会话')
     input.value = ''
     return
   }
@@ -1194,24 +1442,9 @@ async function onSendFile(e: Event) {
 function sendFileMessage(type: string, content: string) {
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
-  if (!wsConnected.value || !wsManager.isConnected()) {
-    alert('WebSocket 未连接，暂时无法发送消息')
-    return
-  }
 
   const clientMsgId = generateId()
-  const sent = wsManager.send('MESSAGE_SEND', {
-    conversationId: conv.conversationId,
-    messageType: type,
-    content,
-    clientMsgId,
-  })
-  if (!sent) {
-    alert('消息发送失败，请稍后重试')
-    return
-  }
-
-  chatStore.addMessage({
+  const localMessage: Message = {
     messageId: '',
     conversationId: conv.conversationId,
     senderId: authStore.currentUser.userId,
@@ -1223,7 +1456,10 @@ function sendFileMessage(type: string, content: string) {
     mentions: [],
     clientMsgId,
     createdAt: new Date().toISOString(),
-  })
+    status: 'SENDING',
+  }
+  chatStore.addMessage(localMessage)
+  sendOutgoingMessage(localMessage)
   scrollToBottom()
 }
 
@@ -1246,6 +1482,9 @@ async function handleWsMessage(msg: WsMessage) {
       if (!conv) {
         alert('收到新消息，但会话信息加载失败，请刷新后重试')
       }
+      if (conv && !conv.muted && chatStore.currentConversation?.conversationId !== receivedMessage.conversationId) {
+        showBrowserNotification(conv.name || receivedMessage.senderName, receivedMessage.displayContent || receivedMessage.content)
+      }
       // If current conv, scroll down
       if (chatStore.currentConversation?.conversationId === receivedMessage.conversationId) {
         scrollToBottom()
@@ -1253,7 +1492,14 @@ async function handleWsMessage(msg: WsMessage) {
       }
       break
     }
-    case 'CONVERSATION_CREATED': {
+    case 'MESSAGE_UPDATED': {
+      if (msg.data) {
+        chatStore.addMessage(normalizeMessage(msg.data))
+      }
+      break
+    }
+    case 'CONVERSATION_CREATED':
+    case 'CONVERSATION_UPDATED': {
       if (msg.data) {
         chatStore.upsertConversation(normalizeConversation(msg.data))
       }
@@ -1302,8 +1548,31 @@ function initWebSocket() {
   if (!token) return
   wsManager = new WebSocketManager(token, handleWsMessage, (connected) => {
     wsConnected.value = connected
+    if (connected) {
+      const currentConvId = chatStore.currentConversation?.conversationId
+      chatStore.fetchConversations()
+      if (currentConvId) {
+        chatStore.fetchMessages(currentConvId)
+        chatStore.markAsRead(currentConvId)
+      }
+    }
   })
   wsManager.connect()
+}
+
+function showBrowserNotification(title: string, body: string) {
+  if (!('Notification' in window)) return
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body })
+    return
+  }
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') {
+        new Notification(title, { body })
+      }
+    })
+  }
 }
 
 // Create dialog
@@ -1904,6 +2173,60 @@ watch(
   color: #667eea;
 }
 
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-search-input {
+  width: 150px;
+  height: 30px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.chat-search-results {
+  max-height: 220px;
+  overflow-y: auto;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+  padding: 8px 12px;
+}
+
+.search-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #333;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.search-result-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 80px 1fr 70px;
+  gap: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.search-result-row:hover {
+  background: #f5f6fb;
+}
+
 .action-btn {
   background: none;
   border: none;
@@ -2001,6 +2324,19 @@ watch(
   color: #fff;
 }
 
+.recalled-bubble {
+  color: #999;
+  font-style: italic;
+}
+
+.reply-preview {
+  border-left: 3px solid #c4c9f8;
+  color: #777;
+  font-size: 12px;
+  margin-bottom: 6px;
+  padding-left: 8px;
+}
+
 .mention {
   color: #4f63d8;
   font-weight: 600;
@@ -2074,11 +2410,49 @@ watch(
   margin-top: 2px;
 }
 
+.message-retry {
+  border: none;
+  background: none;
+  color: #d93026;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 0 0 4px;
+}
+
+.message-action-link {
+  border: none;
+  background: none;
+  color: #8c95d9;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 0 0 6px;
+}
+
 /* Input Area */
 .input-area {
   border-top: 1px solid #e0e0e0;
   background: #f0f0f0;
   padding: 8px 16px 12px;
+}
+
+.reply-target {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  color: #666;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+}
+
+.reply-target button {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
 }
 
 .input-toolbar {
@@ -2343,6 +2717,32 @@ watch(
   background: #f8f9fa;
 }
 
+.member-add-box {
+  padding: 0 12px 10px;
+}
+
+.member-add-input {
+  margin: 0;
+  width: 100%;
+}
+
+.member-add-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.member-add-result {
+  border: none;
+  border-radius: 6px;
+  background: #eef0ff;
+  color: #4f63d8;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
 .member-list {
   flex: 1;
   overflow-y: auto;
@@ -2365,6 +2765,7 @@ watch(
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
 }
 
 .member-name {
@@ -2378,6 +2779,16 @@ watch(
 .member-role {
   font-size: 11px;
   color: #999;
+}
+
+.member-remove-btn {
+  border: none;
+  border-radius: 6px;
+  background: #fff1f0;
+  color: #d93026;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 8px;
 }
 
 /* Dialog */

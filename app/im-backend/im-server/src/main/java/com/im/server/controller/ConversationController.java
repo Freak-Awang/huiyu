@@ -1,6 +1,7 @@
 package com.im.server.controller;
 
 import com.im.common.dto.ConversationVO;
+import com.im.common.dto.ConversationMembersRequest;
 import com.im.common.dto.CreateConversationRequest;
 import com.im.common.result.Result;
 import com.im.server.service.ConversationService;
@@ -39,9 +40,9 @@ public class ConversationController {
 
     @PostMapping("/{id}/members")
     public Result<Void> addMembers(@PathVariable("id") Long conversationId,
-                                    @RequestBody List<Long> userIds) {
+                                    @RequestBody ConversationMembersRequest request) {
         Long userId = getCurrentUserId();
-        conversationService.addMembers(conversationId, userIds, userId);
+        conversationService.addMembers(conversationId, request.getUserIds(), userId);
         return Result.ok();
     }
 
@@ -58,6 +59,14 @@ public class ConversationController {
                                          @RequestParam boolean pinned) {
         Long userId = getCurrentUserId();
         conversationService.pinConversation(conversationId, userId, pinned);
+        return Result.ok();
+    }
+
+    @PutMapping("/{id}/mute")
+    public Result<Void> muteConversation(@PathVariable("id") Long conversationId,
+                                         @RequestParam boolean muted) {
+        Long userId = getCurrentUserId();
+        conversationService.muteConversation(conversationId, userId, muted);
         return Result.ok();
     }
 
