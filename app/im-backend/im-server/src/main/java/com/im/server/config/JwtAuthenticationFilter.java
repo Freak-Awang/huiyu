@@ -34,8 +34,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
+        String method = request.getMethod();
+        boolean isPublicFileDownload = path.startsWith("/api/files/download/")
+                && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.startsWith("/api/auth/login")
+                || isPublicFileDownload
                 || path.startsWith("/ws/");
     }
 

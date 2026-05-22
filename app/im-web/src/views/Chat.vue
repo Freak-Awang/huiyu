@@ -271,9 +271,9 @@
                   </template>
                   <template v-else-if="msg.messageType === 'IMAGE'">
                     <img
-                      :src="msg.content"
+                      :src="getImageUrl(msg.content)"
                       class="image-bubble"
-                      @click="previewImage = msg.content"
+                      @click="previewImage = getImageUrl(msg.content)"
                       alt="图片"
                     />
                   </template>
@@ -1015,6 +1015,19 @@ function sendSticker(sticker: Sticker) {
 
 function getStickerInfo(content: string): Sticker | null {
   return parseStickerContent(content)
+}
+
+function getImageUrl(content: string): string {
+  if (!content) return ''
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object' && typeof parsed.url === 'string') {
+      return parsed.url
+    }
+  } catch {
+    // Existing IMAGE messages are stored as raw URLs.
+  }
+  return content
 }
 
 function rememberEmoji(emoji: string) {
