@@ -12,6 +12,7 @@ export interface Conversation {
   createdAt: string
   updatedAt: string
   unreadCount: number
+  mentionUnreadCount: number
 }
 
 export interface ConversationMember {
@@ -39,6 +40,7 @@ export interface RawConversation {
   lastMessage?: string | MessagePreview | null
   lastMessageTime?: string | null
   unreadCount?: number | null
+  mentionUnreadCount?: number | null
   isPinned?: number | boolean | null
   pinned?: boolean | null
   memberCount?: number | null
@@ -88,6 +90,7 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     createdAt: raw.createdAt || raw.createTime || '',
     updatedAt: raw.updatedAt || raw.updateTime || lastMessageTime || '',
     unreadCount: raw.unreadCount || 0,
+    mentionUnreadCount: raw.mentionUnreadCount || 0,
   }
 }
 

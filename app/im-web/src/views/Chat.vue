@@ -78,6 +78,10 @@
                 <div class="conv-bottom">
                   <span class="conv-preview">{{ conv.lastMessage?.content || '暂无消息' }}</span>
                   <span
+                    v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
+                    class="mention-badge"
+                  >@我</span>
+                  <span
                     v-if="chatStore.getUnreadCount(conv.conversationId)"
                     class="unread-badge"
                   >{{ chatStore.getUnreadCount(conv.conversationId) }}</span>
@@ -106,6 +110,10 @@
               </div>
               <div class="conv-bottom">
                 <span class="conv-preview">{{ conv.lastMessage?.content || '暂无消息' }}</span>
+                <span
+                  v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
+                  class="mention-badge"
+                >@我</span>
                 <span
                   v-if="chatStore.getUnreadCount(conv.conversationId)"
                   class="unread-badge"
@@ -219,9 +227,14 @@
         <div class="chat-header">
           <div class="chat-header-info">
             <span class="chat-header-name">{{ chatStore.currentConversation.name }}</span>
-            <span class="chat-header-meta">
-              {{ chatStore.currentConversation.type === 'GROUP' ? `${chatStore.currentConversation.memberCount ?? 0}人` : '私聊' }}
-            </span>
+            <button
+              v-if="chatStore.currentConversation.type === 'GROUP'"
+              class="chat-header-meta member-count-btn"
+              @click="openMembersDrawer"
+            >
+              {{ chatStore.currentConversation.memberCount ?? 0 }}人
+            </button>
+            <span v-else class="chat-header-meta">私聊</span>
           </div>
           <div class="chat-header-actions">
             <button
@@ -248,7 +261,13 @@
                 <div class="message-sender">{{ msg.senderName }}</div>
                 <div class="message-content">
                   <template v-if="msg.messageType === 'TEXT'">
-                    <div class="text-bubble">{{ msg.content }}</div>
+                    <div class="text-bubble">
+                      <span
+                        v-for="(segment, index) in renderTextSegments(msg)"
+                        :key="index"
+                        :class="{ mention: segment.mention, 'mention-self': segment.self }"
+                      >{{ segment.text }}</span>
+                    </div>
                   </template>
                   <template v-else-if="msg.messageType === 'IMAGE'">
                     <img
@@ -285,12 +304,29 @@
           </div>
           <div class="input-box">
             <textarea
+              ref="messageInputRef"
               v-model="messageText"
               class="message-input"
               placeholder="输入消息..."
               rows="3"
-              @keydown.enter.exact.prevent="handleSendText"
+              @input="onMessageInput"
+              @keydown="handleMessageKeydown"
             ></textarea>
+            <div v-if="showMentionPicker && mentionCandidates.length" class="mention-picker">
+              <div
+                v-for="(member, index) in mentionCandidates"
+                :key="member.userId"
+                class="mention-option"
+                :class="{ active: index === mentionSelectedIndex }"
+                @mousedown.prevent="selectMention(member)"
+              >
+                <div class="mention-avatar">
+                  <img v-if="member.avatar" :src="member.avatar" alt="" />
+                  <span v-else>{{ getMemberName(member)[0] }}</span>
+                </div>
+                <span>{{ getMemberName(member) }}</span>
+              </div>
+            </div>
             <button class="send-btn" @click="handleSendText">发送</button>
           </div>
         </div>
@@ -302,6 +338,35 @@
           <p>选择一个会话开始聊天</p>
         </div>
       </template>
+
+      <div v-if="showMembersDrawer" class="member-drawer">
+        <div class="member-drawer-header">
+          <span>群成员</span>
+          <button class="dialog-close" @click="showMembersDrawer = false">✕</button>
+        </div>
+        <input
+          v-model="memberSearch"
+          class="member-search"
+          placeholder="搜索成员..."
+        />
+        <div class="member-list">
+          <div
+            v-for="member in filteredGroupMembers"
+            :key="member.userId"
+            class="member-row"
+          >
+            <div class="member-avatar">
+              <img v-if="member.avatar" :src="member.avatar" alt="" />
+              <span v-else>{{ getMemberName(member)[0] }}</span>
+            </div>
+            <div class="member-info">
+              <span class="member-name">{{ getMemberName(member) }}</span>
+              <span class="member-role">{{ formatMemberRole(member.role) }}</span>
+            </div>
+          </div>
+          <div v-if="filteredGroupMembers.length === 0" class="empty-hint">暂无成员</div>
+        </div>
+      </div>
     </div>
 
     <!-- Create Conversation Dialog -->
@@ -408,8 +473,18 @@ import { useChatStore } from '../stores/chat'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
-import { createConversation, normalizeConversation, pinConversation } from '../api/conversation'
-import { normalizeMessage } from '../api/message'
+import {
+  createConversation,
+  normalizeConversation,
+  pinConversation,
+  type ConversationMember,
+} from '../api/conversation'
+import {
+  buildTextMessageContent,
+  normalizeMessage,
+  type Message,
+  type MessageMention,
+} from '../api/message'
 import { uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
 
@@ -533,13 +608,51 @@ async function createSingleChat(user: any) {
 
 // Select conversation
 const messageAreaRef = ref<HTMLElement | null>(null)
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
+const draftMentions = ref<MessageMention[]>([])
+const showMentionPicker = ref(false)
+const mentionSearch = ref('')
+const mentionSelectedIndex = ref(0)
+const showMembersDrawer = ref(false)
+const memberSearch = ref('')
 let loadingOlderMessages = false
+
+const sortedGroupMembers = computed(() => {
+  const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
+  const members = chatStore.currentConversation?.members || []
+  return [...members].sort((a, b) => {
+    const roleDiff = (roleOrder[a.role || 'member'] ?? 3) - (roleOrder[b.role || 'member'] ?? 3)
+    if (roleDiff !== 0) return roleDiff
+    return getMemberName(a).localeCompare(getMemberName(b), 'zh-CN')
+  })
+})
+
+const filteredGroupMembers = computed(() => {
+  const keyword = memberSearch.value.trim().toLowerCase()
+  if (!keyword) return sortedGroupMembers.value
+  return sortedGroupMembers.value.filter((member) =>
+    getMemberName(member).toLowerCase().includes(keyword)
+  )
+})
+
+const mentionCandidates = computed(() => {
+  const conv = chatStore.currentConversation
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  if (!conv || conv.type !== 'GROUP') return []
+  const keyword = mentionSearch.value.trim().toLowerCase()
+  return sortedGroupMembers.value
+    .filter((member) => member.userId !== currentUserId)
+    .filter((member) => !keyword || getMemberName(member).toLowerCase().includes(keyword))
+    .slice(0, 8)
+})
 
 async function handleSelectConv(conv: any) {
   try {
     await chatStore.selectConversation(conv.conversationId)
+    closeMentionPicker()
+    showMembersDrawer.value = false
   } catch (err: any) {
     alert(err?.response?.data?.message || '加载消息失败')
   }
@@ -556,6 +669,155 @@ async function togglePin() {
   } catch {
     // ignore
   }
+}
+
+async function openMembersDrawer() {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP') return
+  showMembersDrawer.value = true
+  memberSearch.value = ''
+  await chatStore.refreshConversation(conv.conversationId)
+}
+
+function getMemberName(member: ConversationMember): string {
+  return member.nickname || `用户${member.userId}`
+}
+
+function formatMemberRole(role?: string): string {
+  if (role === 'owner') return '群主'
+  if (role === 'admin') return '管理员'
+  return '成员'
+}
+
+function onMessageInput(event: Event) {
+  pruneDraftMentions()
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP') {
+    closeMentionPicker()
+    return
+  }
+  const input = event.target as HTMLTextAreaElement
+  const cursor = input.selectionStart ?? messageText.value.length
+  const beforeCursor = messageText.value.slice(0, cursor)
+  const match = beforeCursor.match(/(^|\s)@([^\s@]*)$/)
+  if (!match) {
+    closeMentionPicker()
+    return
+  }
+  mentionSearch.value = match[2] || ''
+  mentionSelectedIndex.value = 0
+  showMentionPicker.value = true
+}
+
+function handleMessageKeydown(event: KeyboardEvent) {
+  if (showMentionPicker.value && mentionCandidates.value.length) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      mentionSelectedIndex.value = (mentionSelectedIndex.value + 1) % mentionCandidates.value.length
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      mentionSelectedIndex.value =
+        (mentionSelectedIndex.value - 1 + mentionCandidates.value.length) % mentionCandidates.value.length
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      selectMention(mentionCandidates.value[mentionSelectedIndex.value])
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMentionPicker()
+      return
+    }
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    handleSendText()
+  }
+}
+
+function selectMention(member: ConversationMember) {
+  const input = messageInputRef.value
+  const cursor = input?.selectionStart ?? messageText.value.length
+  const beforeCursor = messageText.value.slice(0, cursor)
+  const atIndex = beforeCursor.lastIndexOf('@')
+  if (atIndex < 0) return
+
+  const name = getMemberName(member)
+  const mentionText = `@${name} `
+  messageText.value =
+    messageText.value.slice(0, atIndex) + mentionText + messageText.value.slice(cursor)
+
+  if (!draftMentions.value.some((mention) => mention.userId === member.userId)) {
+    draftMentions.value.push({ userId: member.userId, nickname: name })
+  }
+  closeMentionPicker()
+
+  nextTick(() => {
+    const nextCursor = atIndex + mentionText.length
+    messageInputRef.value?.focus()
+    messageInputRef.value?.setSelectionRange(nextCursor, nextCursor)
+  })
+}
+
+function closeMentionPicker() {
+  showMentionPicker.value = false
+  mentionSearch.value = ''
+  mentionSelectedIndex.value = 0
+}
+
+function pruneDraftMentions(): MessageMention[] {
+  const text = messageText.value
+  const seen = new Set<string>()
+  draftMentions.value = draftMentions.value.filter((mention) => {
+    if (seen.has(mention.userId)) return false
+    seen.add(mention.userId)
+    return text.includes(`@${mention.nickname}`)
+  })
+  return draftMentions.value
+}
+
+function renderTextSegments(msg: Message) {
+  const text = msg.displayContent || msg.content
+  const mentions = msg.mentions || []
+  if (!mentions.length) return [{ text, mention: false, self: false }]
+
+  const labels = mentions
+    .map((mention) => ({
+      ...mention,
+      label: `@${mention.nickname}`,
+      self: mention.userId === String(authStore.currentUser?.userId ?? ''),
+    }))
+    .sort((a, b) => b.label.length - a.label.length)
+  const segments: Array<{ text: string; mention: boolean; self: boolean }> = []
+  let cursor = 0
+
+  while (cursor < text.length) {
+    let nextIndex = -1
+    let nextMention: (typeof labels)[number] | null = null
+    for (const mention of labels) {
+      const index = text.indexOf(mention.label, cursor)
+      if (index >= 0 && (nextIndex < 0 || index < nextIndex)) {
+        nextIndex = index
+        nextMention = mention
+      }
+    }
+    if (nextIndex < 0 || !nextMention) {
+      segments.push({ text: text.slice(cursor), mention: false, self: false })
+      break
+    }
+    if (nextIndex > cursor) {
+      segments.push({ text: text.slice(cursor, nextIndex), mention: false, self: false })
+    }
+    segments.push({ text: nextMention.label, mention: true, self: nextMention.self })
+    cursor = nextIndex + nextMention.label.length
+  }
+
+  return segments.length ? segments : [{ text, mention: false, self: false }]
 }
 
 // Scroll
@@ -599,10 +861,12 @@ function handleSendText() {
   }
 
   const clientMsgId = generateId()
+  const mentions = pruneDraftMentions()
+  const content = buildTextMessageContent(text, mentions)
   const sent = wsManager.send('MESSAGE_SEND', {
     conversationId: conv.conversationId,
     messageType: 'TEXT',
-    content: text,
+    content,
     clientMsgId,
   })
   if (!sent) {
@@ -618,12 +882,16 @@ function handleSendText() {
     senderName: authStore.currentUser.nickname,
     senderAvatar: authStore.currentUser.avatar || '',
     messageType: 'TEXT',
-    content: text,
+    content,
+    displayContent: text,
+    mentions,
     clientMsgId,
     createdAt: new Date().toISOString(),
   })
 
   messageText.value = ''
+  draftMentions.value = []
+  closeMentionPicker()
   scrollToBottom()
 }
 
@@ -698,6 +966,8 @@ function sendFileMessage(type: string, content: string) {
     senderAvatar: authStore.currentUser.avatar || '',
     messageType: type as any,
     content,
+    displayContent: content,
+    mentions: [],
     clientMsgId,
     createdAt: new Date().toISOString(),
   })
@@ -716,7 +986,10 @@ async function handleWsMessage(msg: WsMessage) {
           data.createTime ||
           (data.timestamp ? new Date(Number(data.timestamp)).toISOString() : undefined),
       })
-      const conv = await chatStore.receiveMessage(receivedMessage)
+      const conv = await chatStore.receiveMessage(
+        receivedMessage,
+        String(authStore.currentUser?.userId ?? '')
+      )
       if (!conv) {
         alert('收到新消息，但会话信息加载失败，请刷新后重试')
       }
@@ -1225,6 +1498,16 @@ watch(
   text-align: center;
 }
 
+.mention-badge {
+  background: #ff7a45;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
 .empty-hint {
   text-align: center;
   padding: 40px 0;
@@ -1316,6 +1599,7 @@ watch(
   flex-direction: column;
   background: #f8f8f8;
   min-width: 0;
+  position: relative;
 }
 
 .chat-header {
@@ -1342,6 +1626,18 @@ watch(
 .chat-header-meta {
   font-size: 12px;
   color: #999;
+}
+
+.member-count-btn {
+  width: fit-content;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.member-count-btn:hover {
+  color: #667eea;
 }
 
 .action-btn {
@@ -1441,6 +1737,21 @@ watch(
   color: #fff;
 }
 
+.mention {
+  color: #4f63d8;
+  font-weight: 600;
+}
+
+.message-self .mention {
+  color: #fff4a3;
+}
+
+.mention-self {
+  background: rgba(255, 122, 69, 0.16);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
 .image-bubble {
   max-width: 240px;
   max-height: 240px;
@@ -1509,6 +1820,7 @@ watch(
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  position: relative;
 }
 
 .message-input {
@@ -1540,6 +1852,59 @@ watch(
   background: #5a6fd8;
 }
 
+.mention-picker {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  width: 240px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  padding: 6px;
+  z-index: 30;
+}
+
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+}
+
+.mention-option:hover,
+.mention-option.active {
+  background: #eef0ff;
+}
+
+.mention-avatar,
+.member-avatar {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  background: #667eea;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.mention-avatar img,
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* No conversation */
 .no-conversation {
   flex: 1;
@@ -1557,6 +1922,77 @@ watch(
 
 .no-conversation p {
   font-size: 16px;
+}
+
+.member-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background: #fff;
+  border-left: 1px solid #ddd;
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.08);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  font-weight: 600;
+  color: #333;
+}
+
+.member-search {
+  margin: 12px;
+  height: 34px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: #f8f9fa;
+}
+
+.member-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 8px;
+}
+
+.member-row:hover {
+  background: #f5f6fb;
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.member-name {
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-role {
+  font-size: 11px;
+  color: #999;
 }
 
 /* Dialog */

@@ -22,6 +22,8 @@ public class ConversationVO {
 
     private Integer unreadCount;
 
+    private Integer mentionUnreadCount;
+
     private Integer isPinned;
 
     private Integer memberCount;

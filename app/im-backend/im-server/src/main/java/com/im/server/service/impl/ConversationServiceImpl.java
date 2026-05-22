@@ -1,6 +1,7 @@
 package com.im.server.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.ConversationVO;
@@ -363,12 +364,19 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setLastMessage(conversation.getLastMessage());
         vo.setLastMessageTime(conversation.getLastMessageTime());
         vo.setUnreadCount(0);
+        vo.setMentionUnreadCount(0);
 
         ImConversationMember selfMember = conversationMemberMapper.selectOne(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getConversationId, conversation.getId())
                         .eq(ImConversationMember::getUserId, userId));
         vo.setIsPinned(selfMember != null ? selfMember.getIsPinned() : 0);
+        if (selfMember != null && conversation.getType() != null && conversation.getType() == 2) {
+            LocalDateTime since = selfMember.getLastReadTime() != null
+                    ? selfMember.getLastReadTime()
+                    : selfMember.getJoinTime();
+            vo.setMentionUnreadCount(countMentionUnread(conversation.getId(), userId, since));
+        }
 
         List<ImConversationMember> allMembers = conversationMemberMapper.selectList(
                 new LambdaQueryWrapper<ImConversationMember>()
@@ -393,5 +401,44 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setMembers(memberVOs);
 
         return vo;
+    }
+
+    private int countMentionUnread(Long conversationId, Long userId, LocalDateTime since) {
+        LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<ImMessage>()
+                .eq(ImMessage::getConversationId, conversationId)
+                .eq(ImMessage::getMessageType, "TEXT");
+        if (since != null) {
+            wrapper.gt(ImMessage::getCreateTime, since);
+        }
+        List<ImMessage> unreadTextMessages = messageMapper.selectList(wrapper);
+        int count = 0;
+        for (ImMessage message : unreadTextMessages) {
+            if (mentionsUser(message.getContent(), userId)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean mentionsUser(String content, Long userId) {
+        if (!StringUtils.hasText(content) || userId == null) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(content);
+            JsonNode mentions = root.get("mentions");
+            if (mentions == null || !mentions.isArray()) {
+                return false;
+            }
+            for (JsonNode mention : mentions) {
+                JsonNode mentionedUserId = mention.get("userId");
+                if (mentionedUserId != null && String.valueOf(userId).equals(mentionedUserId.asText())) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
     }
 }
