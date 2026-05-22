@@ -1,12 +1,27 @@
 import http from './index'
 
 export interface DeptNode {
+  id: string
   deptId: string
   name: string
   parentId: string | null
   children: DeptNode[]
 }
 
+function normalizeDept(node: any): DeptNode {
+  const id = String(node.deptId ?? node.id ?? '')
+  return {
+    ...node,
+    id,
+    deptId: id,
+    parentId: node.parentId == null ? null : String(node.parentId),
+    children: (node.children ?? []).map(normalizeDept),
+  }
+}
+
 export function getDeptTree() {
-  return http.get<DeptNode[]>('/api/depts/tree')
+  return http.get<DeptNode[]>('/api/depts/tree').then((res) => {
+    res.data = (res.data ?? []).map(normalizeDept)
+    return res
+  })
 }

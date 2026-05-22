@@ -35,8 +35,12 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<SysUser> listByDeptId(Long deptId) {
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUser::getDeptId, deptId)
-               .eq(SysUser::getStatus, 1);
+        if (deptId == null) {
+            wrapper.isNull(SysUser::getDeptId);
+        } else {
+            wrapper.eq(SysUser::getDeptId, deptId);
+        }
+        wrapper.eq(SysUser::getStatus, 1);
         return userMapper.selectList(wrapper);
     }
 

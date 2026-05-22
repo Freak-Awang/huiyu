@@ -6,10 +6,18 @@ export interface Conversation {
   name: string
   avatar: string
   lastMessage: MessagePreview | null
+  members?: ConversationMember[]
   memberCount: number
   pinned: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface ConversationMember {
+  userId: string
+  nickname?: string
+  avatar?: string
+  role?: string
 }
 
 export interface MessagePreview {

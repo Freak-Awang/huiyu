@@ -60,7 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = savedToken
     try {
       const res = await getProfile()
-      const body = res.data
+      const body = res.data as any
       const data = body.data || body
       user.value = {
         userId: String(data.userId || data.id || ''),

@@ -54,7 +54,7 @@
             class="search-input"
           />
         </div>
-        <div class="conversation-list" ref="convListRef">
+        <div class="conversation-list">
           <!-- Pinned -->
           <template v-if="chatStore.pinnedConversations.length">
             <div class="list-section-label">置顶</div>
@@ -68,7 +68,7 @@
               <div class="conv-avatar">
                 <img v-if="conv.avatar" :src="conv.avatar" alt="" />
                 <span v-else>{{ (conv.name || '群')[0] }}</span>
-                <span v-if="onlineUsers[conv.members?.[0]?.userId]" class="online-dot"></span>
+                <span v-if="onlineUsers[conv.members?.[0]?.userId ?? '']" class="online-dot"></span>
               </div>
               <div class="conv-info">
                 <div class="conv-top">
@@ -97,7 +97,7 @@
             <div class="conv-avatar">
               <img v-if="conv.avatar" :src="conv.avatar" alt="" />
               <span v-else>{{ (conv.name || '群')[0] }}</span>
-              <span v-if="onlineUsers[conv.members?.[0]?.userId]" class="online-dot"></span>
+              <span v-if="onlineUsers[conv.members?.[0]?.userId ?? '']" class="online-dot"></span>
             </div>
             <div class="conv-info">
               <div class="conv-top">
@@ -401,7 +401,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
@@ -436,11 +436,28 @@ const filteredConversations = computed(() => {
 const deptTree = ref<DeptNode[]>([])
 const expandedDepts = ref(new Set<string>())
 const deptUsersMap = ref<Record<string, any[]>>({})
+const UNASSIGNED_DEPT_ID = '__unassigned__'
 
 async function loadDeptTree() {
   try {
-    const res = await getDeptTree()
-    deptTree.value = res.data
+    const [deptRes, unassignedRes] = await Promise.all([
+      getDeptTree(),
+      getUsersByDept(),
+    ])
+    const unassignedUsers = unassignedRes.data ?? []
+    deptTree.value = unassignedUsers.length
+      ? [
+          ...deptRes.data,
+          {
+            id: UNASSIGNED_DEPT_ID,
+            deptId: UNASSIGNED_DEPT_ID,
+            name: '未分配部门',
+            parentId: null,
+            children: [],
+          },
+        ]
+      : deptRes.data
+    deptUsersMap.value[UNASSIGNED_DEPT_ID] = unassignedUsers
   } catch {
     // ignore
   }
@@ -453,7 +470,7 @@ async function toggleDept(deptId: string) {
     expandedDepts.value.add(deptId)
     if (!deptUsersMap.value[deptId]) {
       try {
-        const res = await getUsersByDept(deptId)
+        const res = await getUsersByDept(deptId === UNASSIGNED_DEPT_ID ? undefined : deptId)
         deptUsersMap.value[deptId] = res.data
       } catch {
         deptUsersMap.value[deptId] = []
@@ -507,7 +524,6 @@ async function createSingleChat(user: any) {
 }
 
 // Select conversation
-const convListRef = ref<HTMLElement | null>(null)
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')

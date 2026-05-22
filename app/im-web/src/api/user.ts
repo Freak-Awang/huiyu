@@ -23,8 +23,18 @@ export function getUsersByDept(deptId?: string) {
   return http.get('/api/users/list', { params: { deptId } })
 }
 
+function normalizeUserPage(data: any) {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.records)) return data.records
+  if (Array.isArray(data?.data)) return data.data
+  return []
+}
+
 export function searchUsers(keyword: string, page: number, pageSize: number) {
-  return http.get('/api/users/search', { params: { keyword, page, pageSize } })
+  return http.get('/api/users/search', { params: { keyword, page, pageSize } }).then((res) => {
+    res.data = normalizeUserPage(res.data)
+    return res
+  })
 }
 
 export function updatePassword(oldPassword: string, newPassword: string) {
