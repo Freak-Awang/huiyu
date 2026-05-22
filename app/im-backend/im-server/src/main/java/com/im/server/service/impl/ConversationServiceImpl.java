@@ -8,6 +8,7 @@ import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
+import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageMapper;
@@ -16,11 +17,14 @@ import com.im.server.service.ConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,14 +57,7 @@ public class ConversationServiceImpl implements ConversationService {
                 continue;
             }
 
-            ConversationVO vo = new ConversationVO();
-            vo.setConversationId(conversation.getId());
-            vo.setType(conversation.getType());
-            vo.setName(conversation.getName());
-            vo.setAvatar(conversation.getAvatar());
-            vo.setLastMessage(conversation.getLastMessage());
-            vo.setLastMessageTime(conversation.getLastMessageTime());
-            vo.setIsPinned(member.getIsPinned());
+            ConversationVO vo = buildConversationVO(conversation, userId);
 
             LocalDateTime since = member.getLastReadTime() != null
                     ? member.getLastReadTime()
@@ -71,23 +68,6 @@ public class ConversationServiceImpl implements ConversationService {
                             .eq(ImMessage::getConversationId, conversation.getId())
                             .gt(since != null, ImMessage::getCreateTime, since));
             vo.setUnreadCount(unreadCount != null ? unreadCount.intValue() : 0);
-
-            List<ImConversationMember> allMembers = conversationMemberMapper.selectList(
-                    new LambdaQueryWrapper<ImConversationMember>()
-                            .eq(ImConversationMember::getConversationId, conversation.getId()));
-            vo.setMemberCount(allMembers.size());
-
-            List<MemberVO> memberVOs = new ArrayList<>();
-            for (ImConversationMember cm : allMembers) {
-                SysUser user = userMapper.selectById(cm.getUserId());
-                MemberVO memberVO = new MemberVO();
-                memberVO.setUserId(cm.getUserId());
-                memberVO.setNickname(user != null ? user.getNickname() : null);
-                memberVO.setAvatar(user != null ? user.getAvatar() : null);
-                memberVO.setRole(cm.getRole());
-                memberVOs.add(memberVO);
-            }
-            vo.setMembers(memberVOs);
 
             result.add(vo);
         }
@@ -102,7 +82,25 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public ConversationVO createConversation(Long userId, CreateConversationRequest request) {
+        if (request == null) {
+            throw new BusinessException("Conversation request is required");
+        }
+        if (request.getType() == null) {
+            throw new BusinessException("Conversation type is required");
+        }
+
         if (request.getType() == 1) {
+            if (request.getTargetUserId() == null) {
+                throw new BusinessException("Target user is required");
+            }
+            if (request.getTargetUserId().equals(userId)) {
+                throw new BusinessException("Cannot create a single chat with yourself");
+            }
+            SysUser targetUser = userMapper.selectById(request.getTargetUserId());
+            if (targetUser == null) {
+                throw new BusinessException("Target user does not exist");
+            }
+
             ImConversation existing = findExistingSingleChat(userId, request.getTargetUserId());
             if (existing != null) {
                 return buildConversationVO(existing, userId);
@@ -134,6 +132,21 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         if (request.getType() == 2) {
+            if (!StringUtils.hasText(request.getName())) {
+                throw new BusinessException("Group name is required");
+            }
+            Set<Long> memberIds = new LinkedHashSet<>();
+            if (request.getMemberIds() != null) {
+                for (Long memberId : request.getMemberIds()) {
+                    if (memberId != null && !memberId.equals(userId)) {
+                        memberIds.add(memberId);
+                    }
+                }
+            }
+            if (memberIds.isEmpty()) {
+                throw new BusinessException("Group members are required");
+            }
+
             ImConversation conversation = new ImConversation();
             conversation.setType(2);
             conversation.setName(request.getName());
@@ -150,25 +163,24 @@ public class ConversationServiceImpl implements ConversationService {
             ownerMember.setIsPinned(0);
             conversationMemberMapper.insert(ownerMember);
 
-            if (request.getMemberIds() != null) {
-                for (Long memberId : request.getMemberIds()) {
-                    if (memberId.equals(userId)) {
-                        continue;
-                    }
-                    ImConversationMember member = new ImConversationMember();
-                    member.setConversationId(conversation.getId());
-                    member.setUserId(memberId);
-                    member.setRole("member");
-                    member.setJoinTime(LocalDateTime.now());
-                    member.setIsPinned(0);
-                    conversationMemberMapper.insert(member);
+            for (Long memberId : memberIds) {
+                SysUser user = userMapper.selectById(memberId);
+                if (user == null) {
+                    throw new BusinessException("User does not exist: " + memberId);
                 }
+                ImConversationMember member = new ImConversationMember();
+                member.setConversationId(conversation.getId());
+                member.setUserId(memberId);
+                member.setRole("member");
+                member.setJoinTime(LocalDateTime.now());
+                member.setIsPinned(0);
+                conversationMemberMapper.insert(member);
             }
 
             return buildConversationVO(conversation, userId);
         }
 
-        throw new RuntimeException("Invalid conversation type: " + request.getType());
+        throw new BusinessException("Invalid conversation type: " + request.getType());
     }
 
     @Override
@@ -268,8 +280,20 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public ImConversation getById(Long id) {
-        return conversationMapper.selectById(id);
+    public ConversationVO getById(Long id, Long userId) {
+        ImConversationMember member = conversationMemberMapper.selectOne(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, id)
+                        .eq(ImConversationMember::getUserId, userId));
+        if (member == null) {
+            throw new BusinessException("User is not a member of this conversation");
+        }
+
+        ImConversation conversation = conversationMapper.selectById(id);
+        if (conversation == null) {
+            throw new BusinessException("Conversation not found");
+        }
+        return buildConversationVO(conversation, userId);
     }
 
     private ImConversation findExistingSingleChat(Long userId1, Long userId2) {
@@ -328,6 +352,11 @@ public class ConversationServiceImpl implements ConversationService {
             memberVO.setAvatar(user != null ? user.getAvatar() : null);
             memberVO.setRole(cm.getRole());
             memberVOs.add(memberVO);
+
+            if (conversation.getType() != null && conversation.getType() == 1 && !cm.getUserId().equals(userId)) {
+                vo.setName(user != null && StringUtils.hasText(user.getNickname()) ? user.getNickname() : user != null ? user.getUsername() : null);
+                vo.setAvatar(user != null ? user.getAvatar() : null);
+            }
         }
         vo.setMembers(memberVOs);
 

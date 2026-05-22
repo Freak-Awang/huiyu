@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.SendMessageRequest;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
+import com.im.common.entity.SysUser;
 import com.im.common.util.JwtUtil;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.UserMapper;
@@ -223,8 +224,12 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             receiveData.put("messageId", msg.getId());
             receiveData.put("conversationId", conversationId);
             receiveData.put("senderId", senderId);
+            SysUser sender = userMapper.selectById(senderId);
+            receiveData.put("senderName", sender != null ? sender.getNickname() : "");
+            receiveData.put("senderAvatar", sender != null ? sender.getAvatar() : "");
             receiveData.put("messageType", msg.getMessageType());
             receiveData.put("content", msg.getContent());
+            receiveData.put("createdAt", msg.getCreateTime() != null ? msg.getCreateTime().toString() : null);
             receiveData.put("timestamp", System.currentTimeMillis());
 
             String messageJson = objectMapper.writeValueAsString(receiveMsg);

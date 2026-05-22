@@ -28,20 +28,47 @@ export const useChatStore = defineStore('chat', () => {
   async function fetchConversations() {
     const res = await listConversations()
     conversations.value = res.data
+    for (const conv of res.data) {
+      unreadCounts.value.set(conv.conversationId, conv.unreadCount || 0)
+    }
+    if (currentConversation.value) {
+      const updated = conversations.value.find(
+        (c) => c.conversationId === currentConversation.value?.conversationId
+      )
+      if (updated) {
+        currentConversation.value = updated
+      }
+    }
   }
 
-  function selectConversation(convId: string) {
+  async function selectConversation(convId: string) {
     const conv = conversations.value.find((c) => c.conversationId === convId)
     if (!conv) return
     currentConversation.value = conv
-    fetchMessages(convId)
-    markAsRead(convId)
+    await fetchMessages(convId)
+    await markAsRead(convId)
+  }
+
+  function upsertConversation(conv: Conversation) {
+    const index = conversations.value.findIndex(
+      (item) => item.conversationId === conv.conversationId
+    )
+    if (index >= 0) {
+      conversations.value[index] = conv
+    } else {
+      conversations.value.unshift(conv)
+    }
+    unreadCounts.value.set(conv.conversationId, conv.unreadCount || 0)
+    if (currentConversation.value?.conversationId === conv.conversationId) {
+      currentConversation.value = conv
+    }
   }
 
   async function fetchMessages(convId: string, beforeId?: string) {
     const res = await getMessages(convId, beforeId)
-    const msgs = res.data
-    const existing = messages.value.get(convId) || []
+    const msgs = [...res.data.records].reverse()
+    const existingRaw = messages.value.get(convId)
+    const existing = Array.isArray(existingRaw) ? existingRaw : []
     if (beforeId) {
       messages.value.set(convId, [...msgs, ...existing])
     } else {
@@ -50,7 +77,17 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function addMessage(msg: Message) {
-    const convMessages = messages.value.get(msg.conversationId) || []
+    const convMessagesRaw = messages.value.get(msg.conversationId)
+    const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
+    const exists = msg.clientMsgId
+      ? convMessages.find((m) => m.clientMsgId === msg.clientMsgId)
+      : msg.messageId
+        ? convMessages.find((m) => m.messageId === msg.messageId)
+        : undefined
+    if (exists) {
+      Object.assign(exists, msg)
+      return
+    }
     messages.value.set(msg.conversationId, [...convMessages, msg])
 
     const conv = conversations.value.find((c) => c.conversationId === msg.conversationId)
@@ -63,6 +100,10 @@ export const useChatStore = defineStore('chat', () => {
         messageType: msg.messageType,
         createdAt: msg.createdAt,
       }
+      conversations.value = [
+        conv,
+        ...conversations.value.filter((c) => c.conversationId !== msg.conversationId),
+      ]
     }
   }
 
@@ -89,11 +130,12 @@ export const useChatStore = defineStore('chat', () => {
     return unreadCounts.value.get(convId) || 0
   }
 
-  function updateMessageStatus(clientMsgId: string, serverMsgId: string) {
+  function updateMessageStatus(clientMsgId: string, serverMsgId: string, status = 'SENT') {
     for (const [, convMessages] of messages.value) {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
       if (msg) {
         msg.messageId = serverMsgId
+        msg.status = status
         break
       }
     }
@@ -109,6 +151,7 @@ export const useChatStore = defineStore('chat', () => {
     unpinnedConversations,
     fetchConversations,
     selectConversation,
+    upsertConversation,
     fetchMessages,
     addMessage,
     receiveMessage,

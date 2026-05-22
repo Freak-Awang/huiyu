@@ -5,11 +5,13 @@ export interface WsMessage {
 }
 
 type MessageHandler = (msg: WsMessage) => void
+type ConnectionHandler = (connected: boolean) => void
 
 export class WebSocketManager {
   private ws: WebSocket | null = null
   private token: string
   private messageHandler: MessageHandler
+  private connectionHandler?: ConnectionHandler
   private seqCounter = 0
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -18,9 +20,10 @@ export class WebSocketManager {
   private reconnectDelay = 3000
   private intentionalClose = false
 
-  constructor(token: string, handler: MessageHandler) {
+  constructor(token: string, handler: MessageHandler, connectionHandler?: ConnectionHandler) {
     this.token = token
     this.messageHandler = handler
+    this.connectionHandler = connectionHandler
   }
 
   connect() {
@@ -34,13 +37,16 @@ export class WebSocketManager {
       this.ws.close()
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const url = `${protocol}//${host}/ws/im?token=${encodeURIComponent(this.token)}`
+    const configuredUrl = import.meta.env.VITE_WS_URL
+    const defaultUrl = import.meta.env.PROD
+      ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/im`
+      : 'ws://localhost:8080/ws/im'
+    const url = `${configuredUrl || defaultUrl}?token=${encodeURIComponent(this.token)}`
     this.ws = new WebSocket(url)
 
     this.ws.onopen = () => {
       this.reconnectCount = 0
+      this.connectionHandler?.(true)
       this.startHeartbeat()
     }
 
@@ -55,12 +61,14 @@ export class WebSocketManager {
 
     this.ws.onclose = () => {
       this.stopHeartbeat()
+      this.connectionHandler?.(false)
       if (!this.intentionalClose) {
         this.scheduleReconnect()
       }
     }
 
     this.ws.onerror = (err) => {
+      this.connectionHandler?.(false)
       console.error('WebSocket error:', err)
     }
   }
@@ -76,16 +84,18 @@ export class WebSocketManager {
       this.ws.close()
       this.ws = null
     }
+    this.connectionHandler?.(false)
   }
 
-  send(cmd: string, data: any) {
+  send(cmd: string, data: any): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket not connected, cannot send:', cmd)
-      return
+      return false
     }
     const seq = ++this.seqCounter
     const payload = JSON.stringify({ cmd, seq, data })
     this.ws.send(payload)
+    return true
   }
 
   isConnected(): boolean {

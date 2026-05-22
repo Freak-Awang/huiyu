@@ -139,7 +139,7 @@
               v-for="user in searchedUsers"
               :key="user.userId || user.id"
               class="contact-item"
-              @click="createSingleChat(user)"
+              @dblclick="createSingleChat(user)"
             >
               <div class="contact-avatar">
                 <img v-if="user.avatar" :src="user.avatar" alt="" />
@@ -167,7 +167,7 @@
                   v-for="user in deptUsersMap[dept.deptId]"
                   :key="user.userId || user.id"
                   class="contact-item"
-                  @click="createSingleChat(user)"
+                  @dblclick="createSingleChat(user)"
                 >
                   <div class="contact-avatar">
                     <img v-if="user.avatar" :src="user.avatar" alt="" />
@@ -194,7 +194,7 @@
                       v-for="user in deptUsersMap[child.deptId]"
                       :key="user.userId || user.id"
                       class="contact-item"
-                      @click="createSingleChat(user)"
+                      @dblclick="createSingleChat(user)"
                     >
                       <div class="contact-avatar">
                         <img v-if="user.avatar" :src="user.avatar" alt="" />
@@ -409,6 +409,7 @@ import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
 import { createConversation, pinConversation } from '../api/conversation'
+import { normalizeMessage } from '../api/message'
 import { uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
 
@@ -420,8 +421,10 @@ const activeTab = ref<'chat' | 'contacts'>('chat')
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
 const onlineUsers = ref<Record<string, boolean>>({})
+const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
+const canSendMessage = computed(() => !!chatStore.currentConversation && wsConnected.value)
 
 // Filtered conversations
 const filteredConversations = computed(() => {
@@ -507,19 +510,24 @@ async function createSingleChat(user: any) {
   try {
     const res = await createConversation({
       type: 'SINGLE',
-      memberIds: [userId],
+      targetUserId: userId,
     })
     await chatStore.fetchConversations()
-    const conv = chatStore.conversations.find(
+    let conv = chatStore.conversations.find(
       (c) => c.conversationId === res.data.conversationId
     )
+    if (!conv) {
+      chatStore.upsertConversation(res.data)
+      conv = res.data
+    }
     if (conv) {
       activeTab.value = 'chat'
-      chatStore.selectConversation(conv.conversationId)
+      await chatStore.selectConversation(conv.conversationId)
       closeCreateDialog()
+      scrollToBottom()
     }
-  } catch {
-    // ignore
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '创建会话失败')
   }
 }
 
@@ -527,9 +535,14 @@ async function createSingleChat(user: any) {
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
+let loadingOlderMessages = false
 
-function handleSelectConv(conv: any) {
-  chatStore.selectConversation(conv.conversationId)
+async function handleSelectConv(conv: any) {
+  try {
+    await chatStore.selectConversation(conv.conversationId)
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '加载消息失败')
+  }
   scrollToBottom()
 }
 
@@ -555,14 +568,21 @@ function scrollToBottom() {
   })
 }
 
-function onMessageScroll() {
+async function onMessageScroll() {
   const el = messageAreaRef.value
-  if (el && el.scrollTop === 0) {
+  if (el && el.scrollTop === 0 && !loadingOlderMessages) {
     const conv = chatStore.currentConversation
     if (!conv) return
     const msgs = chatStore.currentMessages
     if (msgs.length > 0) {
-      chatStore.fetchMessages(conv.conversationId, msgs[0].messageId)
+      loadingOlderMessages = true
+      try {
+        await chatStore.fetchMessages(conv.conversationId, msgs[0].messageId)
+      } catch (err: any) {
+        alert(err?.response?.data?.message || '加载历史消息失败')
+      } finally {
+        loadingOlderMessages = false
+      }
     }
   }
 }
@@ -573,14 +593,22 @@ function handleSendText() {
   if (!text) return
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
+  if (!wsConnected.value || !wsManager.isConnected()) {
+    alert('WebSocket 未连接，暂时无法发送消息')
+    return
+  }
 
   const clientMsgId = generateId()
-  wsManager.send('MESSAGE_SEND', {
+  const sent = wsManager.send('MESSAGE_SEND', {
     conversationId: conv.conversationId,
     messageType: 'TEXT',
     content: text,
     clientMsgId,
   })
+  if (!sent) {
+    alert('消息发送失败，请稍后重试')
+    return
+  }
 
   // Optimistic add
   chatStore.addMessage({
@@ -601,35 +629,43 @@ function handleSendText() {
 
 async function onSendImage(e: Event) {
   const input = e.target as HTMLInputElement
+  if (!canSendMessage.value) {
+    alert('WebSocket 未连接，暂时无法发送消息')
+    input.value = ''
+    return
+  }
   const file = input.files?.[0]
   if (!file) return
   try {
     const res = await uploadFile(file)
-    const fileId = res.data.fileId
-    const url = getFileUrl(fileId)
+    const url = res.data.url || getFileUrl(res.data.id)
     sendFileMessage('IMAGE', url)
-  } catch {
-    // ignore
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '上传图片失败')
   }
   input.value = ''
 }
 
 async function onSendFile(e: Event) {
   const input = e.target as HTMLInputElement
+  if (!canSendMessage.value) {
+    alert('WebSocket 未连接，暂时无法发送消息')
+    input.value = ''
+    return
+  }
   const file = input.files?.[0]
   if (!file) return
   try {
     const res = await uploadFile(file)
-    const fileId = res.data.fileId
-    const url = getFileUrl(fileId)
+    const url = res.data.url || getFileUrl(res.data.id)
     const fileData = JSON.stringify({
       name: file.name,
       url,
       size: formatFileSize(file.size),
     })
     sendFileMessage('FILE', fileData)
-  } catch {
-    // ignore
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '上传文件失败')
   }
   input.value = ''
 }
@@ -637,14 +673,22 @@ async function onSendFile(e: Event) {
 function sendFileMessage(type: string, content: string) {
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
+  if (!wsConnected.value || !wsManager.isConnected()) {
+    alert('WebSocket 未连接，暂时无法发送消息')
+    return
+  }
 
   const clientMsgId = generateId()
-  wsManager.send('MESSAGE_SEND', {
+  const sent = wsManager.send('MESSAGE_SEND', {
     conversationId: conv.conversationId,
     messageType: type,
     content,
     clientMsgId,
   })
+  if (!sent) {
+    alert('消息发送失败，请稍后重试')
+    return
+  }
 
   chatStore.addMessage({
     messageId: '',
@@ -665,33 +709,31 @@ function handleWsMessage(msg: WsMessage) {
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
       const data = msg.data
-      chatStore.receiveMessage({
-        messageId: data.messageId,
-        conversationId: data.conversationId,
-        senderId: data.senderId,
-        senderName: data.senderName,
-        senderAvatar: data.senderAvatar || '',
-        messageType: data.messageType,
-        content: data.content,
-        createdAt: data.createdAt || new Date().toISOString(),
+      const receivedMessage = normalizeMessage({
+        ...data,
+        createdAt:
+          data.createdAt ||
+          data.createTime ||
+          (data.timestamp ? new Date(Number(data.timestamp)).toISOString() : undefined),
       })
+      chatStore.receiveMessage(receivedMessage)
       // If current conv, scroll down
-      if (chatStore.currentConversation?.conversationId === data.conversationId) {
+      if (chatStore.currentConversation?.conversationId === receivedMessage.conversationId) {
         scrollToBottom()
-        chatStore.markAsRead(data.conversationId)
+        chatStore.markAsRead(receivedMessage.conversationId)
       }
       break
     }
     case 'MESSAGE_ACK': {
       const data = msg.data
-      chatStore.updateMessageStatus(data.clientMsgId, data.messageId)
+      chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
       break
     }
     case 'MESSAGE_SEND_REPLY': {
       // Server may also send reply for a send
       const data = msg.data
       if (data.clientMsgId) {
-        chatStore.updateMessageStatus(data.clientMsgId, data.messageId)
+        chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
       }
       break
     }
@@ -723,7 +765,9 @@ function initWebSocket() {
   }
   const token = authStore.token
   if (!token) return
-  wsManager = new WebSocketManager(token, handleWsMessage)
+  wsManager = new WebSocketManager(token, handleWsMessage, (connected) => {
+    wsConnected.value = connected
+  })
   wsManager.connect()
 }
 
@@ -815,8 +859,8 @@ async function doCreateGroupChat() {
     })
     await chatStore.fetchConversations()
     closeCreateDialog()
-  } catch {
-    // ignore
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '创建群聊失败')
   }
 }
 

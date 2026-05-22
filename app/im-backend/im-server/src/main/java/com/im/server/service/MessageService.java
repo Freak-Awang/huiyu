@@ -7,7 +7,7 @@ import com.im.common.result.PageResult;
 
 public interface MessageService {
 
-    PageResult<MessageVO> getMessages(Long conversationId, Long beforeMessageId, int pageSize);
+    PageResult<MessageVO> getMessages(Long userId, Long conversationId, Long beforeMessageId, int pageSize);
 
     ImMessage sendMessage(Long senderId, SendMessageRequest request);
 }

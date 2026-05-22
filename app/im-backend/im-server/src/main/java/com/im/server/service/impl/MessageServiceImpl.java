@@ -43,7 +43,15 @@ public class MessageServiceImpl implements MessageService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
-    public PageResult<MessageVO> getMessages(Long conversationId, Long beforeMessageId, int pageSize) {
+    public PageResult<MessageVO> getMessages(Long userId, Long conversationId, Long beforeMessageId, int pageSize) {
+        ImConversationMember member = conversationMemberMapper.selectOne(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId)
+                        .eq(ImConversationMember::getUserId, userId));
+        if (member == null) {
+            throw new BusinessException("Not a member of this conversation");
+        }
+
         Long total = messageMapper.selectCount(
                 new LambdaQueryWrapper<ImMessage>().eq(ImMessage::getConversationId, conversationId));
 

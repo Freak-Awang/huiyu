@@ -2,8 +2,6 @@ package com.im.server.service;
 
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
-import com.im.common.entity.ImConversation;
-
 import java.util.List;
 
 public interface ConversationService {
@@ -18,5 +16,5 @@ public interface ConversationService {
 
     void pinConversation(Long conversationId, Long userId, boolean pinned);
 
-    ImConversation getById(Long id);
+    ConversationVO getById(Long id, Long userId);
 }

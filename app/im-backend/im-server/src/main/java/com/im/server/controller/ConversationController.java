@@ -2,7 +2,6 @@ package com.im.server.controller;
 
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
-import com.im.common.entity.ImConversation;
 import com.im.common.result.Result;
 import com.im.server.service.ConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,8 +62,9 @@ public class ConversationController {
     }
 
     @GetMapping("/{id}")
-    public Result<ImConversation> getConversation(@PathVariable("id") Long id) {
-        return Result.success(conversationService.getById(id));
+    public Result<ConversationVO> getConversation(@PathVariable("id") Long id) {
+        Long userId = getCurrentUserId();
+        return Result.success(conversationService.getById(id, userId));
     }
 
     private Long getCurrentUserId() {

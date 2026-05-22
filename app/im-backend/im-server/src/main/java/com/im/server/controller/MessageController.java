@@ -32,7 +32,8 @@ public class MessageController {
             @PathVariable Long conversationId,
             @RequestParam(required = false) Long beforeMessageId,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return Result.success(messageService.getMessages(conversationId, beforeMessageId, pageSize));
+        Long userId = getCurrentUserId();
+        return Result.success(messageService.getMessages(userId, conversationId, beforeMessageId, pageSize));
     }
 
     @PostMapping("/read/{conversationId}")
