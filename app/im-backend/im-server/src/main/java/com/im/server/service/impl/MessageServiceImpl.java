@@ -156,6 +156,11 @@ public class MessageServiceImpl implements MessageService {
                         return "[文件] " + node.get("name").asText();
                     }
                     return "[文件]";
+                case "STICKER":
+                    if (node.has("name")) {
+                        return "[表情] " + node.get("name").asText();
+                    }
+                    return "[表情]";
                 default:
                     break;
             }

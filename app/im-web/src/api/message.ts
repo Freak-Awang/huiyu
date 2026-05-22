@@ -6,7 +6,7 @@ export interface Message {
   senderId: string
   senderName: string
   senderAvatar: string
-  messageType: 'TEXT' | 'IMAGE' | 'FILE'
+  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content: string
   displayContent: string
   mentions: MessageMention[]
@@ -34,7 +34,7 @@ export interface RawMessage {
   senderId?: number | string
   senderName?: string | null
   senderAvatar?: string | null
-  messageType?: 'TEXT' | 'IMAGE' | 'FILE'
+  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content?: string | null
   clientMsgId?: string | null
   createTime?: string | null
@@ -58,6 +58,7 @@ export function normalizeMessage(raw: RawMessage): Message {
     (raw.timestamp ? new Date(Number(raw.timestamp)).toISOString() : '')
   const content = raw.content || ''
   const parsedText = parseTextContent(raw.messageType || 'TEXT', content)
+  const messageType = raw.messageType || 'TEXT'
 
   return {
     messageId: String(raw.messageId ?? raw.id ?? ''),
@@ -65,14 +66,26 @@ export function normalizeMessage(raw: RawMessage): Message {
     senderId: String(raw.senderId ?? ''),
     senderName: raw.senderName || '',
     senderAvatar: raw.senderAvatar || '',
-    messageType: raw.messageType || 'TEXT',
+    messageType,
     content,
-    displayContent: parsedText.text,
+    displayContent: messageType === 'STICKER' ? parseStickerDisplayName(content) : parsedText.text,
     mentions: parsedText.mentions,
     clientMsgId: raw.clientMsgId || undefined,
     createdAt: timestamp,
     status: raw.status || undefined,
   }
+}
+
+function parseStickerDisplayName(content: string): string {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+      return `[表情] ${parsed.name}`
+    }
+  } catch {
+    return '表情加载失败'
+  }
+  return '表情加载失败'
 }
 
 export function buildTextMessageContent(text: string, mentions: MessageMention[] = []): string {

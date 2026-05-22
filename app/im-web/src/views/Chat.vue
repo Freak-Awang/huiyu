@@ -284,6 +284,18 @@
                       <span class="file-size">{{ getFileInfo(msg.content).size }}</span>
                     </div>
                   </template>
+                  <template v-else-if="msg.messageType === 'STICKER'">
+                    <div class="sticker-bubble">
+                      <template v-if="getStickerInfo(msg.content)">
+                        <img
+                          :src="getStickerInfo(msg.content)?.url"
+                          class="sticker-img"
+                          :alt="getStickerInfo(msg.content)?.name"
+                        />
+                      </template>
+                      <span v-else class="sticker-error">表情加载失败</span>
+                    </div>
+                  </template>
                 </div>
                 <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
               </div>
@@ -293,6 +305,13 @@
 
         <div class="input-area">
           <div class="input-toolbar">
+            <button
+              ref="emojiButtonRef"
+              class="tool-btn"
+              title="表情"
+              type="button"
+              @click="toggleEmojiPanel"
+            >😊</button>
             <label class="tool-btn" title="发送图片">
               📷
               <input type="file" accept="image/*" hidden @change="onSendImage" />
@@ -325,6 +344,83 @@
                   <span v-else>{{ getMemberName(member)[0] }}</span>
                 </div>
                 <span>{{ getMemberName(member) }}</span>
+              </div>
+            </div>
+            <div v-if="showEmojiPanel" ref="emojiPanelRef" class="emoji-panel">
+              <div class="emoji-tabs">
+                <button
+                  type="button"
+                  :class="{ active: emojiActiveTab === 'emoji' }"
+                  @click="emojiActiveTab = 'emoji'"
+                >Emoji</button>
+                <button
+                  type="button"
+                  :class="{ active: emojiActiveTab === 'sticker' }"
+                  @click="emojiActiveTab = 'sticker'"
+                >大表情</button>
+              </div>
+
+              <div v-if="emojiActiveTab === 'emoji'" class="emoji-content">
+                <div v-if="recentEmojis.length" class="emoji-section">
+                  <div class="emoji-section-title">最近使用</div>
+                  <div class="emoji-grid">
+                    <button
+                      v-for="emoji in recentEmojis"
+                      :key="`recent-${emoji}`"
+                      type="button"
+                      class="emoji-item"
+                      @click="insertEmoji(emoji)"
+                    >{{ emoji }}</button>
+                  </div>
+                </div>
+                <div class="emoji-group-tabs">
+                  <button
+                    v-for="(group, index) in EMOJI_GROUPS"
+                    :key="group.name"
+                    type="button"
+                    :class="{ active: emojiActiveGroup === index }"
+                    @click="emojiActiveGroup = index"
+                  >{{ group.name }}</button>
+                </div>
+                <div class="emoji-grid">
+                  <button
+                    v-for="emoji in EMOJI_GROUPS[emojiActiveGroup].emojis"
+                    :key="emoji"
+                    type="button"
+                    class="emoji-item"
+                    @click="insertEmoji(emoji)"
+                  >{{ emoji }}</button>
+                </div>
+              </div>
+
+              <div v-else class="emoji-content">
+                <div v-if="recentStickers.length" class="emoji-section">
+                  <div class="emoji-section-title">最近使用</div>
+                  <div class="sticker-grid">
+                    <button
+                      v-for="sticker in recentStickers"
+                      :key="`recent-${sticker.id}`"
+                      type="button"
+                      class="sticker-option"
+                      :title="sticker.name"
+                      @click="sendSticker(sticker)"
+                    >
+                      <img :src="sticker.url" :alt="sticker.name" />
+                    </button>
+                  </div>
+                </div>
+                <div class="sticker-grid">
+                  <button
+                    v-for="sticker in STICKERS"
+                    :key="sticker.id"
+                    type="button"
+                    class="sticker-option"
+                    :title="sticker.name"
+                    @click="sendSticker(sticker)"
+                  >
+                    <img :src="sticker.url" :alt="sticker.name" />
+                  </button>
+                </div>
               </div>
             </div>
             <button class="send-btn" @click="handleSendText">发送</button>
@@ -487,6 +583,13 @@ import {
 } from '../api/message'
 import { uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
+import { EMOJI_GROUPS } from '../constants/emoji'
+import {
+  STICKERS,
+  buildStickerContent,
+  parseStickerContent,
+  type Sticker,
+} from '../constants/stickers'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -609,15 +712,24 @@ async function createSingleChat(user: any) {
 // Select conversation
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const emojiButtonRef = ref<HTMLElement | null>(null)
+const emojiPanelRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const draftMentions = ref<MessageMention[]>([])
 const showMentionPicker = ref(false)
 const mentionSearch = ref('')
 const mentionSelectedIndex = ref(0)
+const showEmojiPanel = ref(false)
+const emojiActiveTab = ref<'emoji' | 'sticker'>('emoji')
+const emojiActiveGroup = ref(0)
+const recentEmojis = ref<string[]>([])
+const recentStickers = ref<Sticker[]>([])
 const showMembersDrawer = ref(false)
 const memberSearch = ref('')
 let loadingOlderMessages = false
+const RECENT_EMOJIS_KEY = 'im_recent_emojis'
+const RECENT_STICKERS_KEY = 'im_recent_stickers'
 
 const sortedGroupMembers = computed(() => {
   const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
@@ -652,6 +764,7 @@ async function handleSelectConv(conv: any) {
   try {
     await chatStore.selectConversation(conv.conversationId)
     closeMentionPicker()
+    closeEmojiPanel()
     showMembersDrawer.value = false
   } catch (err: any) {
     alert(err?.response?.data?.message || '加载消息失败')
@@ -707,9 +820,16 @@ function onMessageInput(event: Event) {
   mentionSearch.value = match[2] || ''
   mentionSelectedIndex.value = 0
   showMentionPicker.value = true
+  showEmojiPanel.value = false
 }
 
 function handleMessageKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && showEmojiPanel.value) {
+    event.preventDefault()
+    closeEmojiPanel()
+    return
+  }
+
   if (showMentionPicker.value && mentionCandidates.value.length) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -820,6 +940,125 @@ function renderTextSegments(msg: Message) {
   return segments.length ? segments : [{ text, mention: false, self: false }]
 }
 
+function toggleEmojiPanel() {
+  if (!chatStore.currentConversation) {
+    alert('请先选择会话')
+    return
+  }
+  showEmojiPanel.value = !showEmojiPanel.value
+  if (showEmojiPanel.value) {
+    closeMentionPicker()
+  }
+}
+
+function closeEmojiPanel() {
+  showEmojiPanel.value = false
+}
+
+function insertEmoji(emoji: string) {
+  const input = messageInputRef.value
+  const start = input?.selectionStart ?? messageText.value.length
+  const end = input?.selectionEnd ?? start
+  messageText.value = messageText.value.slice(0, start) + emoji + messageText.value.slice(end)
+  rememberEmoji(emoji)
+  pruneDraftMentions()
+  closeEmojiPanel()
+
+  nextTick(() => {
+    const nextCursor = start + emoji.length
+    messageInputRef.value?.focus()
+    messageInputRef.value?.setSelectionRange(nextCursor, nextCursor)
+  })
+}
+
+function sendSticker(sticker: Sticker) {
+  const conv = chatStore.currentConversation
+  if (!conv || !wsManager || !authStore.currentUser) {
+    alert('请先选择会话')
+    return
+  }
+  if (!wsConnected.value || !wsManager.isConnected()) {
+    alert('WebSocket 未连接，暂时无法发送表情')
+    return
+  }
+
+  const clientMsgId = generateId()
+  const content = buildStickerContent(sticker)
+  const sent = wsManager.send('MESSAGE_SEND', {
+    conversationId: conv.conversationId,
+    messageType: 'STICKER',
+    content,
+    clientMsgId,
+  })
+  if (!sent) {
+    alert('表情发送失败，请稍后重试')
+    return
+  }
+
+  rememberSticker(sticker)
+  closeEmojiPanel()
+  chatStore.addMessage({
+    messageId: '',
+    conversationId: conv.conversationId,
+    senderId: authStore.currentUser.userId,
+    senderName: authStore.currentUser.nickname,
+    senderAvatar: authStore.currentUser.avatar || '',
+    messageType: 'STICKER',
+    content,
+    displayContent: `[表情] ${sticker.name}`,
+    mentions: [],
+    clientMsgId,
+    createdAt: new Date().toISOString(),
+  })
+  scrollToBottom()
+}
+
+function getStickerInfo(content: string): Sticker | null {
+  return parseStickerContent(content)
+}
+
+function rememberEmoji(emoji: string) {
+  recentEmojis.value = [emoji, ...recentEmojis.value.filter((item) => item !== emoji)].slice(0, 24)
+  localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(recentEmojis.value))
+}
+
+function rememberSticker(sticker: Sticker) {
+  recentStickers.value = [sticker, ...recentStickers.value.filter((item) => item.id !== sticker.id)].slice(0, 12)
+  localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => item.id)))
+}
+
+function loadRecentEmojiState() {
+  try {
+    const storedEmojis = JSON.parse(localStorage.getItem(RECENT_EMOJIS_KEY) || '[]')
+    recentEmojis.value = Array.isArray(storedEmojis)
+      ? storedEmojis.filter((item) => typeof item === 'string').slice(0, 24)
+      : []
+  } catch {
+    recentEmojis.value = []
+  }
+
+  try {
+    const storedStickerIds = JSON.parse(localStorage.getItem(RECENT_STICKERS_KEY) || '[]')
+    recentStickers.value = Array.isArray(storedStickerIds)
+      ? storedStickerIds
+          .map((id) => STICKERS.find((sticker) => sticker.id === id))
+          .filter((sticker): sticker is Sticker => !!sticker)
+          .slice(0, 12)
+      : []
+  } catch {
+    recentStickers.value = []
+  }
+}
+
+function handleDocumentMouseDown(event: MouseEvent) {
+  if (!showEmojiPanel.value) return
+  const target = event.target as Node
+  if (emojiPanelRef.value?.contains(target) || emojiButtonRef.value?.contains(target)) {
+    return
+  }
+  closeEmojiPanel()
+}
+
 // Scroll
 function scrollToBottom() {
   nextTick(() => {
@@ -892,6 +1131,7 @@ function handleSendText() {
   messageText.value = ''
   draftMentions.value = []
   closeMentionPicker()
+  closeEmojiPanel()
   scrollToBottom()
 }
 
@@ -1195,6 +1435,8 @@ async function handleLogout() {
 }
 
 onMounted(async () => {
+  loadRecentEmojiState()
+  document.addEventListener('mousedown', handleDocumentMouseDown)
   await authStore.init()
   if (authStore.isLoggedIn) {
     await chatStore.fetchConversations()
@@ -1204,8 +1446,17 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('mousedown', handleDocumentMouseDown)
   wsManager?.disconnect()
 })
+
+watch(
+  () => chatStore.currentConversation?.conversationId,
+  () => {
+    closeMentionPicker()
+    closeEmojiPanel()
+  }
+)
 
 watch(
   () => authStore.isLoggedIn,
@@ -1760,6 +2011,25 @@ watch(
   object-fit: cover;
 }
 
+.sticker-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+}
+
+.sticker-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
+.sticker-error {
+  font-size: 11px;
+  color: #999;
+}
+
 .file-bubble {
   background: #fff;
   padding: 10px 14px;
@@ -1810,6 +2080,9 @@ watch(
   padding: 4px;
   border-radius: 4px;
   transition: background 0.15s;
+  border: none;
+  background: none;
+  line-height: 1;
 }
 
 .tool-btn:hover {
@@ -1865,6 +2138,105 @@ watch(
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
   padding: 6px;
   z-index: 30;
+}
+
+.emoji-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  width: 320px;
+  max-height: 360px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  padding: 10px;
+  z-index: 35;
+  overflow-y: auto;
+}
+
+.emoji-tabs,
+.emoji-group-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.emoji-tabs button,
+.emoji-group-tabs button {
+  border: none;
+  border-radius: 6px;
+  background: #f0f0f0;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.emoji-tabs button.active,
+.emoji-group-tabs button.active {
+  background: #667eea;
+  color: #fff;
+}
+
+.emoji-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.emoji-section-title {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-item {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: #f8f8f8;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.emoji-item:hover {
+  background: #eef0ff;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.sticker-option {
+  border: none;
+  border-radius: 8px;
+  background: #f8f8f8;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.sticker-option:hover {
+  background: #eef0ff;
+}
+
+.sticker-option img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 
 .mention-option {
