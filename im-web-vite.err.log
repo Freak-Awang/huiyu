@@ -581,3 +581,70 @@
 [2m13:13:25[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
 [2m13:13:25[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
 [2m13:13:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:35:31[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:35:31[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:35:32[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428322676:15:14
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428322676:15:14
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428322676:15:14
+[2m13:38:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:44[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:44[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428332796:15:14
+[2m13:38:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:53[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428332796:15:14
+[2m13:38:53[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:53[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428332796:15:14
+[2m13:38:53[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:38:53[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:53[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:38:53[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428350014:15:14
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428350014:15:14
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428350014:15:14
+[2m13:39:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:10[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:11[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:11[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428356193:15:14
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428356193:15:14
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428356193:15:14
+[2m13:39:16[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:16[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:17[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:17[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428371418:15:14
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428371418:15:14
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] ReferenceError: Cannot access 'Chat' before initialization
+    at http://localhost:5174/src/router/index.ts?t=1779428371418:15:14
+[2m13:39:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22m[vite] Failed to reload /src/views/Chat.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+[2m13:39:32[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:32[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:39:32[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:41:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.
+[2m13:41:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22m[Vue Router warn]: The `next()` callback in navigation guards is deprecated. Return the value instead of calling `next(value)`.

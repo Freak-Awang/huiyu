@@ -1,6 +1,8 @@
 package com.im.server.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
 import com.im.common.dto.MemberVO;
@@ -14,6 +16,9 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.ConversationService;
+import com.im.server.websocket.WebSocketSessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +35,8 @@ import java.util.stream.Collectors;
 @Service
 public class ConversationServiceImpl implements ConversationService {
 
+    private static final Logger log = LoggerFactory.getLogger(ConversationServiceImpl.class);
+
     @Autowired
     private ConversationMapper conversationMapper;
 
@@ -41,6 +48,12 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private WebSocketSessionManager sessionManager;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     public List<ConversationVO> listConversations(Long userId) {
@@ -176,6 +189,8 @@ public class ConversationServiceImpl implements ConversationService {
                 member.setIsPinned(0);
                 conversationMemberMapper.insert(member);
             }
+
+            notifyConversationCreated(conversation, memberIds);
 
             return buildConversationVO(conversation, userId);
         }
@@ -320,6 +335,23 @@ public class ConversationServiceImpl implements ConversationService {
             }
         }
         return null;
+    }
+
+    private void notifyConversationCreated(ImConversation conversation, Set<Long> memberIds) {
+        for (Long memberId : memberIds) {
+            if (!sessionManager.isOnline(memberId)) {
+                continue;
+            }
+            try {
+                ObjectNode message = objectMapper.createObjectNode();
+                message.put("cmd", "CONVERSATION_CREATED");
+                message.set("data", objectMapper.valueToTree(buildConversationVO(conversation, memberId)));
+                sessionManager.sendToUser(memberId, objectMapper.writeValueAsString(message));
+            } catch (Exception e) {
+                log.error("Failed to push conversation created event: conversationId={}, userId={}",
+                        conversation.getId(), memberId, e);
+            }
+        }
     }
 
     private ConversationVO buildConversationVO(ImConversation conversation, Long userId) {

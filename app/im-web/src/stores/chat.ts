@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
+  getConversation,
   listConversations,
   type Conversation,
 } from '../api/conversation'
@@ -64,6 +65,19 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function ensureConversation(convId: string): Promise<Conversation | null> {
+    const existing = conversations.value.find((c) => c.conversationId === convId)
+    if (existing) return existing
+
+    try {
+      const res = await getConversation(convId)
+      upsertConversation(res.data)
+      return res.data
+    } catch {
+      return null
+    }
+  }
+
   async function fetchMessages(convId: string, beforeId?: string) {
     const res = await getMessages(convId, beforeId)
     const msgs = [...res.data.records].reverse()
@@ -107,14 +121,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function receiveMessage(msg: Message) {
+  async function receiveMessage(msg: Message): Promise<Conversation | null> {
+    const conv = await ensureConversation(msg.conversationId)
     addMessage(msg)
     const isCurrentConv =
       currentConversation.value?.conversationId === msg.conversationId
     if (!isCurrentConv) {
       const count = unreadCounts.value.get(msg.conversationId) || 0
       unreadCounts.value.set(msg.conversationId, count + 1)
+    } else {
+      unreadCounts.value.set(msg.conversationId, 0)
     }
+    return conv
   }
 
   async function markAsRead(convId: string) {
@@ -152,6 +170,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchConversations,
     selectConversation,
     upsertConversation,
+    ensureConversation,
     fetchMessages,
     addMessage,
     receiveMessage,

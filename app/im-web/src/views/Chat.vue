@@ -408,7 +408,7 @@ import { useChatStore } from '../stores/chat'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
-import { createConversation, pinConversation } from '../api/conversation'
+import { createConversation, normalizeConversation, pinConversation } from '../api/conversation'
 import { normalizeMessage } from '../api/message'
 import { uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
@@ -705,7 +705,7 @@ function sendFileMessage(type: string, content: string) {
 }
 
 // WebSocket message handler
-function handleWsMessage(msg: WsMessage) {
+async function handleWsMessage(msg: WsMessage) {
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
       const data = msg.data
@@ -716,11 +716,20 @@ function handleWsMessage(msg: WsMessage) {
           data.createTime ||
           (data.timestamp ? new Date(Number(data.timestamp)).toISOString() : undefined),
       })
-      chatStore.receiveMessage(receivedMessage)
+      const conv = await chatStore.receiveMessage(receivedMessage)
+      if (!conv) {
+        alert('收到新消息，但会话信息加载失败，请刷新后重试')
+      }
       // If current conv, scroll down
       if (chatStore.currentConversation?.conversationId === receivedMessage.conversationId) {
         scrollToBottom()
         chatStore.markAsRead(receivedMessage.conversationId)
+      }
+      break
+    }
+    case 'CONVERSATION_CREATED': {
+      if (msg.data) {
+        chatStore.upsertConversation(normalizeConversation(msg.data))
       }
       break
     }
@@ -852,13 +861,16 @@ async function doCreateGroupChat() {
   if (!createGroupName.value || createSelectedMembers.value.length === 0) return
   try {
     const memberIds = createSelectedMembers.value.map((m) => m.userId || m.id)
-    await createConversation({
+    const res = await createConversation({
       type: 'GROUP',
       name: createGroupName.value,
       memberIds,
     })
-    await chatStore.fetchConversations()
+    chatStore.upsertConversation(res.data)
+    activeTab.value = 'chat'
+    await chatStore.selectConversation(res.data.conversationId)
     closeCreateDialog()
+    scrollToBottom()
   } catch (err: any) {
     alert(err?.response?.data?.message || '创建群聊失败')
   }

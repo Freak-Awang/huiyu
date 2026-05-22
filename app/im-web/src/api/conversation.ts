@@ -30,7 +30,7 @@ export interface MessagePreview {
   createdAt: string
 }
 
-interface RawConversation {
+export interface RawConversation {
   id?: number | string
   conversationId?: number | string
   type?: number | string
@@ -53,7 +53,7 @@ export type CreateConversationParams =
   | { type: 'SINGLE'; targetUserId: string | number }
   | { type: 'GROUP'; name: string; memberIds: Array<string | number> }
 
-function normalizeConversation(raw: RawConversation): Conversation {
+export function normalizeConversation(raw: RawConversation): Conversation {
   const conversationId = String(raw.conversationId ?? raw.id ?? '')
   const type = raw.type === 1 || raw.type === '1' || raw.type === 'SINGLE' ? 'SINGLE' : 'GROUP'
   const lastMessageTime = raw.lastMessageTime || raw.updatedAt || raw.updateTime || raw.createdAt || raw.createTime || ''
@@ -95,6 +95,13 @@ export function listConversations() {
   return http.get<RawConversation[]>('/api/conversations').then((res) => ({
     ...res,
     data: (res.data || []).map(normalizeConversation),
+  }))
+}
+
+export function getConversation(conversationId: string) {
+  return http.get<RawConversation>(`/api/conversations/${conversationId}`).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
   }))
 }
 
