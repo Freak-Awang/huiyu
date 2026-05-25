@@ -12,9 +12,11 @@ export interface Message {
   mentions: MessageMention[]
   clientMsgId?: string
   createdAt: string
-  status?: string
+  status?: MessageStatus
   replyTo?: MessageReply | null
 }
+
+export type MessageStatus = 'SENT' | 'SENDING' | 'FAILED' | 'RECALLED' | string
 
 export interface MessageMention {
   userId: string
@@ -59,10 +61,7 @@ interface RawMessagePage {
 }
 
 export function normalizeMessage(raw: RawMessage): Message {
-  const timestamp =
-    raw.createdAt ||
-    raw.createTime ||
-    (raw.timestamp ? new Date(Number(raw.timestamp)).toISOString() : '')
+  const timestamp = normalizeMessageTime(raw.createdAt || raw.createTime || raw.timestamp)
   const content = raw.content || ''
   const parsedText = parseTextContent(raw.messageType || 'TEXT', content)
   const messageType = raw.messageType || 'TEXT'
@@ -82,6 +81,21 @@ export function normalizeMessage(raw: RawMessage): Message {
     status: raw.status || undefined,
     replyTo: parsedText.replyTo,
   }
+}
+
+function normalizeMessageTime(value?: string | number | null): string {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'number') return new Date(value).toISOString()
+
+  const raw = String(value)
+  if (/^\d+$/.test(raw)) return new Date(Number(raw)).toISOString()
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) return raw
+
+  // Backend LocalDateTime values are emitted without a timezone; the server runs in UTC.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
+    return `${raw}Z`
+  }
+  return raw
 }
 
 function parseStickerDisplayName(content: string): string {

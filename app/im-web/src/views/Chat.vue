@@ -1494,7 +1494,7 @@ async function handleWsMessage(msg: WsMessage) {
     }
     case 'MESSAGE_UPDATED': {
       if (msg.data) {
-        chatStore.addMessage(normalizeMessage(msg.data))
+        chatStore.upsertMessage(normalizeMessage(msg.data))
       }
       break
     }

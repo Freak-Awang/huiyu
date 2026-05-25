@@ -167,8 +167,29 @@ public class MessageServiceImpl implements MessageService {
         message.setStatus("RECALLED");
         message.setContent("");
         messageMapper.updateById(message);
+        updateConversationPreviewAfterRecall(message);
         pushMessageUpdated(message);
         return toMessageVO(message);
+    }
+
+    private void updateConversationPreviewAfterRecall(ImMessage message) {
+        ImMessage latestMessage = messageMapper.selectOne(
+                new LambdaQueryWrapper<ImMessage>()
+                        .eq(ImMessage::getConversationId, message.getConversationId())
+                        .orderByDesc(ImMessage::getCreateTime)
+                        .orderByDesc(ImMessage::getId)
+                        .last("LIMIT 1"));
+        if (latestMessage == null || !message.getId().equals(latestMessage.getId())) {
+            return;
+        }
+
+        ImConversation conversation = conversationMapper.selectById(message.getConversationId());
+        if (conversation == null) {
+            return;
+        }
+        conversation.setLastMessage("消息已撤回");
+        conversation.setLastMessageTime(message.getCreateTime());
+        conversationMapper.updateById(conversation);
     }
 
     private void pushMessageUpdated(ImMessage message) {

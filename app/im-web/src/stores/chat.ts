@@ -4,6 +4,7 @@ import {
   getConversation,
   listConversations,
   type Conversation,
+  type MessagePreview,
 } from '../api/conversation'
 import { getMessages, markRead, type Message } from '../api/message'
 
@@ -101,34 +102,59 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function addMessage(msg: Message) {
-    const convMessagesRaw = messages.value.get(msg.conversationId)
-    const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
-    const exists = convMessages.find((m) =>
-      (msg.clientMsgId && m.clientMsgId === msg.clientMsgId) ||
-      (msg.messageId && m.messageId === msg.messageId)
-    )
-    if (exists) {
-      Object.assign(exists, msg)
-      return
-    }
-    messages.value.set(msg.conversationId, [...convMessages, msg])
+  function getMessagePreviewContent(msg: Message): string {
+    if (msg.status === 'RECALLED') return '消息已撤回'
+    return msg.displayContent || msg.content
+  }
 
+  function updateConversationLastMessage(msg: Message, moveToTop: boolean) {
     const conv = conversations.value.find((c) => c.conversationId === msg.conversationId)
-    if (conv) {
-      conv.lastMessage = {
-        messageId: msg.messageId,
-        senderId: msg.senderId,
-        senderName: msg.senderName,
-        content: msg.displayContent || msg.content,
-        messageType: msg.messageType,
-        createdAt: msg.createdAt,
-      }
+    if (!conv) return
+
+    const preview: MessagePreview = {
+      messageId: msg.messageId,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      content: getMessagePreviewContent(msg),
+      messageType: msg.messageType,
+      createdAt: msg.createdAt,
+    }
+    conv.lastMessage = preview
+
+    if (moveToTop) {
       conversations.value = [
         conv,
         ...conversations.value.filter((c) => c.conversationId !== msg.conversationId),
       ]
     }
+  }
+
+  function upsertMessage(msg: Message) {
+    const convMessagesRaw = messages.value.get(msg.conversationId)
+    const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
+    const existingIndex = convMessages.findIndex((m) =>
+      (msg.messageId && m.messageId === msg.messageId) ||
+      (msg.clientMsgId && m.clientMsgId === msg.clientMsgId)
+    )
+    if (existingIndex >= 0) {
+      const updated = { ...convMessages[existingIndex], ...msg }
+      const nextMessages = [...convMessages]
+      nextMessages[existingIndex] = updated
+      messages.value.set(msg.conversationId, nextMessages)
+
+      const isLatestMessage = existingIndex === convMessages.length - 1
+      if (isLatestMessage) {
+        updateConversationLastMessage(updated, false)
+      }
+      return
+    }
+
+    messages.value.set(msg.conversationId, [...convMessages, msg])
+    updateConversationLastMessage(msg, true)
+  }
+
+  function addMessage(msg: Message) {
+    upsertMessage(msg)
   }
 
   async function receiveMessage(msg: Message, currentUserId?: string): Promise<Conversation | null> {
@@ -206,6 +232,7 @@ export const useChatStore = defineStore('chat', () => {
     ensureConversation,
     fetchMessages,
     addMessage,
+    upsertMessage,
     receiveMessage,
     markAsRead,
     getUnreadCount,

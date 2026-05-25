@@ -20,10 +20,24 @@ http.interceptors.request.use(
 http.interceptors.response.use(
   (response) => {
     const body = response.data
-    if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+    if (body && typeof body === 'object' && 'code' in body) {
       if (body.code === 200) {
         response.data = body.data
+        return response
       }
+      if (body.code === 401) {
+        localStorage.removeItem('token')
+        router.push('/login')
+      }
+      const error = new Error(body.message || '请求失败') as Error & {
+        response?: typeof response
+      }
+      error.response = {
+        ...response,
+        status: body.code === 401 ? 401 : response.status,
+        data: body,
+      }
+      return Promise.reject(error)
     }
     return response
   },
