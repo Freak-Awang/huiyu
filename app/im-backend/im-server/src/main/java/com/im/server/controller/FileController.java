@@ -44,7 +44,7 @@ public class FileController {
     @PostMapping("/upload")
     public Result<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
         Long userId = getCurrentUserId();
-        ImFile result = fileService.upload(file, userId);
+        ImFile result = fileService.upload(file, userId, true);
 
         Map<String, Object> data = new HashMap<>();
         data.put("id", result.getId());
@@ -57,7 +57,7 @@ public class FileController {
     @PostMapping("/upload/avatar")
     public Result<Map<String, Object>> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long userId = getCurrentUserId();
-        ImFile result = fileService.upload(file, userId);
+        ImFile result = fileService.upload(file, userId, false);
 
         SysUser user = userService.getById(userId);
         user.setAvatar("/api/files/download/" + result.getId());
@@ -106,6 +106,15 @@ public class FileController {
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                 .body(resource);
+    }
+
+    @PostMapping("/ack/{fileId}")
+    public Result<Void> acknowledgeDownload(@PathVariable Long fileId) {
+        ImFile imFile = fileService.getById(fileId);
+        if (imFile == null) {
+            return Result.error(404, "File not found");
+        }
+        return Result.ok();
     }
 
     private Long getCurrentUserId() {

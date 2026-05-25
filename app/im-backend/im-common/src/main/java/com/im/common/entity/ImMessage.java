@@ -19,4 +19,5 @@ public class ImMessage {
     private String status;
     private String clientMsgId;
     private LocalDateTime createTime;
+    private LocalDateTime expiresAt;
 }

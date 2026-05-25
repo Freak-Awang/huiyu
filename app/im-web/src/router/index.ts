@@ -1,10 +1,12 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Login from '../views/Login.vue'
 import Chat from '../views/Chat.vue'
 
+const history = window.location.protocol === 'file:' ? createWebHashHistory() : createWebHistory()
+
 const router = createRouter({
-  history: createWebHistory(),
+  history,
   routes: [
     {
       path: '/login',

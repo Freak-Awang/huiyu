@@ -104,6 +104,9 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
                 case CMD_MESSAGE_SEND:
                     handleMessageSend(session, senderId, root, seq);
                     break;
+                case CMD_MESSAGE_ACK:
+                    handleMessageAck(senderId, root);
+                    break;
                 case CMD_ONLINE_STATUS:
                     handleOnlineStatus(session, senderId, root, seq);
                     break;
@@ -209,6 +212,15 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private void handleMessageAck(Long userId, JsonNode root) {
+        JsonNode data = root.get("data");
+        Long messageId = data != null && data.has("messageId") ? data.get("messageId").asLong() : null;
+        if (messageId == null) {
+            return;
+        }
+        messageService.acknowledgeMessage(userId, messageId);
+    }
+
     private void pushMessageToConversationMembers(Long conversationId, Long senderId, ImMessage msg) {
         try {
             LambdaQueryWrapper<ImConversationMember> wrapper = new LambdaQueryWrapper<>();
@@ -229,6 +241,8 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             receiveData.put("senderAvatar", sender != null ? sender.getAvatar() : "");
             receiveData.put("messageType", msg.getMessageType());
             receiveData.put("content", msg.getContent());
+            receiveData.put("clientMsgId", msg.getClientMsgId());
+            receiveData.put("status", msg.getStatus());
             receiveData.put("createdAt", msg.getCreateTime() != null ? msg.getCreateTime().toString() : null);
             receiveData.put("timestamp", System.currentTimeMillis());
 

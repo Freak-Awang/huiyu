@@ -677,12 +677,16 @@ import {
   buildTextMessageContent,
   normalizeMessage,
   recallMessage,
-  searchMessages,
+  searchMessages as searchServerMessages,
   type Message,
   type MessageMention,
   type MessageReply,
 } from '../api/message'
-import { uploadFile } from '../api/file'
+import {
+  canUseLocalMessageStore,
+  searchLocalMessages,
+} from '../utils/localMessageStore'
+import { acknowledgeFileDownload, uploadFile } from '../api/file'
 import { getFileUrl } from '../api/file'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
@@ -749,6 +753,11 @@ async function loadInitialChatData() {
   })
 
   await Promise.all([conversationTask, contactsTask])
+  if (authStore.isLoggedIn) {
+    await chatStore.fetchPendingMessages().catch((err) => {
+      console.warn('Pending messages sync failed', err)
+    })
+  }
 }
 
 async function toggleDept(deptId: string) {
@@ -924,8 +933,12 @@ async function runChatSearch() {
   const keyword = chatSearchKeyword.value.trim()
   if (!conv || !keyword) return
   try {
-    const res = await searchMessages(conv.conversationId, keyword, 20)
-    chatSearchResults.value = res.data.records
+    if (canUseLocalMessageStore()) {
+      chatSearchResults.value = await searchLocalMessages(conv.conversationId, keyword, 20)
+    } else {
+      const res = await searchServerMessages(conv.conversationId, keyword, 20)
+      chatSearchResults.value = res.data.records
+    }
     showSearchResults.value = true
   } catch (err: any) {
     alert(err?.response?.data?.message || '搜索聊天记录失败')
@@ -1489,6 +1502,9 @@ async function handleWsMessage(msg: WsMessage) {
       if (!conv) {
         alert('收到新消息，但会话信息加载失败，请刷新后重试')
       }
+      if (receivedMessage.messageId) {
+        wsManager?.send('MESSAGE_ACK', { messageId: receivedMessage.messageId })
+      }
       if (conv && !conv.muted && chatStore.currentConversation?.conversationId !== receivedMessage.conversationId) {
         showBrowserNotification(conv.name || receivedMessage.senderName, receivedMessage.displayContent || receivedMessage.content)
       }
@@ -1713,6 +1729,12 @@ function getFileInfo(content: string): { name: string; size: string; url: string
 function downloadFile(content: string) {
   const info = getFileInfo(content)
   if (info.url) {
+    const match = info.url.match(/\/api\/files\/download\/([^/?#]+)/)
+    if (match?.[1]) {
+      acknowledgeFileDownload(match[1]).catch(() => {
+        // Download still opens even if the acknowledgement cannot be recorded.
+      })
+    }
     window.open(info.url, '_blank')
   }
 }

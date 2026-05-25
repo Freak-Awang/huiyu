@@ -29,7 +29,7 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="rememberPwd" label="记住密码" />
+          <el-checkbox v-model="rememberAccount" label="记住账号" />
         </el-form-item>
         <el-form-item>
           <el-button
@@ -59,7 +59,7 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const rememberPwd = ref(false)
+const rememberAccount = ref(false)
 
 const form = reactive({
   username: '',
@@ -73,11 +73,10 @@ const rules: FormRules = {
 
 onMounted(() => {
   const savedUsername = localStorage.getItem('rememberedUsername')
-  const savedPassword = localStorage.getItem('rememberedPassword')
-  if (savedUsername && savedPassword) {
+  localStorage.removeItem('rememberedPassword')
+  if (savedUsername) {
     form.username = savedUsername
-    form.password = savedPassword
-    rememberPwd.value = true
+    rememberAccount.value = true
   }
 })
 
@@ -88,12 +87,10 @@ async function handleLogin() {
   loading.value = true
   try {
     await authStore.login(form.username, form.password)
-    if (rememberPwd.value) {
+    if (rememberAccount.value) {
       localStorage.setItem('rememberedUsername', form.username)
-      localStorage.setItem('rememberedPassword', form.password)
     } else {
       localStorage.removeItem('rememberedUsername')
-      localStorage.removeItem('rememberedPassword')
     }
     ElMessage.success('登录成功')
     router.push('/')

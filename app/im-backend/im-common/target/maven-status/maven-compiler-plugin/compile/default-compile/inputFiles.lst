@@ -1,4 +1,5 @@
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\config\WebConfig.java
+E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\ConversationMembersRequest.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\ConversationVO.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\CreateConversationRequest.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\DeptVO.java
@@ -11,6 +12,7 @@ E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImConve
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImConversationMember.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImFile.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImMessage.java
+E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImMessageDelivery.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\SysDept.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\SysUser.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\exception\BusinessException.java

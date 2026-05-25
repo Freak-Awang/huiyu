@@ -1,3 +1,5 @@
+import { getWsBaseUrl } from '../config/runtime'
+
 export interface WsMessage {
   cmd: string
   seq: number
@@ -37,11 +39,7 @@ export class WebSocketManager {
       this.ws.close()
     }
 
-    const configuredUrl = import.meta.env.VITE_WS_URL
-    const defaultUrl = import.meta.env.PROD
-      ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/im`
-      : 'ws://localhost:8080/ws/im'
-    const url = `${configuredUrl || defaultUrl}?token=${encodeURIComponent(this.token)}`
+    const url = `${getWsBaseUrl()}?token=${encodeURIComponent(this.token)}`
     this.ws = new WebSocket(url)
 
     this.ws.onopen = () => {

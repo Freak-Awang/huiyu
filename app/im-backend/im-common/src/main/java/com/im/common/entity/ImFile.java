@@ -19,4 +19,6 @@ public class ImFile {
     private String contentType;
     private Long uploaderId;
     private LocalDateTime createTime;
+    private LocalDateTime expiresAt;
+    private Integer temporary;
 }

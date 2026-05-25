@@ -9,11 +9,13 @@ import com.im.common.dto.SendMessageRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
+import com.im.common.entity.ImMessageDelivery;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.PageResult;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
+import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.MessageService;
@@ -31,9 +33,13 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
+    private static final int MESSAGE_RETENTION_DAYS = 7;
 
     @Autowired
     private MessageMapper messageMapper;
+
+    @Autowired
+    private MessageDeliveryMapper messageDeliveryMapper;
 
     @Autowired
     private ConversationMapper conversationMapper;
@@ -59,11 +65,15 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException("Not a member of this conversation");
         }
 
+        LocalDateTime now = LocalDateTime.now();
         Long total = messageMapper.selectCount(
-                new LambdaQueryWrapper<ImMessage>().eq(ImMessage::getConversationId, conversationId));
+                new LambdaQueryWrapper<ImMessage>()
+                        .eq(ImMessage::getConversationId, conversationId)
+                        .gt(ImMessage::getExpiresAt, now));
 
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ImMessage::getConversationId, conversationId);
+        wrapper.gt(ImMessage::getExpiresAt, now);
         if (beforeMessageId != null) {
             wrapper.lt(ImMessage::getId, beforeMessageId);
         }
@@ -94,6 +104,7 @@ public class MessageServiceImpl implements MessageService {
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ImMessage::getConversationId, conversationId)
                 .ne(ImMessage::getStatus, "RECALLED")
+                .gt(ImMessage::getExpiresAt, LocalDateTime.now())
                 .like(ImMessage::getContent, keyword)
                 .orderByDesc(ImMessage::getCreateTime)
                 .last("LIMIT " + pageSize);
@@ -133,8 +144,10 @@ public class MessageServiceImpl implements MessageService {
         message.setStatus("SENT");
         message.setClientMsgId(request.getClientMsgId());
         message.setCreateTime(LocalDateTime.now());
+        message.setExpiresAt(LocalDateTime.now().plusDays(MESSAGE_RETENTION_DAYS));
 
         messageMapper.insert(message);
+        createDeliveryRows(message);
 
         ImConversation conversation = conversationMapper.selectById(request.getConversationId());
         if (conversation != null) {
@@ -170,6 +183,74 @@ public class MessageServiceImpl implements MessageService {
         updateConversationPreviewAfterRecall(message);
         pushMessageUpdated(message);
         return toMessageVO(message);
+    }
+
+    @Override
+    public List<MessageVO> getPendingMessages(Long userId, int limit) {
+        List<ImMessageDelivery> pendingDeliveries = messageDeliveryMapper.selectList(
+                new LambdaQueryWrapper<ImMessageDelivery>()
+                        .eq(ImMessageDelivery::getUserId, userId)
+                        .eq(ImMessageDelivery::getDelivered, 0)
+                        .orderByAsc(ImMessageDelivery::getCreateTime)
+                        .last("LIMIT " + Math.max(1, Math.min(limit, 200))));
+
+        LocalDateTime now = LocalDateTime.now();
+        return pendingDeliveries.stream()
+                .map(delivery -> messageMapper.selectById(delivery.getMessageId()))
+                .filter(message -> message != null
+                        && message.getExpiresAt() != null
+                        && message.getExpiresAt().isAfter(now))
+                .map(this::toMessageVO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void acknowledgeMessage(Long userId, Long messageId) {
+        ImMessageDelivery delivery = messageDeliveryMapper.selectOne(
+                new LambdaQueryWrapper<ImMessageDelivery>()
+                        .eq(ImMessageDelivery::getMessageId, messageId)
+                        .eq(ImMessageDelivery::getUserId, userId));
+        if (delivery == null) {
+            return;
+        }
+        if (delivery.getDelivered() != null && delivery.getDelivered() == 1) {
+            return;
+        }
+        delivery.setDelivered(1);
+        delivery.setDeliveredTime(LocalDateTime.now());
+        messageDeliveryMapper.updateById(delivery);
+    }
+
+    @Override
+    @Transactional
+    public void cleanupExpiredMessages() {
+        List<ImMessage> expiredMessages = messageMapper.selectList(
+                new LambdaQueryWrapper<ImMessage>()
+                        .lt(ImMessage::getExpiresAt, LocalDateTime.now()));
+        for (ImMessage message : expiredMessages) {
+            messageDeliveryMapper.delete(
+                    new LambdaQueryWrapper<ImMessageDelivery>()
+                            .eq(ImMessageDelivery::getMessageId, message.getId()));
+            messageMapper.deleteById(message.getId());
+        }
+    }
+
+    private void createDeliveryRows(ImMessage message) {
+        List<ImConversationMember> members = conversationMemberMapper.selectList(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, message.getConversationId()));
+        LocalDateTime now = LocalDateTime.now();
+        for (ImConversationMember member : members) {
+            ImMessageDelivery delivery = new ImMessageDelivery();
+            delivery.setMessageId(message.getId());
+            delivery.setConversationId(message.getConversationId());
+            delivery.setUserId(member.getUserId());
+            delivery.setDelivered(member.getUserId().equals(message.getSenderId()) ? 1 : 0);
+            delivery.setDeliveredTime(member.getUserId().equals(message.getSenderId()) ? now : null);
+            delivery.setCreateTime(now);
+            messageDeliveryMapper.insert(delivery);
+        }
     }
 
     private void updateConversationPreviewAfterRecall(ImMessage message) {

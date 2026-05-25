@@ -5,6 +5,8 @@ import com.im.common.dto.SendMessageRequest;
 import com.im.common.entity.ImMessage;
 import com.im.common.result.PageResult;
 
+import java.util.List;
+
 public interface MessageService {
 
     PageResult<MessageVO> getMessages(Long userId, Long conversationId, Long beforeMessageId, int pageSize);
@@ -14,4 +16,10 @@ public interface MessageService {
     ImMessage sendMessage(Long senderId, SendMessageRequest request);
 
     MessageVO recallMessage(Long userId, Long messageId);
+
+    List<MessageVO> getPendingMessages(Long userId, int limit);
+
+    void acknowledgeMessage(Long userId, Long messageId);
+
+    void cleanupExpiredMessages();
 }

@@ -1,13 +1,15 @@
 import axios from 'axios'
 import router from '../router'
+import { getApiBaseUrl } from '../config/runtime'
 
 const http = axios.create({
-  baseURL: import.meta.env.PROD ? '' : 'http://localhost:8080',
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
 })
 
 http.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiBaseUrl()
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

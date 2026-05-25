@@ -16,5 +16,6 @@ com\im\common\dto\DeptVO.class
 com\im\common\dto\MemberVO.class
 com\im\common\dto\SendMessageRequest.class
 com\im\common\entity\ImMessage.class
+com\im\common\dto\ConversationMembersRequest.class
 com\im\common\entity\SysUser.class
 com\im\common\result\PageResult.class

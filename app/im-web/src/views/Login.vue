@@ -7,6 +7,14 @@
         <p>企业即时通讯平台</p>
       </div>
       <form class="login-form" @submit.prevent="handleLogin">
+        <div v-if="showServerConfig" class="form-item">
+          <input
+            v-model="serverOrigin"
+            type="text"
+            placeholder="服务器地址，如 192.168.1.10 或 http://im.local"
+            autocomplete="url"
+          />
+        </div>
         <div class="form-item">
           <input
             v-model="username"
@@ -26,11 +34,11 @@
         <div class="form-options">
           <label class="checkbox-label">
             <input v-model="rememberMe" type="checkbox" />
-            <span>记住密码</span>
+            <span>记住账号</span>
           </label>
           <label class="checkbox-label">
             <input v-model="autoLogin" type="checkbox" />
-            <span>自动登录</span>
+            <span>自动进入</span>
           </label>
         </div>
         <button class="login-btn" type="submit" :disabled="loading">
@@ -46,18 +54,30 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getServerOrigin, isDesktopRuntime, setServerOrigin } from '../config/runtime'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const username = ref('')
 const password = ref('')
+const serverOrigin = ref(getServerOrigin())
 const rememberMe = ref(false)
 const autoLogin = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
+const hasExplicitServerOrigin =
+  !!localStorage.getItem('imServerOrigin') ||
+  !!import.meta.env.VITE_IM_SERVER_ORIGIN ||
+  !!import.meta.env.VITE_API_BASE_URL
+const showServerConfig = isDesktopRuntime() || hasExplicitServerOrigin
 
 function handleLogin() {
+  if (showServerConfig && !serverOrigin.value.trim()) {
+    errorMsg.value = '请输入内网服务器地址'
+    return
+  }
+
   if (!username.value || !password.value) {
     errorMsg.value = '请输入用户名和密码'
     return
@@ -66,14 +86,22 @@ function handleLogin() {
   loading.value = true
   errorMsg.value = ''
 
+  try {
+    if (serverOrigin.value.trim()) {
+      serverOrigin.value = setServerOrigin(serverOrigin.value)
+    }
+  } catch (err) {
+    errorMsg.value = err instanceof Error ? err.message : '服务器地址无效'
+    loading.value = false
+    return
+  }
+
   authStore.login(username.value, password.value).then(() => {
     if (rememberMe.value) {
       localStorage.setItem('savedUsername', username.value)
-      localStorage.setItem('savedPassword', password.value)
       localStorage.setItem('rememberMe', 'true')
     } else {
       localStorage.removeItem('savedUsername')
-      localStorage.removeItem('savedPassword')
       localStorage.removeItem('rememberMe')
     }
     localStorage.setItem('autoLogin', autoLogin.value ? 'true' : 'false')
@@ -85,22 +113,24 @@ function handleLogin() {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   const savedUsername = localStorage.getItem('savedUsername')
-  const savedPassword = localStorage.getItem('savedPassword')
   const savedRemember = localStorage.getItem('rememberMe')
   const savedAutoLogin = localStorage.getItem('autoLogin')
+  localStorage.removeItem('savedPassword')
 
   if (savedRemember === 'true') {
     rememberMe.value = true
     if (savedUsername) username.value = savedUsername
-    if (savedPassword) password.value = savedPassword
   }
 
   if (savedAutoLogin === 'true') {
     autoLogin.value = true
-    if (username.value && password.value) {
-      handleLogin()
+    if (localStorage.getItem('token')) {
+      await authStore.init()
+      if (authStore.isLoggedIn) {
+        router.push('/')
+      }
     }
   }
 })

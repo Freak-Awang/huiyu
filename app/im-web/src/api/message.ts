@@ -190,6 +190,17 @@ export function getMessages(convId: string, beforeMessageId?: string, pageSize?:
   })
 }
 
+export function getPendingMessages(limit = 100) {
+  return http.get<RawMessage[]>('/api/messages/pending', { params: { limit } }).then((res) => ({
+    ...res,
+    data: (res.data || []).map(normalizeMessage),
+  }))
+}
+
+export function acknowledgeMessage(messageId: string) {
+  return http.post(`/api/messages/ack/${messageId}`)
+}
+
 export function markRead(convId: string) {
   return http.post(`/api/messages/read/${convId}`)
 }

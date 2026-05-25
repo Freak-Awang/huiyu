@@ -1,4 +1,5 @@
 import http from './index'
+import { toServerUrl } from '../config/runtime'
 
 export interface UploadedFile {
   id: string
@@ -14,10 +15,7 @@ interface RawUploadedFile {
 }
 
 function apiAssetUrl(path: string) {
-  if (!path) return ''
-  if (/^https?:\/\//i.test(path)) return path
-  const normalized = path.startsWith('/') ? path : `/${path}`
-  return import.meta.env.PROD ? normalized : `http://localhost:8080${normalized}`
+  return toServerUrl(path)
 }
 
 function normalizeUploadedFile(raw: RawUploadedFile): UploadedFile {
@@ -53,4 +51,8 @@ export function uploadAvatar(file: File) {
 
 export function getFileUrl(fileId: string) {
   return apiAssetUrl(`/api/files/download/${fileId}`)
+}
+
+export function acknowledgeFileDownload(fileId: string) {
+  return http.post(`/api/files/ack/${fileId}`)
 }

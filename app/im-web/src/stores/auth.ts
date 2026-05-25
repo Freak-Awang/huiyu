@@ -40,6 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
         deptId: u.deptId ? String(u.deptId) : '',
         deptName: u.deptName || '',
       }
+      localStorage.setItem('imCurrentUserId', user.value.userId)
     }
   }
 
@@ -52,6 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('imCurrentUserId')
   }
 
   async function loadFromStorage() {
@@ -73,10 +75,12 @@ export const useAuthStore = defineStore('auth', () => {
         deptId: data.deptId ? String(data.deptId) : '',
         deptName: data.deptName || '',
       }
+      localStorage.setItem('imCurrentUserId', user.value.userId)
     } catch {
       token.value = ''
       user.value = null
       localStorage.removeItem('token')
+      localStorage.removeItem('imCurrentUserId')
     }
   }
 

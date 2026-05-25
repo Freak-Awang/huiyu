@@ -6,7 +6,18 @@ import {
   type Conversation,
   type MessagePreview,
 } from '../api/conversation'
-import { getMessages, markRead, type Message } from '../api/message'
+import {
+  acknowledgeMessage,
+  getMessages,
+  getPendingMessages,
+  markRead,
+  type Message,
+} from '../api/message'
+import {
+  canUseLocalMessageStore,
+  listLocalMessages,
+  upsertLocalMessage,
+} from '../utils/localMessageStore'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -91,6 +102,17 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function fetchMessages(convId: string, beforeId?: string) {
+    if (canUseLocalMessageStore()) {
+      const localMessages = await listLocalMessages(convId, beforeId, 50)
+      const existingRaw = messages.value.get(convId)
+      const existing = Array.isArray(existingRaw) ? existingRaw : []
+      if (beforeId) {
+        messages.value.set(convId, [...localMessages, ...existing])
+      } else {
+        messages.value.set(convId, localMessages)
+      }
+      return
+    }
     const res = await getMessages(convId, beforeId)
     const msgs = [...res.data.records].reverse()
     const existingRaw = messages.value.get(convId)
@@ -105,6 +127,20 @@ export const useChatStore = defineStore('chat', () => {
   function getMessagePreviewContent(msg: Message): string {
     if (msg.status === 'RECALLED') return '消息已撤回'
     return msg.displayContent || msg.content
+  }
+
+  async function fetchPendingMessages() {
+    const res = await getPendingMessages()
+    for (const msg of res.data) {
+      upsertMessage(msg)
+      if (msg.messageId) {
+        try {
+          await acknowledgeMessage(msg.messageId)
+        } catch {
+          // The next pending sync will retry the delivery acknowledgement.
+        }
+      }
+    }
   }
 
   function updateConversationLastMessage(msg: Message, moveToTop: boolean) {
@@ -146,11 +182,13 @@ export const useChatStore = defineStore('chat', () => {
       if (isLatestMessage) {
         updateConversationLastMessage(updated, false)
       }
+      void upsertLocalMessage(updated)
       return
     }
 
     messages.value.set(msg.conversationId, [...convMessages, msg])
     updateConversationLastMessage(msg, true)
+    void upsertLocalMessage(msg)
   }
 
   function addMessage(msg: Message) {
@@ -201,6 +239,7 @@ export const useChatStore = defineStore('chat', () => {
       if (msg) {
         msg.messageId = String(serverMsgId || msg.messageId || '')
         msg.status = status
+        void upsertLocalMessage(msg)
         break
       }
     }
@@ -211,6 +250,7 @@ export const useChatStore = defineStore('chat', () => {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
       if (msg) {
         msg.status = status
+        void upsertLocalMessage(msg)
         break
       }
     }
@@ -231,6 +271,7 @@ export const useChatStore = defineStore('chat', () => {
     refreshConversation,
     ensureConversation,
     fetchMessages,
+    fetchPendingMessages,
     addMessage,
     upsertMessage,
     receiveMessage,

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/messages")
@@ -43,6 +44,19 @@ public class MessageController {
             @RequestParam(defaultValue = "20") int pageSize) {
         Long userId = getCurrentUserId();
         return Result.success(messageService.searchMessages(userId, conversationId, keyword, pageSize));
+    }
+
+    @GetMapping("/pending")
+    public Result<List<MessageVO>> getPendingMessages(@RequestParam(defaultValue = "100") int limit) {
+        Long userId = getCurrentUserId();
+        return Result.success(messageService.getPendingMessages(userId, limit));
+    }
+
+    @PostMapping("/ack/{messageId}")
+    public Result<Void> acknowledgeMessage(@PathVariable Long messageId) {
+        Long userId = getCurrentUserId();
+        messageService.acknowledgeMessage(userId, messageId);
+        return Result.ok();
     }
 
     @PostMapping("/recall/{messageId}")
