@@ -720,28 +720,35 @@ const deptUsersMap = ref<Record<string, any[]>>({})
 const UNASSIGNED_DEPT_ID = '__unassigned__'
 
 async function loadDeptTree() {
-  try {
-    const [deptRes, unassignedRes] = await Promise.all([
-      getDeptTree(),
-      getUsersByDept(),
-    ])
-    const unassignedUsers = unassignedRes.data ?? []
-    deptTree.value = unassignedUsers.length
-      ? [
-          ...deptRes.data,
-          {
-            id: UNASSIGNED_DEPT_ID,
-            deptId: UNASSIGNED_DEPT_ID,
-            name: '未分配部门',
-            parentId: null,
-            children: [],
-          },
-        ]
-      : deptRes.data
-    deptUsersMap.value[UNASSIGNED_DEPT_ID] = unassignedUsers
-  } catch {
-    // ignore
-  }
+  const [deptRes, unassignedRes] = await Promise.all([
+    getDeptTree(),
+    getUsersByDept(),
+  ])
+  const unassignedUsers = unassignedRes.data ?? []
+  deptTree.value = unassignedUsers.length
+    ? [
+        ...deptRes.data,
+        {
+          id: UNASSIGNED_DEPT_ID,
+          deptId: UNASSIGNED_DEPT_ID,
+          name: '未分配部门',
+          parentId: null,
+          children: [],
+        },
+      ]
+    : deptRes.data
+  deptUsersMap.value[UNASSIGNED_DEPT_ID] = unassignedUsers
+}
+
+async function loadInitialChatData() {
+  const conversationTask = chatStore.fetchConversations().catch((err) => {
+    console.warn('会话列表加载失败', err)
+  })
+  const contactsTask = loadDeptTree().catch((err) => {
+    console.warn('通讯录加载失败', err)
+  })
+
+  await Promise.all([conversationTask, contactsTask])
 }
 
 async function toggleDept(deptId: string) {
@@ -1721,8 +1728,7 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleDocumentMouseDown)
   await authStore.init()
   if (authStore.isLoggedIn) {
-    await chatStore.fetchConversations()
-    await loadDeptTree()
+    await loadInitialChatData()
     initWebSocket()
   }
 })
@@ -1744,8 +1750,7 @@ watch(
   () => authStore.isLoggedIn,
   (val) => {
     if (val) {
-      chatStore.fetchConversations()
-      loadDeptTree()
+      loadInitialChatData()
       initWebSocket()
     }
   }
