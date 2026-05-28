@@ -11,6 +11,7 @@ import {
   getMessages,
   getPendingMessages,
   markRead,
+  isAllMention,
   type Message,
   type MessageReadReceipt,
 } from '../api/message'
@@ -257,7 +258,7 @@ export const useChatStore = defineStore('chat', () => {
     if (countAsUnread && !isOwnMessage) {
       const count = unreadCounts.value.get(msg.conversationId) || 0
       unreadCounts.value.set(msg.conversationId, count + 1)
-      const mentioned = !!currentUserId && msg.mentions.some((m) => m.userId === currentUserId)
+      const mentioned = !!currentUserId && msg.mentions.some((m) => m.userId === currentUserId || isAllMention(m))
       if (conv?.type !== 'SINGLE' && mentioned) {
         const mentionCount = mentionUnreadCounts.value.get(msg.conversationId) || 0
         mentionUnreadCounts.value.set(msg.conversationId, mentionCount + 1)

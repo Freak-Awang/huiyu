@@ -1,0 +1,155 @@
+package com.im.server.service.impl;
+
+import com.im.common.dto.SendMessageRequest;
+import com.im.common.entity.ImConversation;
+import com.im.common.entity.ImConversationMember;
+import com.im.common.entity.ImMessage;
+import com.im.common.exception.BusinessException;
+import com.im.server.mapper.ConversationMapper;
+import com.im.server.mapper.ConversationMemberMapper;
+import com.im.server.mapper.MessageDeliveryMapper;
+import com.im.server.mapper.MessageMapper;
+import com.im.server.mapper.UserMapper;
+import com.im.server.websocket.WebSocketSessionManager;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class MessageServiceImplTest {
+
+    @Mock
+    private MessageMapper messageMapper;
+
+    @Mock
+    private MessageDeliveryMapper messageDeliveryMapper;
+
+    @Mock
+    private ConversationMapper conversationMapper;
+
+    @Mock
+    private ConversationMemberMapper conversationMemberMapper;
+
+    @Mock
+    private UserMapper userMapper;
+
+    @Mock
+    private WebSocketSessionManager sessionManager;
+
+    @InjectMocks
+    private MessageServiceImpl messageService;
+
+    @Test
+    void ownerCanSendAllMention() {
+        arrangeSend("owner", 2);
+
+        ImMessage message = messageService.sendMessage(10L, allMentionRequest());
+
+        assertThat(message.getContent()).contains("\"type\":\"all\"");
+        verify(messageMapper).insert(any(ImMessage.class));
+    }
+
+    @Test
+    void adminCanSendAllMention() {
+        arrangeSend("admin", 2);
+
+        ImMessage message = messageService.sendMessage(10L, allMentionRequest());
+
+        assertThat(message.getContent()).contains("\"userId\":\"__ALL__\"");
+        verify(messageMapper).insert(any(ImMessage.class));
+    }
+
+    @Test
+    void memberCannotSendAllMention() {
+        arrangeSenderAndConversation("member", 2);
+
+        assertThatThrownBy(() -> messageService.sendMessage(10L, allMentionRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("只有群主和群管理员可以@所有人")
+                .extracting("code")
+                .isEqualTo(403);
+        verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void allMentionIsRejectedInSingleConversation() {
+        arrangeSenderAndConversation("owner", 1);
+
+        assertThatThrownBy(() -> messageService.sendMessage(10L, allMentionRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("@所有人只能在群聊中使用")
+                .extracting("code")
+                .isEqualTo(403);
+        verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void memberCanStillSendRegularMention() {
+        arrangeSend("member", 2);
+
+        ImMessage message = messageService.sendMessage(10L, regularMentionRequest());
+
+        assertThat(message.getContent()).contains("\"userId\":\"11\"");
+        verify(messageMapper).insert(any(ImMessage.class));
+    }
+
+    private void arrangeSend(String role, int conversationType) {
+        arrangeSenderAndConversation(role, conversationType);
+        when(messageMapper.insert(any(ImMessage.class))).thenAnswer(invocation -> {
+            ImMessage message = invocation.getArgument(0);
+            message.setId(100L);
+            return 1;
+        });
+        when(conversationMemberMapper.selectList(any())).thenReturn(List.of(member(10L, role), member(11L, "member")));
+    }
+
+    private void arrangeSenderAndConversation(String role, int conversationType) {
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, role));
+        when(conversationMapper.selectById(1L)).thenReturn(conversation(conversationType));
+    }
+
+    private SendMessageRequest allMentionRequest() {
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("TEXT");
+        request.setContent("{\"text\":\"@所有人 开会\",\"mentions\":[{\"type\":\"all\",\"userId\":\"__ALL__\",\"nickname\":\"所有人\"}],\"replyTo\":null}");
+        return request;
+    }
+
+    private SendMessageRequest regularMentionRequest() {
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("TEXT");
+        request.setContent("{\"text\":\"@张三 看一下\",\"mentions\":[{\"type\":\"user\",\"userId\":\"11\",\"nickname\":\"张三\"}],\"replyTo\":null}");
+        return request;
+    }
+
+    private ImConversation conversation(int type) {
+        ImConversation conversation = new ImConversation();
+        conversation.setId(1L);
+        conversation.setType(type);
+        return conversation;
+    }
+
+    private ImConversationMember member(Long userId, String role) {
+        ImConversationMember member = new ImConversationMember();
+        member.setId(userId);
+        member.setConversationId(1L);
+        member.setUserId(userId);
+        member.setRole(role);
+        member.setIsPinned(0);
+        member.setIsMuted(0);
+        return member;
+    }
+}

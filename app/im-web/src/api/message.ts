@@ -21,10 +21,18 @@ export interface Message {
 }
 
 export type MessageStatus = 'SENT' | 'SENDING' | 'FAILED' | 'RECALLED' | string
+export type MessageMentionType = 'user' | 'all'
+
+export const MESSAGE_MENTION_ALL_ID = '__ALL__'
 
 export interface MessageMention {
+  type?: MessageMentionType
   userId: string
   nickname: string
+}
+
+export function isAllMention(mention: MessageMention): boolean {
+  return mention.type === 'all' || mention.userId === MESSAGE_MENTION_ALL_ID
 }
 
 export interface MessageReply {
@@ -182,12 +190,14 @@ function normalizeMentions(raw: unknown): MessageMention[] {
   const result: MessageMention[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
-    const mention = item as { userId?: string | number; nickname?: string }
-    const userId = String(mention.userId ?? '')
-    const nickname = mention.nickname || ''
+    const mention = item as { type?: string; userId?: string | number; nickname?: string }
+    const type: MessageMentionType =
+      mention.type === 'all' || String(mention.userId ?? '') === MESSAGE_MENTION_ALL_ID ? 'all' : 'user'
+    const userId = type === 'all' ? MESSAGE_MENTION_ALL_ID : String(mention.userId ?? '')
+    const nickname = mention.nickname || (type === 'all' ? '所有人' : '')
     if (!userId || !nickname || seen.has(userId)) continue
     seen.add(userId)
-    result.push({ userId, nickname })
+    result.push({ type, userId, nickname })
   }
   return result
 }

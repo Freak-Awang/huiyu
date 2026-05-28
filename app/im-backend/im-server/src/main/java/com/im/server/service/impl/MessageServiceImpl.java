@@ -36,6 +36,9 @@ public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
     private static final int MESSAGE_RETENTION_DAYS = 7;
+    private static final String MESSAGE_TYPE_TEXT = "TEXT";
+    private static final String MENTION_TYPE_ALL = "all";
+    private static final String MENTION_ALL_USER_ID = "__ALL__";
 
     @Autowired
     private MessageMapper messageMapper;
@@ -127,6 +130,7 @@ public class MessageServiceImpl implements MessageService {
         if (member == null) {
             throw new BusinessException("Not a member of this conversation");
         }
+        validateAllMentionPermission(request, member);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
             LambdaQueryWrapper<ImMessage> dupWrapper = new LambdaQueryWrapper<>();
@@ -515,5 +519,51 @@ public class MessageServiceImpl implements MessageService {
         }
 
         return content.length() > 50 ? content.substring(0, 50) : content;
+    }
+
+    private void validateAllMentionPermission(SendMessageRequest request, ImConversationMember senderMember) {
+        if (!MESSAGE_TYPE_TEXT.equalsIgnoreCase(request.getMessageType()) || !containsAllMention(request.getContent())) {
+            return;
+        }
+
+        ImConversation conversation = conversationMapper.selectById(request.getConversationId());
+        if (conversation == null || conversation.getType() == null || conversation.getType() != 2) {
+            throw new BusinessException(403, "@所有人只能在群聊中使用");
+        }
+
+        String role = senderMember.getRole();
+        if (!"owner".equals(role) && !"admin".equals(role)) {
+            throw new BusinessException(403, "只有群主和群管理员可以@所有人");
+        }
+    }
+
+    private boolean containsAllMention(String content) {
+        if (!StringUtils.hasText(content)) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(content);
+            JsonNode mentions = root.get("mentions");
+            if (mentions == null || !mentions.isArray()) {
+                return false;
+            }
+            for (JsonNode mention : mentions) {
+                if (isAllMention(mention)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    private boolean isAllMention(JsonNode mention) {
+        JsonNode type = mention.get("type");
+        if (type != null && MENTION_TYPE_ALL.equals(type.asText())) {
+            return true;
+        }
+        JsonNode userId = mention.get("userId");
+        return userId != null && MENTION_ALL_USER_ID.equals(userId.asText());
     }
 }

@@ -679,6 +679,8 @@ import {
 } from '../api/conversation'
 import {
   buildTextMessageContent,
+  isAllMention,
+  MESSAGE_MENTION_ALL_ID,
   normalizeMessage,
   recallMessage,
   searchMessages as searchServerMessages,
@@ -857,6 +859,11 @@ let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 const RECENT_STICKERS_KEY = 'im_recent_stickers'
+const ALL_MENTION_MEMBER: ConversationMember = {
+  userId: MESSAGE_MENTION_ALL_ID,
+  nickname: '所有人',
+  role: 'all',
+}
 
 const sortedGroupMembers = computed(() => {
   const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
@@ -900,11 +907,19 @@ const mentionCandidates = computed(() => {
   const currentUserId = String(authStore.currentUser?.userId ?? '')
   if (!conv || conv.type !== 'GROUP') return []
   const keyword = mentionSearch.value.trim().toLowerCase()
-  return sortedGroupMembers.value
+  const candidates: ConversationMember[] = []
+  if (canManageCurrentGroup.value && matchesAllMentionKeyword(keyword)) {
+    candidates.push(ALL_MENTION_MEMBER)
+  }
+  candidates.push(...sortedGroupMembers.value
     .filter((member) => member.userId !== currentUserId)
-    .filter((member) => !keyword || getMemberName(member).toLowerCase().includes(keyword))
-    .slice(0, 8)
+    .filter((member) => !keyword || getMemberName(member).toLowerCase().includes(keyword)))
+  return candidates.slice(0, 8)
 })
+
+function matchesAllMentionKeyword(keyword: string): boolean {
+  return !keyword || '所有人'.includes(keyword) || 'all'.includes(keyword)
+}
 
 async function handleSelectConv(conv: any) {
   try {
@@ -1115,7 +1130,11 @@ function selectMention(member: ConversationMember) {
     messageText.value.slice(0, atIndex) + mentionText + messageText.value.slice(cursor)
 
   if (!draftMentions.value.some((mention) => mention.userId === member.userId)) {
-    draftMentions.value.push({ userId: member.userId, nickname: name })
+    draftMentions.value.push({
+      type: member.userId === MESSAGE_MENTION_ALL_ID ? 'all' : 'user',
+      userId: member.userId,
+      nickname: name,
+    })
   }
   closeMentionPicker()
 
@@ -1152,7 +1171,7 @@ function renderTextSegments(msg: Message) {
     .map((mention) => ({
       ...mention,
       label: `@${mention.nickname}`,
-      self: mention.userId === String(authStore.currentUser?.userId ?? ''),
+      self: isAllMention(mention) || mention.userId === String(authStore.currentUser?.userId ?? ''),
     }))
     .sort((a, b) => b.label.length - a.label.length)
   const segments: Array<{ text: string; mention: boolean; self: boolean }> = []

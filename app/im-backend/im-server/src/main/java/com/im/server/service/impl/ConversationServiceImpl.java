@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
 public class ConversationServiceImpl implements ConversationService {
 
     private static final Logger log = LoggerFactory.getLogger(ConversationServiceImpl.class);
+    private static final String MENTION_TYPE_ALL = "all";
+    private static final String MENTION_ALL_USER_ID = "__ALL__";
 
     @Autowired
     private ConversationMapper conversationMapper;
@@ -491,6 +493,9 @@ public class ConversationServiceImpl implements ConversationService {
                 return false;
             }
             for (JsonNode mention : mentions) {
+                if (isAllMention(mention)) {
+                    return true;
+                }
                 JsonNode mentionedUserId = mention.get("userId");
                 if (mentionedUserId != null && String.valueOf(userId).equals(mentionedUserId.asText())) {
                     return true;
@@ -500,5 +505,14 @@ public class ConversationServiceImpl implements ConversationService {
             return false;
         }
         return false;
+    }
+
+    private boolean isAllMention(JsonNode mention) {
+        JsonNode type = mention.get("type");
+        if (type != null && MENTION_TYPE_ALL.equals(type.asText())) {
+            return true;
+        }
+        JsonNode userId = mention.get("userId");
+        return userId != null && MENTION_ALL_USER_ID.equals(userId.asText());
     }
 }
