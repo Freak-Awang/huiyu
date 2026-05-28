@@ -76,10 +76,14 @@ public class ConversationServiceImpl implements ConversationService {
             LocalDateTime since = member.getLastReadTime() != null
                     ? member.getLastReadTime()
                     : member.getJoinTime();
+            LocalDateTime now = LocalDateTime.now();
 
             Long unreadCount = messageMapper.selectCount(
                     new LambdaQueryWrapper<ImMessage>()
                             .eq(ImMessage::getConversationId, conversation.getId())
+                            .ne(ImMessage::getSenderId, userId)
+                            .ne(ImMessage::getStatus, "RECALLED")
+                            .gt(ImMessage::getExpiresAt, now)
                             .gt(since != null, ImMessage::getCreateTime, since));
             vo.setUnreadCount(unreadCount != null ? unreadCount.intValue() : 0);
 
@@ -459,7 +463,10 @@ public class ConversationServiceImpl implements ConversationService {
     private int countMentionUnread(Long conversationId, Long userId, LocalDateTime since) {
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<ImMessage>()
                 .eq(ImMessage::getConversationId, conversationId)
-                .eq(ImMessage::getMessageType, "TEXT");
+                .eq(ImMessage::getMessageType, "TEXT")
+                .ne(ImMessage::getSenderId, userId)
+                .ne(ImMessage::getStatus, "RECALLED")
+                .gt(ImMessage::getExpiresAt, LocalDateTime.now());
         if (since != null) {
             wrapper.gt(ImMessage::getCreateTime, since);
         }

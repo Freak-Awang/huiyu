@@ -21,5 +21,7 @@ public interface MessageService {
 
     void acknowledgeMessage(Long userId, Long messageId);
 
+    void markConversationRead(Long userId, Long conversationId, Long lastReadMessageId);
+
     void cleanupExpiredMessages();
 }

@@ -85,9 +85,12 @@ CREATE TABLE IF NOT EXISTS im_message_delivery (
     user_id BIGINT NOT NULL COMMENT 'recipient user id',
     delivered TINYINT NOT NULL DEFAULT 0 COMMENT '0=pending, 1=delivered',
     delivered_time DATETIME DEFAULT NULL COMMENT 'delivery ack time',
+    read_status TINYINT NOT NULL DEFAULT 0 COMMENT '0=unread, 1=read',
+    read_time DATETIME DEFAULT NULL COMMENT 'read time',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     UNIQUE KEY uk_msg_user (message_id, user_id),
     INDEX idx_user_delivered (user_id, delivered, create_time),
+    INDEX idx_conv_user_read (conversation_id, user_id, read_status),
     INDEX idx_message_id (message_id),
     INDEX idx_conversation_id (conversation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='message delivery state';

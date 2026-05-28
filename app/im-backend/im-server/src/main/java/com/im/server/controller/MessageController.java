@@ -1,10 +1,7 @@
 package com.im.server.controller;
 
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.im.common.dto.MessageVO;
-import com.im.common.entity.ImConversationMember;
 import com.im.common.result.Result;
-import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.service.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -24,9 +20,6 @@ public class MessageController {
 
     @Autowired
     private MessageService messageService;
-
-    @Autowired
-    private ConversationMemberMapper conversationMemberMapper;
 
     @GetMapping("/{conversationId}")
     public Result<com.im.common.result.PageResult<MessageVO>> getMessages(
@@ -66,13 +59,11 @@ public class MessageController {
     }
 
     @PostMapping("/read/{conversationId}")
-    public Result<Void> markRead(@PathVariable Long conversationId) {
+    public Result<Void> markRead(
+            @PathVariable Long conversationId,
+            @RequestParam(required = false) Long lastReadMessageId) {
         Long userId = getCurrentUserId();
-        LambdaUpdateWrapper<ImConversationMember> wrapper = new LambdaUpdateWrapper<>();
-        wrapper.eq(ImConversationMember::getConversationId, conversationId)
-                .eq(ImConversationMember::getUserId, userId)
-                .set(ImConversationMember::getLastReadTime, LocalDateTime.now());
-        conversationMemberMapper.update(null, wrapper);
+        messageService.markConversationRead(userId, conversationId, lastReadMessageId);
         return Result.ok();
     }
 

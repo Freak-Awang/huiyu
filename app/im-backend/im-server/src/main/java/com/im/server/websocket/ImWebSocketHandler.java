@@ -35,6 +35,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private static final String CMD_MESSAGE_SEND = "MESSAGE_SEND";
     private static final String CMD_MESSAGE_ACK = "MESSAGE_ACK";
     private static final String CMD_MESSAGE_RECEIVE = "MESSAGE_RECEIVE";
+    private static final String CMD_MESSAGE_READ = "MESSAGE_READ";
     private static final String CMD_ONLINE_STATUS = "ONLINE_STATUS";
 
     private final JwtUtil jwtUtil;
@@ -106,6 +107,9 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
                     break;
                 case CMD_MESSAGE_ACK:
                     handleMessageAck(senderId, root);
+                    break;
+                case CMD_MESSAGE_READ:
+                    handleMessageRead(senderId, root);
                     break;
                 case CMD_ONLINE_STATUS:
                     handleOnlineStatus(session, senderId, root, seq);
@@ -219,6 +223,16 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         messageService.acknowledgeMessage(userId, messageId);
+    }
+
+    private void handleMessageRead(Long userId, JsonNode root) {
+        JsonNode data = root.get("data");
+        Long conversationId = data != null && data.has("conversationId") ? data.get("conversationId").asLong() : null;
+        Long lastReadMessageId = data != null && data.has("lastReadMessageId") ? data.get("lastReadMessageId").asLong() : null;
+        if (conversationId == null) {
+            return;
+        }
+        messageService.markConversationRead(userId, conversationId, lastReadMessageId);
     }
 
     private void pushMessageToConversationMembers(Long conversationId, Long senderId, ImMessage msg) {

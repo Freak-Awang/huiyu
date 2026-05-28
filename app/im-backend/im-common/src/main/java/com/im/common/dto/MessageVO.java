@@ -26,4 +26,12 @@ public class MessageVO {
     private String clientMsgId;
 
     private LocalDateTime createTime;
+
+    private Integer readCount;
+
+    private Integer recipientCount;
+
+    private Integer readStatus;
+
+    private LocalDateTime readTime;
 }

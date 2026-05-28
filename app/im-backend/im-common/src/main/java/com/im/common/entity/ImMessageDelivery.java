@@ -17,5 +17,7 @@ public class ImMessageDelivery {
     private Long userId;
     private Integer delivered;
     private LocalDateTime deliveredTime;
+    private Integer readStatus;
+    private LocalDateTime readTime;
     private LocalDateTime createTime;
 }

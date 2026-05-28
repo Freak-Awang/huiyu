@@ -336,6 +336,9 @@
                 </div>
                 <div class="message-time">
                   {{ formatTime(msg.createdAt) }}
+                  <span v-if="getReadReceiptText(msg)" class="message-read-receipt">
+                    · {{ getReadReceiptText(msg) }}
+                  </span>
                   <span v-if="msg.status === 'SENDING'"> · 发送中</span>
                   <button
                     v-if="msg.status !== 'RECALLED'"
@@ -671,6 +674,7 @@ import {
   normalizeConversation,
   pinConversation,
   removeMember,
+  type Conversation,
   type ConversationMember,
 } from '../api/conversation'
 import {
@@ -818,7 +822,7 @@ async function createSingleChat(user: any) {
       activeTab.value = 'chat'
       await chatStore.selectConversation(conv.conversationId)
       closeCreateDialog()
-      scrollToBottom()
+      scrollToBottom(true)
     }
   } catch (err: any) {
     alert(err?.response?.data?.message || '创建会话失败')
@@ -850,6 +854,7 @@ const chatSearchKeyword = ref('')
 const chatSearchResults = ref<Message[]>([])
 const showSearchResults = ref(false)
 let loadingOlderMessages = false
+let lastMarkedReadMessageId = ''
 const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 const RECENT_STICKERS_KEY = 'im_recent_stickers'
 
@@ -881,6 +886,15 @@ const canManageCurrentGroup = computed(() => {
   return role === 'owner' || role === 'admin'
 })
 
+function getInitialReadReceipt(conv: Conversation) {
+  const recipientCount = Math.max(0, (conv.memberCount || conv.members?.length || 1) - 1)
+  return {
+    readCount: 0,
+    recipientCount,
+    readStatus: recipientCount === 0 ? 1 : 0,
+  }
+}
+
 const mentionCandidates = computed(() => {
   const conv = chatStore.currentConversation
   const currentUserId = String(authStore.currentUser?.userId ?? '')
@@ -898,10 +912,11 @@ async function handleSelectConv(conv: any) {
     closeMentionPicker()
     closeEmojiPanel()
     showMembersDrawer.value = false
+    lastMarkedReadMessageId = ''
+    scrollToBottom(true)
   } catch (err: any) {
     alert(err?.response?.data?.message || '加载消息失败')
   }
-  scrollToBottom()
 }
 
 async function togglePin() {
@@ -1220,12 +1235,13 @@ function sendSticker(sticker: Sticker) {
     clientMsgId,
     createdAt: new Date().toISOString(),
     status: 'SENDING',
+    ...getInitialReadReceipt(conv),
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
   rememberSticker(sticker)
   closeEmojiPanel()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 function getStickerInfo(content: string): Sticker | null {
@@ -1288,11 +1304,33 @@ function handleDocumentMouseDown(event: MouseEvent) {
 }
 
 // Scroll
-function scrollToBottom() {
+function isMessageAreaNearBottom() {
+  const el = messageAreaRef.value
+  if (!el) return false
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= 24
+}
+
+function getLastReadableMessageId() {
+  const lastMessage = [...chatStore.currentMessages].reverse().find((msg) => !!msg.messageId)
+  return lastMessage?.messageId || ''
+}
+
+function markCurrentConversationReadAtBottom() {
+  const convId = chatStore.currentConversation?.conversationId
+  const lastReadMessageId = getLastReadableMessageId()
+  if (!convId || !lastReadMessageId || lastMarkedReadMessageId === lastReadMessageId) return
+  lastMarkedReadMessageId = lastReadMessageId
+  void chatStore.markAsRead(convId, lastReadMessageId)
+}
+
+function scrollToBottom(markRead = false) {
   nextTick(() => {
     const el = messageAreaRef.value
     if (el) {
       el.scrollTop = el.scrollHeight
+      if (markRead) {
+        markCurrentConversationReadAtBottom()
+      }
     }
   })
 }
@@ -1313,6 +1351,9 @@ async function onMessageScroll() {
         loadingOlderMessages = false
       }
     }
+  }
+  if (isMessageAreaNearBottom()) {
+    markCurrentConversationReadAtBottom()
   }
 }
 
@@ -1370,6 +1411,19 @@ function canRecallMessage(msg: Message): boolean {
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 2 * 60 * 1000
 }
 
+function getReadReceiptText(msg: Message): string {
+  const conv = chatStore.currentConversation
+  if (!conv || msg.senderId !== authStore.currentUser?.userId) return ''
+  if (!msg.messageId || msg.status === 'SENDING' || msg.status === 'FAILED' || msg.status === 'RECALLED') return ''
+
+  const recipientCount = msg.recipientCount || Math.max(0, (conv.memberCount || 1) - 1)
+  const readCount = Math.min(recipientCount, msg.readCount || 0)
+  if (conv.type === 'GROUP') {
+    return `已读 ${readCount}/${recipientCount}`
+  }
+  return msg.readStatus || readCount >= recipientCount ? '已读' : '未读'
+}
+
 async function recallCurrentMessage(msg: Message) {
   if (!msg.messageId) return
   try {
@@ -1404,6 +1458,7 @@ function handleSendText() {
     clientMsgId,
     createdAt: new Date().toISOString(),
     status: 'SENDING',
+    ...getInitialReadReceipt(conv),
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
@@ -1413,7 +1468,7 @@ function handleSendText() {
   replyTarget.value = null
   closeMentionPicker()
   closeEmojiPanel()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 async function onSendImage(e: Event) {
@@ -1477,10 +1532,11 @@ function sendFileMessage(type: string, content: string) {
     clientMsgId,
     createdAt: new Date().toISOString(),
     status: 'SENDING',
+    ...getInitialReadReceipt(conv),
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 // WebSocket message handler
@@ -1495,9 +1551,13 @@ async function handleWsMessage(msg: WsMessage) {
           data.createTime ||
           (data.timestamp ? new Date(Number(data.timestamp)).toISOString() : undefined),
       })
+      const isCurrentConversation =
+        chatStore.currentConversation?.conversationId === receivedMessage.conversationId
+      const wasAtBottom = isCurrentConversation && isMessageAreaNearBottom()
       const conv = await chatStore.receiveMessage(
         receivedMessage,
-        String(authStore.currentUser?.userId ?? '')
+        String(authStore.currentUser?.userId ?? ''),
+        !isCurrentConversation || !wasAtBottom
       )
       if (!conv) {
         alert('收到新消息，但会话信息加载失败，请刷新后重试')
@@ -1508,10 +1568,8 @@ async function handleWsMessage(msg: WsMessage) {
       if (conv && !conv.muted && chatStore.currentConversation?.conversationId !== receivedMessage.conversationId) {
         showBrowserNotification(conv.name || receivedMessage.senderName, receivedMessage.displayContent || receivedMessage.content)
       }
-      // If current conv, scroll down
-      if (chatStore.currentConversation?.conversationId === receivedMessage.conversationId) {
-        scrollToBottom()
-        chatStore.markAsRead(receivedMessage.conversationId)
+      if (isCurrentConversation && wasAtBottom) {
+        scrollToBottom(true)
       }
       break
     }
@@ -1531,6 +1589,19 @@ async function handleWsMessage(msg: WsMessage) {
     case 'MESSAGE_ACK': {
       const data = msg.data
       chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
+      break
+    }
+    case 'MESSAGE_READ': {
+      const data = msg.data
+      if (data?.conversationId && data?.readerId) {
+        chatStore.applyReadReceipt(
+          String(data.conversationId),
+          String(data.readerId),
+          data.lastReadMessageId ? String(data.lastReadMessageId) : undefined,
+          data.readTime || undefined,
+          Array.isArray(data.readMessageIds) ? data.readMessageIds.map((id: unknown) => String(id)) : undefined,
+        )
+      }
       break
     }
     case 'MESSAGE_SEND_REPLY': {
@@ -1575,8 +1646,11 @@ function initWebSocket() {
       const currentConvId = chatStore.currentConversation?.conversationId
       chatStore.fetchConversations()
       if (currentConvId) {
-        chatStore.fetchMessages(currentConvId)
-        chatStore.markAsRead(currentConvId)
+        chatStore.fetchMessages(currentConvId).then(() => {
+          if (isMessageAreaNearBottom()) {
+            markCurrentConversationReadAtBottom()
+          }
+        })
       }
     }
   })
@@ -1688,7 +1762,7 @@ async function doCreateGroupChat() {
     activeTab.value = 'chat'
     await chatStore.selectConversation(res.data.conversationId)
     closeCreateDialog()
-    scrollToBottom()
+    scrollToBottom(true)
   } catch (err: any) {
     alert(err?.response?.data?.message || '创建群聊失败')
   }
@@ -1763,6 +1837,7 @@ onUnmounted(() => {
 watch(
   () => chatStore.currentConversation?.conversationId,
   () => {
+    lastMarkedReadMessageId = ''
     closeMentionPicker()
     closeEmojiPanel()
   }
@@ -2435,6 +2510,10 @@ watch(
   font-size: 11px;
   color: #ccc;
   margin-top: 2px;
+}
+
+.message-read-receipt {
+  color: #9aa0b5;
 }
 
 .message-retry {

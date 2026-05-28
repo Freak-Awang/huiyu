@@ -61,7 +61,6 @@ export const useChatStore = defineStore('chat', () => {
     if (!conv) return
     currentConversation.value = conv
     await fetchMessages(convId)
-    await markAsRead(convId)
   }
 
   function upsertConversation(conv: Conversation) {
@@ -195,12 +194,15 @@ export const useChatStore = defineStore('chat', () => {
     upsertMessage(msg)
   }
 
-  async function receiveMessage(msg: Message, currentUserId?: string): Promise<Conversation | null> {
+  async function receiveMessage(
+    msg: Message,
+    currentUserId?: string,
+    countAsUnread = true,
+  ): Promise<Conversation | null> {
     const conv = await ensureConversation(msg.conversationId)
     addMessage(msg)
-    const isCurrentConv =
-      currentConversation.value?.conversationId === msg.conversationId
-    if (!isCurrentConv) {
+    const isOwnMessage = !!currentUserId && msg.senderId === currentUserId
+    if (countAsUnread && !isOwnMessage) {
       const count = unreadCounts.value.get(msg.conversationId) || 0
       unreadCounts.value.set(msg.conversationId, count + 1)
       const mentioned = !!currentUserId && msg.mentions.some((m) => m.userId === currentUserId)
@@ -208,20 +210,60 @@ export const useChatStore = defineStore('chat', () => {
         const mentionCount = mentionUnreadCounts.value.get(msg.conversationId) || 0
         mentionUnreadCounts.value.set(msg.conversationId, mentionCount + 1)
       }
-    } else {
-      unreadCounts.value.set(msg.conversationId, 0)
-      mentionUnreadCounts.value.set(msg.conversationId, 0)
     }
     return conv
   }
 
-  async function markAsRead(convId: string) {
+  async function markAsRead(convId: string, lastReadMessageId?: string) {
     unreadCounts.value.set(convId, 0)
     mentionUnreadCounts.value.set(convId, 0)
     try {
-      await markRead(convId)
+      await markRead(convId, lastReadMessageId)
     } catch {
       // ignore
+    }
+  }
+
+  function applyReadReceipt(
+    convId: string,
+    readerId: string,
+    lastReadMessageId?: string,
+    readTime?: string,
+    readMessageIds?: string[],
+  ) {
+    const convMessages = messages.value.get(convId)
+    if (!Array.isArray(convMessages) || !readerId) return
+
+    let changed = false
+    const boundary = Number(lastReadMessageId || Number.MAX_SAFE_INTEGER)
+    const readMessageIdSet = readMessageIds?.length ? new Set(readMessageIds) : null
+    const nextMessages = convMessages.map((msg) => {
+      if (!msg.messageId || msg.senderId === readerId) return msg
+      if (readMessageIdSet && !readMessageIdSet.has(msg.messageId)) return msg
+      const messageId = Number(msg.messageId)
+      if (Number.isFinite(boundary) && Number.isFinite(messageId) && messageId > boundary) return msg
+
+      const recipientCount = msg.recipientCount || 0
+      const nextReadCount = recipientCount > 0
+        ? Math.min(recipientCount, (msg.readCount || 0) + 1)
+        : msg.readCount || 0
+      const nextReadStatus = recipientCount > 0 && nextReadCount >= recipientCount ? 1 : msg.readStatus
+      if (nextReadCount === msg.readCount && nextReadStatus === msg.readStatus && msg.readTime === readTime) {
+        return msg
+      }
+      changed = true
+      const updated = {
+        ...msg,
+        readCount: nextReadCount,
+        readStatus: nextReadStatus,
+        readTime: readTime || msg.readTime,
+      }
+      void upsertLocalMessage(updated)
+      return updated
+    })
+
+    if (changed) {
+      messages.value.set(convId, nextMessages)
     }
   }
 
@@ -276,6 +318,7 @@ export const useChatStore = defineStore('chat', () => {
     upsertMessage,
     receiveMessage,
     markAsRead,
+    applyReadReceipt,
     getUnreadCount,
     getMentionUnreadCount,
     updateMessageStatus,

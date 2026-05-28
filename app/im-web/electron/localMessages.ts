@@ -16,6 +16,10 @@ export interface LocalMessageRecord {
   createdAt: string
   status?: string
   replyTo?: unknown
+  readCount?: number
+  recipientCount?: number
+  readStatus?: number
+  readTime?: string
 }
 
 interface LocalMessageStore {

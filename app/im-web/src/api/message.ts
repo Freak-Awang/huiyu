@@ -14,6 +14,10 @@ export interface Message {
   createdAt: string
   status?: MessageStatus
   replyTo?: MessageReply | null
+  readCount: number
+  recipientCount: number
+  readStatus: number
+  readTime?: string
 }
 
 export type MessageStatus = 'SENT' | 'SENDING' | 'FAILED' | 'RECALLED' | string
@@ -50,6 +54,10 @@ export interface RawMessage {
   createdAt?: string | null
   timestamp?: number | string | null
   status?: string | null
+  readCount?: number | null
+  recipientCount?: number | null
+  readStatus?: number | boolean | null
+  readTime?: string | null
 }
 
 interface RawMessagePage {
@@ -80,6 +88,10 @@ export function normalizeMessage(raw: RawMessage): Message {
     createdAt: timestamp,
     status: raw.status || undefined,
     replyTo: parsedText.replyTo,
+    readCount: Number(raw.readCount || 0),
+    recipientCount: Number(raw.recipientCount || 0),
+    readStatus: raw.readStatus === true ? 1 : Number(raw.readStatus || 0),
+    readTime: raw.readTime || undefined,
   }
 }
 
@@ -201,8 +213,10 @@ export function acknowledgeMessage(messageId: string) {
   return http.post(`/api/messages/ack/${messageId}`)
 }
 
-export function markRead(convId: string) {
-  return http.post(`/api/messages/read/${convId}`)
+export function markRead(convId: string, lastReadMessageId?: string) {
+  return http.post(`/api/messages/read/${convId}`, null, {
+    params: { lastReadMessageId: lastReadMessageId || undefined },
+  })
 }
 
 export function recallMessage(messageId: string) {
