@@ -33,6 +33,14 @@ export interface MessageReply {
   text: string
 }
 
+export interface MessageReadReceipt {
+  messageId: string
+  readCount: number
+  recipientCount: number
+  readStatus: number
+  readTime?: string
+}
+
 export interface MessagePage {
   records: Message[]
   total: number

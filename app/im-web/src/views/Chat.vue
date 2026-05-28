@@ -1320,7 +1320,13 @@ function markCurrentConversationReadAtBottom() {
   const lastReadMessageId = getLastReadableMessageId()
   if (!convId || !lastReadMessageId || lastMarkedReadMessageId === lastReadMessageId) return
   lastMarkedReadMessageId = lastReadMessageId
-  void chatStore.markAsRead(convId, lastReadMessageId)
+  chatStore.clearUnread(convId)
+  const sentByWs = wsManager?.isConnected()
+    ? wsManager.send('MESSAGE_READ', { conversationId: convId, lastReadMessageId })
+    : false
+  if (!sentByWs) {
+    void chatStore.markAsRead(convId, lastReadMessageId)
+  }
 }
 
 function scrollToBottom(markRead = false) {
@@ -1594,13 +1600,27 @@ async function handleWsMessage(msg: WsMessage) {
     case 'MESSAGE_READ': {
       const data = msg.data
       if (data?.conversationId && data?.readerId) {
-        chatStore.applyReadReceipt(
-          String(data.conversationId),
-          String(data.readerId),
-          data.lastReadMessageId ? String(data.lastReadMessageId) : undefined,
-          data.readTime || undefined,
-          Array.isArray(data.readMessageIds) ? data.readMessageIds.map((id: unknown) => String(id)) : undefined,
-        )
+        const convId = String(data.conversationId)
+        if (Array.isArray(data.receipts)) {
+          chatStore.applyReadReceipts(
+            convId,
+            data.receipts.map((receipt: any) => ({
+              messageId: String(receipt.messageId ?? ''),
+              readCount: Number(receipt.readCount || 0),
+              recipientCount: Number(receipt.recipientCount || 0),
+              readStatus: receipt.readStatus === true ? 1 : Number(receipt.readStatus || 0),
+              readTime: receipt.readTime || undefined,
+            })).filter((receipt: any) => !!receipt.messageId),
+          )
+        } else {
+          chatStore.applyReadReceipt(
+            convId,
+            String(data.readerId),
+            data.lastReadMessageId ? String(data.lastReadMessageId) : undefined,
+            data.readTime || undefined,
+            Array.isArray(data.readMessageIds) ? data.readMessageIds.map((id: unknown) => String(id)) : undefined,
+          )
+        }
       }
       break
     }

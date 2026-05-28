@@ -12,6 +12,7 @@ import {
   getPendingMessages,
   markRead,
   type Message,
+  type MessageReadReceipt,
 } from '../api/message'
 import {
   canUseLocalMessageStore,
@@ -110,6 +111,12 @@ export const useChatStore = defineStore('chat', () => {
       } else {
         messages.value.set(convId, localMessages)
       }
+      try {
+        const res = await getMessages(convId, beforeId)
+        mergeServerMessages(convId, [...res.data.records].reverse())
+      } catch {
+        // Local history remains usable if the server is unavailable.
+      }
       return
     }
     const res = await getMessages(convId, beforeId)
@@ -120,6 +127,51 @@ export const useChatStore = defineStore('chat', () => {
       messages.value.set(convId, [...msgs, ...existing])
     } else {
       messages.value.set(convId, msgs)
+    }
+  }
+
+  function messageSortValue(message: Message): number {
+    const time = new Date(message.createdAt || 0).getTime()
+    return Number.isFinite(time) ? time : 0
+  }
+
+  function mergeServerMessages(convId: string, serverMessages: Message[]) {
+    if (!serverMessages.length) return
+    const currentRaw = messages.value.get(convId)
+    const current = Array.isArray(currentRaw) ? currentRaw : []
+    const nextMessages = [...current]
+    let changed = false
+
+    for (const serverMessage of serverMessages) {
+      const index = nextMessages.findIndex((msg) =>
+        (serverMessage.messageId && msg.messageId === serverMessage.messageId) ||
+        (serverMessage.clientMsgId && msg.clientMsgId === serverMessage.clientMsgId)
+      )
+      if (index >= 0) {
+        const updated = {
+          ...nextMessages[index],
+          status: serverMessage.status,
+          readCount: serverMessage.readCount,
+          recipientCount: serverMessage.recipientCount,
+          readStatus: serverMessage.readStatus,
+          readTime: serverMessage.readTime,
+        }
+        nextMessages[index] = updated
+        void upsertLocalMessage(updated)
+      } else {
+        nextMessages.push(serverMessage)
+        void upsertLocalMessage(serverMessage)
+      }
+      changed = true
+    }
+
+    if (changed) {
+      nextMessages.sort((a, b) => {
+        const timeDiff = messageSortValue(a) - messageSortValue(b)
+        if (timeDiff !== 0) return timeDiff
+        return (a.messageId || a.clientMsgId || '').localeCompare(b.messageId || b.clientMsgId || '')
+      })
+      messages.value.set(convId, nextMessages)
     }
   }
 
@@ -215,12 +267,42 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function markAsRead(convId: string, lastReadMessageId?: string) {
-    unreadCounts.value.set(convId, 0)
-    mentionUnreadCounts.value.set(convId, 0)
+    clearUnread(convId)
     try {
       await markRead(convId, lastReadMessageId)
     } catch {
       // ignore
+    }
+  }
+
+  function clearUnread(convId: string) {
+    unreadCounts.value.set(convId, 0)
+    mentionUnreadCounts.value.set(convId, 0)
+  }
+
+  function applyReadReceipts(convId: string, receipts: MessageReadReceipt[]) {
+    const convMessages = messages.value.get(convId)
+    if (!Array.isArray(convMessages) || !receipts.length) return
+
+    const receiptByMessageId = new Map(receipts.map((receipt) => [receipt.messageId, receipt]))
+    let changed = false
+    const nextMessages = convMessages.map((msg) => {
+      const receipt = receiptByMessageId.get(msg.messageId)
+      if (!receipt) return msg
+      const updated = {
+        ...msg,
+        readCount: receipt.readCount,
+        recipientCount: receipt.recipientCount,
+        readStatus: receipt.readStatus,
+        readTime: receipt.readTime || msg.readTime,
+      }
+      changed = true
+      void upsertLocalMessage(updated)
+      return updated
+    })
+
+    if (changed) {
+      messages.value.set(convId, nextMessages)
     }
   }
 
@@ -318,6 +400,8 @@ export const useChatStore = defineStore('chat', () => {
     upsertMessage,
     receiveMessage,
     markAsRead,
+    clearUnread,
+    applyReadReceipts,
     applyReadReceipt,
     getUnreadCount,
     getMentionUnreadCount,

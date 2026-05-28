@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.MessageVO;
 import com.im.common.dto.SendMessageRequest;
@@ -351,6 +352,20 @@ public class MessageServiceImpl implements MessageService {
             }
             data.put("readTime", readTime != null ? readTime.toString() : null);
             data.putPOJO("readMessageIds", readMessageIds);
+            ArrayNode receipts = data.putArray("receipts");
+            for (Long messageId : readMessageIds) {
+                ImMessage message = messageMapper.selectById(messageId);
+                if (message == null) {
+                    continue;
+                }
+                MessageVO receipt = toMessageVO(message, message.getSenderId());
+                ObjectNode item = receipts.addObject();
+                item.put("messageId", receipt.getMessageId());
+                item.put("readCount", receipt.getReadCount() != null ? receipt.getReadCount() : 0);
+                item.put("recipientCount", receipt.getRecipientCount() != null ? receipt.getRecipientCount() : 0);
+                item.put("readStatus", receipt.getReadStatus() != null ? receipt.getReadStatus() : 0);
+                item.put("readTime", readTime != null ? readTime.toString() : null);
+            }
             String payload = objectMapper.writeValueAsString(root);
             for (ImConversationMember member : members) {
                 if (!member.getUserId().equals(readerId) && sessionManager.isOnline(member.getUserId())) {
