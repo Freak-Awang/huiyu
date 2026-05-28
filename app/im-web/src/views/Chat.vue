@@ -227,13 +227,12 @@
         <div class="chat-header">
           <div class="chat-header-info">
             <span class="chat-header-name">{{ chatStore.currentConversation.name }}</span>
-            <button
+            <span
               v-if="chatStore.currentConversation.type === 'GROUP'"
-              class="chat-header-meta member-count-btn"
-              @click="openMembersDrawer"
+              class="chat-header-meta"
             >
               {{ chatStore.currentConversation.memberCount ?? 0 }}人
-            </button>
+            </span>
             <span v-else class="chat-header-meta">私聊</span>
           </div>
           <div class="chat-header-actions">
@@ -244,6 +243,16 @@
               @keyup.enter="runChatSearch"
             />
             <button class="action-btn" title="搜索" @click="runChatSearch">🔎</button>
+            <button
+              v-if="chatStore.currentConversation.type === 'GROUP'"
+              class="members-action-btn"
+              title="群成员"
+              type="button"
+              @click="openMembersDrawer"
+            >
+              <span class="members-action-icon">👥</span>
+              <span>群成员</span>
+            </button>
             <button
               class="action-btn"
               :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
@@ -385,12 +394,28 @@
             >😊</button>
             <label class="tool-btn" title="发送图片">
               📷
-              <input type="file" accept="image/*" hidden @change="onSendImage" />
+              <input type="file" accept="image/*" multiple hidden @change="onSendImage" />
             </label>
             <label class="tool-btn" title="发送文件">
               📁
               <input type="file" hidden @change="onSendFile" />
             </label>
+          </div>
+          <div v-if="pendingImages.length" class="pending-image-list">
+            <div
+              v-for="image in pendingImages"
+              :key="image.id"
+              class="pending-image-item"
+              :title="`${image.name} (${formatFileSize(image.size)})`"
+            >
+              <img :src="image.previewUrl" :alt="image.name" />
+              <button
+                type="button"
+                class="pending-image-remove"
+                :disabled="isSendingMessage"
+                @click="removePendingImage(image.id)"
+              >×</button>
+            </div>
           </div>
           <div class="input-box">
             <textarea
@@ -401,6 +426,7 @@
               rows="3"
               @input="onMessageInput"
               @keydown="handleMessageKeydown"
+              @paste="handleMessagePaste"
             ></textarea>
             <div v-if="showMentionPicker && mentionCandidates.length" class="mention-picker">
               <div
@@ -494,7 +520,11 @@
                 </div>
               </div>
             </div>
-            <button class="send-btn" @click="handleSendText">发送</button>
+            <button
+              class="send-btn"
+              :disabled="isSendingMessage"
+              @click="handleSendText"
+            >{{ isSendingMessage ? '发送中...' : '发送' }}</button>
           </div>
         </div>
       </template>
@@ -508,7 +538,10 @@
 
       <div v-if="showMembersDrawer" class="member-drawer">
         <div class="member-drawer-header">
-          <span>群成员</span>
+          <div class="member-drawer-title">
+            <span>群成员</span>
+            <span>{{ chatStore.currentConversation?.memberCount ?? sortedGroupMembers.length }}人</span>
+          </div>
           <button class="dialog-close" @click="showMembersDrawer = false">✕</button>
         </div>
         <input
@@ -547,7 +580,9 @@
             </div>
             <div class="member-info">
               <span class="member-name">{{ getMemberName(member) }}</span>
-              <span class="member-role">{{ formatMemberRole(member.role) }}</span>
+              <span class="member-role" :class="`member-role-${member.role || 'member'}`">
+                {{ formatMemberRole(member.role) }}
+              </span>
             </div>
             <button
               v-if="canRemoveGroupMember(member)"
@@ -838,6 +873,8 @@ const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
+const pendingImages = ref<PendingImage[]>([])
+const isSendingMessage = ref(false)
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
 const showMentionPicker = ref(false)
@@ -859,6 +896,13 @@ let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 const RECENT_STICKERS_KEY = 'im_recent_stickers'
+interface PendingImage {
+  id: string
+  file: File
+  previewUrl: string
+  name: string
+  size: number
+}
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
   nickname: '所有人',
@@ -932,6 +976,64 @@ async function handleSelectConv(conv: any) {
   } catch (err: any) {
     alert(err?.response?.data?.message || '加载消息失败')
   }
+}
+
+function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
+  const clipboardData = event.clipboardData
+  if (!clipboardData) return []
+
+  const itemFiles = Array.from(clipboardData.items)
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file)
+
+  if (itemFiles.length) return itemFiles
+
+  return Array.from(clipboardData.files).filter((file) => file.type.startsWith('image/'))
+}
+
+function addPendingImages(files: File[]) {
+  const imageFiles = files.filter((file) => file.type.startsWith('image/'))
+  if (!imageFiles.length) return
+
+  const timestamp = Date.now()
+  pendingImages.value.push(
+    ...imageFiles.map((file, index) => {
+      const name = file.name || `clipboard-image-${timestamp}-${index + 1}.png`
+      return {
+        id: generateId(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        name,
+        size: file.size,
+      }
+    }),
+  )
+}
+
+function removePendingImage(id: string) {
+  const image = pendingImages.value.find((item) => item.id === id)
+  if (image) {
+    URL.revokeObjectURL(image.previewUrl)
+  }
+  pendingImages.value = pendingImages.value.filter((item) => item.id !== id)
+}
+
+function clearPendingImages() {
+  for (const image of pendingImages.value) {
+    URL.revokeObjectURL(image.previewUrl)
+  }
+  pendingImages.value = []
+}
+
+function handleMessagePaste(event: ClipboardEvent) {
+  const files = getImageFilesFromClipboard(event)
+  if (!files.length) return
+
+  event.preventDefault()
+  addPendingImages(files)
+  closeMentionPicker()
+  closeEmojiPanel()
 }
 
 async function togglePin() {
@@ -1113,7 +1215,7 @@ function handleMessageKeydown(event: KeyboardEvent) {
 
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    handleSendText()
+    handleSendMessage()
   }
 }
 
@@ -1459,11 +1561,11 @@ async function recallCurrentMessage(msg: Message) {
   }
 }
 
-function handleSendText() {
+function sendTextMessage() {
   const text = messageText.value.trim()
-  if (!text) return
+  if (!text) return false
   const conv = chatStore.currentConversation
-  if (!conv || !wsManager || !authStore.currentUser) return
+  if (!conv || !wsManager || !authStore.currentUser) return false
 
   const clientMsgId = generateId()
   const mentions = pruneDraftMentions()
@@ -1494,6 +1596,44 @@ function handleSendText() {
   closeMentionPicker()
   closeEmojiPanel()
   scrollToBottom(true)
+  return true
+}
+
+async function handleSendMessage() {
+  if (isSendingMessage.value) return
+  const hasText = !!messageText.value.trim()
+  const hasImages = pendingImages.value.length > 0
+  if (!hasText && !hasImages) return
+
+  if (!chatStore.currentConversation || !authStore.currentUser) {
+    alert('请先选择会话')
+    return
+  }
+
+  isSendingMessage.value = true
+  try {
+    for (const image of [...pendingImages.value]) {
+      try {
+        const res = await uploadFile(image.file)
+        const url = res.data.url || getFileUrl(res.data.id)
+        removePendingImage(image.id)
+        sendFileMessage('IMAGE', url)
+      } catch (err: any) {
+        alert(err?.response?.data?.message || '上传图片失败')
+        return
+      }
+    }
+
+    if (hasText) {
+      sendTextMessage()
+    }
+  } finally {
+    isSendingMessage.value = false
+  }
+}
+
+function handleSendText() {
+  void handleSendMessage()
 }
 
 async function onSendImage(e: Event) {
@@ -1503,14 +1643,9 @@ async function onSendImage(e: Event) {
     input.value = ''
     return
   }
-  const file = input.files?.[0]
-  if (!file) return
-  try {
-    const res = await uploadFile(file)
-    const url = res.data.url || getFileUrl(res.data.id)
-    sendFileMessage('IMAGE', url)
-  } catch (err: any) {
-    alert(err?.response?.data?.message || '上传图片失败')
+  const files = Array.from(input.files || []).filter((file) => file.type.startsWith('image/'))
+  if (files.length) {
+    addPendingImages(files)
   }
   input.value = ''
 }
@@ -1870,6 +2005,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown)
+  clearPendingImages()
   wsManager?.disconnect()
 })
 
@@ -1877,6 +2013,11 @@ watch(
   () => chatStore.currentConversation?.conversationId,
   () => {
     lastMarkedReadMessageId = ''
+    showMembersDrawer.value = false
+    memberSearch.value = ''
+    memberAddKeyword.value = ''
+    memberAddResults.value = []
+    clearPendingImages()
     closeMentionPicker()
     closeEmojiPanel()
   }
@@ -2302,22 +2443,36 @@ watch(
   color: #999;
 }
 
-.member-count-btn {
-  width: fit-content;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.member-count-btn:hover {
-  color: #667eea;
-}
-
 .chat-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.members-action-btn {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.members-action-btn:hover {
+  background: #eef0ff;
+  border-color: #c8cef8;
+  color: #4f63d8;
+}
+
+.members-action-icon {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .chat-search-input {
@@ -2621,6 +2776,52 @@ watch(
   background: #e0e0e0;
 }
 
+.pending-image-list {
+  display: flex;
+  gap: 8px;
+  max-height: 92px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+}
+
+.pending-image-item {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  border: 1px solid #d8dce8;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  position: relative;
+}
+
+.pending-image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pending-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 20px;
+  padding: 0;
+}
+
+.pending-image-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .input-box {
   display: flex;
   gap: 10px;
@@ -2655,6 +2856,11 @@ watch(
 
 .send-btn:hover {
   background: #5a6fd8;
+}
+
+.send-btn:disabled {
+  background: #a9b2ee;
+  cursor: not-allowed;
 }
 
 .mention-picker {
@@ -2833,7 +3039,7 @@ watch(
   top: 0;
   right: 0;
   bottom: 0;
-  width: 300px;
+  width: 320px;
   background: #fff;
   border-left: 1px solid #ddd;
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.08);
@@ -2846,10 +3052,26 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 15px 16px;
   border-bottom: 1px solid #eee;
-  font-weight: 600;
   color: #333;
+}
+
+.member-drawer-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.member-drawer-title span:first-child {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.member-drawer-title span:last-child {
+  color: #999;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .member-search {
@@ -2891,14 +3113,15 @@ watch(
 .member-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 12px;
+  padding: 2px 10px 12px;
 }
 
 .member-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 8px;
+  min-height: 48px;
+  padding: 8px 8px;
   border-radius: 8px;
 }
 
@@ -2922,8 +3145,19 @@ watch(
 }
 
 .member-role {
+  border-radius: 4px;
+  color: #8a8f99;
   font-size: 11px;
-  color: #999;
+  line-height: 1;
+  width: fit-content;
+}
+
+.member-role-owner {
+  color: #d46b08;
+}
+
+.member-role-admin {
+  color: #4f63d8;
 }
 
 .member-remove-btn {
