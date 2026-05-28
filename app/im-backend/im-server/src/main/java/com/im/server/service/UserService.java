@@ -21,5 +21,7 @@ public interface UserService {
 
     void updatePassword(Long userId, String oldPassword, String newPassword);
 
+    void resetPassword(Long userId, String newPassword);
+
     SysUser updateProfile(Long userId, String nickname, String email, String phone);
 }

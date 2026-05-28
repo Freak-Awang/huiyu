@@ -54,4 +54,22 @@ public class AdminUserController {
         userService.update(user);
         return Result.ok();
     }
+
+    @PutMapping("/{id}/password/reset")
+    public Result<Void> resetPassword(@PathVariable Long id, @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(id, request != null ? request.getNewPassword() : null);
+        return Result.ok();
+    }
+
+    public static class ResetPasswordRequest {
+        private String newPassword;
+
+        public String getNewPassword() {
+            return newPassword;
+        }
+
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
+        }
+    }
 }

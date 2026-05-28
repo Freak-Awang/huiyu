@@ -97,6 +97,17 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public void resetPassword(Long userId, String newPassword) {
+        if (!StringUtils.hasText(newPassword) || newPassword.length() < 6) {
+            throw new RuntimeException("密码至少6位");
+        }
+        SysUser user = getById(userId);
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.updateById(user);
+    }
+
+    @Override
     public SysUser updateProfile(Long userId, String nickname, String email, String phone) {
         SysUser user = getById(userId);
         user.setNickname(nickname);

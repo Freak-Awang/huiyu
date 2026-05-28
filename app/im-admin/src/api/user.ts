@@ -38,3 +38,7 @@ export function deleteUser(id: number) {
 export function updateUserStatus(id: number, status: number) {
     return client.put(`/api/admin/users/${id}/status`, null, { params: { status } })
 }
+
+export function resetUserPassword(id: number, newPassword: string) {
+    return client.put(`/api/admin/users/${id}/password/reset`, { newPassword })
+}
