@@ -400,6 +400,14 @@
               📁
               <input type="file" hidden @change="onSendFile" />
             </label>
+            <button
+              v-if="canUseDesktopScreenshot"
+              class="tool-btn"
+              title="屏幕截图"
+              type="button"
+              :disabled="isTakingScreenshot"
+              @click="takeScreenshot"
+            >✂</button>
           </div>
           <div v-if="pendingImages.length" class="pending-image-list">
             <div
@@ -875,6 +883,7 @@ const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
 const isSendingMessage = ref(false)
+const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
 const showMentionPicker = ref(false)
@@ -896,6 +905,7 @@ let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 const RECENT_STICKERS_KEY = 'im_recent_stickers'
+const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
 interface PendingImage {
   id: string
   file: File
@@ -1024,6 +1034,42 @@ function clearPendingImages() {
     URL.revokeObjectURL(image.previewUrl)
   }
   pendingImages.value = []
+}
+
+function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [header, base64Data] = dataUrl.split(',')
+  const mime = header.match(/^data:(.*?);base64$/)?.[1] || 'image/png'
+  const binary = atob(base64Data || '')
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new File([bytes], fileName, { type: mime })
+}
+
+async function takeScreenshot() {
+  if (!window.imDesktop?.startScreenshot || isTakingScreenshot.value) return
+  if (!chatStore.currentConversation || !authStore.currentUser) {
+    alert('请先选择会话')
+    return
+  }
+
+  closeMentionPicker()
+  closeEmojiPanel()
+  isTakingScreenshot.value = true
+  try {
+    const result = await window.imDesktop.startScreenshot()
+    if (!result.canceled && result.dataUrl) {
+      const file = dataUrlToFile(result.dataUrl, `screenshot-${Date.now()}.png`)
+      addPendingImages([file])
+      await nextTick()
+      messageInputRef.value?.focus()
+    }
+  } catch {
+    alert('截图失败')
+  } finally {
+    isTakingScreenshot.value = false
+  }
 }
 
 function handleMessagePaste(event: ClipboardEvent) {
@@ -2774,6 +2820,11 @@ watch(
 
 .tool-btn:hover {
   background: #e0e0e0;
+}
+
+.tool-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .pending-image-list {

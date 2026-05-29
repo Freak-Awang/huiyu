@@ -6,6 +6,7 @@ declare global {
       getVersion: () => Promise<string>
       getPlatform: () => Promise<string>
       openExternal: (url: string) => Promise<boolean>
+      startScreenshot?: () => Promise<{ canceled: boolean; dataUrl?: string }>
       upsertMessage: (userId: string, message: unknown) => Promise<boolean>
       listMessages: (
         userId: string,
@@ -19,6 +20,11 @@ declare global {
         keyword: string,
         limit?: number,
       ) => Promise<unknown[]>
+    }
+    imScreenshot?: {
+      getInitialData: () => Promise<{ dataUrl: string; scaleFactor: number } | null>
+      confirm: (dataUrl: string) => Promise<boolean>
+      cancel: () => Promise<boolean>
     }
   }
 }

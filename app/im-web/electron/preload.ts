@@ -4,10 +4,19 @@ contextBridge.exposeInMainWorld('imDesktop', {
   getVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
   getPlatform: () => ipcRenderer.invoke('app:getPlatform') as Promise<string>,
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url) as Promise<boolean>,
+  startScreenshot: () =>
+    ipcRenderer.invoke('screenshot:start') as Promise<{ canceled: boolean; dataUrl?: string }>,
   upsertMessage: (userId: string, message: unknown) =>
     ipcRenderer.invoke('messages:upsert', userId, message) as Promise<boolean>,
   listMessages: (userId: string, conversationId: string, beforeMessageId?: string, pageSize?: number) =>
     ipcRenderer.invoke('messages:list', userId, conversationId, beforeMessageId, pageSize) as Promise<unknown[]>,
   searchMessages: (userId: string, conversationId: string, keyword: string, limit?: number) =>
     ipcRenderer.invoke('messages:search', userId, conversationId, keyword, limit) as Promise<unknown[]>,
+})
+
+contextBridge.exposeInMainWorld('imScreenshot', {
+  getInitialData: () =>
+    ipcRenderer.invoke('screenshot:getInitialData') as Promise<{ dataUrl: string; scaleFactor: number } | null>,
+  confirm: (dataUrl: string) => ipcRenderer.invoke('screenshot:confirm', dataUrl) as Promise<boolean>,
+  cancel: () => ipcRenderer.invoke('screenshot:cancel') as Promise<boolean>,
 })
