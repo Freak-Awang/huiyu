@@ -20,6 +20,12 @@ declare global {
         keyword: string,
         limit?: number,
       ) => Promise<unknown[]>
+      getMessageStats?: (userId: string) => Promise<{
+        conversationCount: number
+        messageCount: number
+        cacheSize: number
+      }>
+      clearMessages?: (userId: string) => Promise<boolean>
     }
     imScreenshot?: {
       getInitialData: () => Promise<{ dataUrl: string; scaleFactor: number } | null>

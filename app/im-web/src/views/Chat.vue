@@ -1,5 +1,11 @@
 <template>
-  <div class="chat-layout">
+  <div
+    class="chat-layout"
+    :class="{
+      'compact-mode': settingsStore.general.compactMode,
+      'dark-theme': settingsStore.general.theme === 'dark',
+    }"
+  >
     <!-- Left Sidebar -->
     <div class="left-sidebar">
       <div class="sidebar-nav">
@@ -34,6 +40,7 @@
             {{ (authStore.currentUser?.nickname || 'U')[0] }}
           </span>
         </div>
+        <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="设置">⚙</button>
         <button class="logout-btn" @click="handleLogout" title="退出登录">↪</button>
       </div>
     </div>
@@ -699,6 +706,13 @@
     <div v-if="previewImage" class="dialog-overlay preview-overlay" @click="previewImage = ''">
       <img :src="previewImage" class="preview-img" alt="预览" />
     </div>
+
+    <SettingsDialog
+      v-if="showSettingsDialog"
+      @close="showSettingsDialog = false"
+      @recent-cache-cleared="clearRecentEmojiState"
+      @local-cache-cleared="handleLocalCacheCleared"
+    />
   </div>
 </template>
 
@@ -707,6 +721,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
+import { useSettingsStore } from '../stores/settings'
+import SettingsDialog from '../components/SettingsDialog.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
@@ -744,12 +760,15 @@ import {
   parseStickerContent,
   type Sticker,
 } from '../constants/stickers'
+import { RECENT_EMOJIS_KEY, RECENT_STICKERS_KEY } from '../utils/recentUsage'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const settingsStore = useSettingsStore()
 
 const activeTab = ref<'chat' | 'contacts'>('chat')
+const showSettingsDialog = ref(false)
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
 const onlineUsers = ref<Record<string, boolean>>({})
@@ -903,8 +922,6 @@ const chatSearchResults = ref<Message[]>([])
 const showSearchResults = ref(false)
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
-const RECENT_EMOJIS_KEY = 'im_recent_emojis'
-const RECENT_STICKERS_KEY = 'im_recent_stickers'
 const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
 interface PendingImage {
   id: string
@@ -1259,7 +1276,12 @@ function handleMessageKeydown(event: KeyboardEvent) {
     }
   }
 
-  if (event.key === 'Enter' && !event.shiftKey) {
+  const sendShortcut = settingsStore.general.sendShortcut
+  const shouldSend =
+    sendShortcut === 'ctrlEnter'
+      ? event.key === 'Enter' && event.ctrlKey
+      : event.key === 'Enter' && !event.shiftKey
+  if (shouldSend) {
     event.preventDefault()
     handleSendMessage()
   }
@@ -1458,6 +1480,18 @@ function loadRecentEmojiState() {
       : []
   } catch {
     recentStickers.value = []
+  }
+}
+
+function clearRecentEmojiState() {
+  recentEmojis.value = []
+  recentStickers.value = []
+}
+
+function handleLocalCacheCleared() {
+  chatStore.messages.clear()
+  if (chatStore.currentConversation) {
+    void chatStore.fetchMessages(chatStore.currentConversation.conversationId)
   }
 }
 
@@ -1771,8 +1805,11 @@ async function handleWsMessage(msg: WsMessage) {
       if (receivedMessage.messageId) {
         wsManager?.send('MESSAGE_ACK', { messageId: receivedMessage.messageId })
       }
-      if (conv && !conv.muted && chatStore.currentConversation?.conversationId !== receivedMessage.conversationId) {
-        showBrowserNotification(conv.name || receivedMessage.senderName, receivedMessage.displayContent || receivedMessage.content)
+      if (conv && shouldNotifyMessage(receivedMessage, conv)) {
+        const body = settingsStore.notification.showPreview
+          ? receivedMessage.displayContent || receivedMessage.content
+          : '收到一条新消息'
+        showBrowserNotification(conv.name || receivedMessage.senderName, body)
       }
       if (isCurrentConversation && wasAtBottom) {
         scrollToBottom(true)
@@ -1875,6 +1912,20 @@ function initWebSocket() {
     }
   })
   wsManager.connect()
+}
+
+function shouldNotifyMessage(message: Message, conversation: Conversation) {
+  const notification = settingsStore.notification
+  if (conversation.muted || notification.doNotDisturb || !notification.desktop) return false
+  if (chatStore.currentConversation?.conversationId === message.conversationId) return false
+  if (notification.mentionOnly && !messageMentionsCurrentUser(message)) return false
+  return true
+}
+
+function messageMentionsCurrentUser(message: Message) {
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  if (!currentUserId) return false
+  return message.mentions.some((mention) => mention.userId === currentUserId || isAllMention(mention))
 }
 
 function showBrowserNotification(title: string, body: string) {
@@ -2036,6 +2087,7 @@ function downloadFile(content: string) {
 async function handleLogout() {
   wsManager?.disconnect()
   await authStore.logout()
+  settingsStore.resetLocal()
   router.push('/login')
 }
 
@@ -2044,6 +2096,11 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleDocumentMouseDown)
   await authStore.init()
   if (authStore.isLoggedIn) {
+    try {
+      await settingsStore.load()
+    } catch {
+      // Settings can be retried from the dialog if the backend is temporarily unavailable.
+    }
     await loadInitialChatData()
     initWebSocket()
   }
@@ -2073,8 +2130,13 @@ watch(
   () => authStore.isLoggedIn,
   (val) => {
     if (val) {
+      settingsStore.load().catch(() => {
+        // Keep defaults if settings cannot be loaded.
+      })
       loadInitialChatData()
       initWebSocket()
+    } else {
+      settingsStore.resetLocal()
     }
   }
 )
@@ -2172,7 +2234,19 @@ watch(
   cursor: pointer;
 }
 
-.logout-btn:hover {
+.settings-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  color: #aaa;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.logout-btn:hover,
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
@@ -3395,5 +3469,76 @@ watch(
   max-width: 80vw;
   max-height: 80vh;
   border-radius: 8px;
+}
+
+.compact-mode .conv-item {
+  padding: 8px 14px;
+}
+
+.compact-mode .message-list {
+  gap: 10px;
+}
+
+.compact-mode .message-area {
+  padding: 12px 16px;
+}
+
+.compact-mode .input-area {
+  padding: 6px 14px 10px;
+}
+
+.dark-theme .middle-panel {
+  background: #252932;
+  border-right-color: #363b48;
+}
+
+.dark-theme .panel-header,
+.dark-theme .chat-header,
+.dark-theme .input-area {
+  background: #2d323c;
+  border-color: #3b414f;
+}
+
+.dark-theme .right-panel,
+.dark-theme .message-area {
+  background: #1f232b;
+}
+
+.dark-theme .panel-title,
+.dark-theme .conv-name,
+.dark-theme .contact-name,
+.dark-theme .dept-name,
+.dark-theme .chat-header-name,
+.dark-theme .message-sender {
+  color: #edf0f5;
+}
+
+.dark-theme .search-input,
+.dark-theme .chat-search-input,
+.dark-theme .message-input {
+  background: #20242c;
+  color: #edf0f5;
+}
+
+.dark-theme .conv-item:hover,
+.dark-theme .contact-item:hover,
+.dark-theme .dept-header:hover,
+.dark-theme .action-btn:hover {
+  background: #343a46;
+}
+
+.dark-theme .conv-item.active {
+  background: #3b4260;
+}
+
+.dark-theme .text-bubble,
+.dark-theme .file-bubble,
+.dark-theme .reply-target {
+  background: #303642;
+  color: #edf0f5;
+}
+
+.dark-theme .message-self .text-bubble {
+  background: #5868d8;
 }
 </style>

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 export interface LocalMessageRecord {
@@ -26,6 +26,12 @@ interface LocalMessageStore {
   users: Record<string, {
     conversations: Record<string, LocalMessageRecord[]>
   }>
+}
+
+export interface LocalMessageStats {
+  conversationCount: number
+  messageCount: number
+  cacheSize: number
 }
 
 const STORE_VERSION = 1
@@ -115,4 +121,29 @@ export async function searchLocalMessages(userId: string, conversationId: string
     .filter((message) => `${message.displayContent || ''}\n${message.content || ''}`.toLowerCase().includes(normalizedKeyword))
     .slice(-Math.max(1, Math.min(limit, 100)))
     .reverse()
+}
+
+export async function getLocalMessageStats(userId: string): Promise<LocalMessageStats> {
+  const store = await readStore()
+  const conversations = store.users[userId]?.conversations || {}
+  const conversationBuckets = Object.values(conversations)
+  let cacheSize = 0
+  try {
+    cacheSize = (await stat(getStorePath())).size
+  } catch {
+    cacheSize = Buffer.byteLength(JSON.stringify({ users: { [userId]: store.users[userId] || { conversations: {} } } }))
+  }
+  return {
+    conversationCount: conversationBuckets.length,
+    messageCount: conversationBuckets.reduce((sum, messages) => sum + messages.length, 0),
+    cacheSize,
+  }
+}
+
+export async function clearLocalMessages(userId: string) {
+  if (!userId) return false
+  const store = await readStore()
+  delete store.users[userId]
+  await writeStore(store)
+  return true
 }

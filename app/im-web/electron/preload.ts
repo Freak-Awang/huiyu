@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.invoke('messages:list', userId, conversationId, beforeMessageId, pageSize) as Promise<unknown[]>,
   searchMessages: (userId: string, conversationId: string, keyword: string, limit?: number) =>
     ipcRenderer.invoke('messages:search', userId, conversationId, keyword, limit) as Promise<unknown[]>,
+  getMessageStats: (userId: string) =>
+    ipcRenderer.invoke('messages:stats', userId) as Promise<{
+      conversationCount: number
+      messageCount: number
+      cacheSize: number
+    }>,
+  clearMessages: (userId: string) => ipcRenderer.invoke('messages:clear', userId) as Promise<boolean>,
 })
 
 contextBridge.exposeInMainWorld('imScreenshot', {

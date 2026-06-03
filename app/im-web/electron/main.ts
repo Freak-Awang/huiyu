@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   listLocalMessages,
+  clearLocalMessages,
+  getLocalMessageStats,
   searchLocalMessages,
   upsertLocalMessage,
   type LocalMessageRecord,
@@ -268,6 +270,8 @@ ipcMain.handle(
   (_event, userId: string, conversationId: string, keyword: string, limit?: number) =>
     searchLocalMessages(userId, conversationId, keyword, limit),
 )
+ipcMain.handle('messages:stats', (_event, userId: string) => getLocalMessageStats(userId))
+ipcMain.handle('messages:clear', (_event, userId: string) => clearLocalMessages(userId))
 ipcMain.handle('screenshot:start', () => startScreenshot())
 ipcMain.handle('screenshot:getInitialData', (event) => {
   if (!isScreenshotSender(event)) return null
