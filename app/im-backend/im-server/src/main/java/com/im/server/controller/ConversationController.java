@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -62,14 +63,14 @@ public class ConversationController {
         return Result.ok();
     }
 
-    @PutMapping("/{id}/settings")
+    @RequestMapping(value = {"/{id}/settings", "/{id}/settings/"}, method = {RequestMethod.PUT, RequestMethod.POST})
     public Result<ConversationVO> updateSettings(@PathVariable("id") Long conversationId,
                                                   @RequestBody UpdateConversationSettingsRequest request) {
         Long userId = getCurrentUserId();
         return Result.success(conversationService.updateSettings(conversationId, userId, request));
     }
 
-    @PutMapping("/{id}/members/{userId}/role")
+    @RequestMapping(value = {"/{id}/members/{userId}/role", "/{id}/members/{userId}/role/"}, method = {RequestMethod.PUT, RequestMethod.POST})
     public Result<ConversationVO> updateMemberRole(@PathVariable("id") Long conversationId,
                                                    @PathVariable Long userId,
                                                    @RequestBody UpdateMemberRoleRequest request) {
