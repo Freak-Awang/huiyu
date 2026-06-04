@@ -1,4 +1,5 @@
 com\im\server\service\impl\UserSettingsServiceImplTest.class
 com\im\server\service\impl\MessageServiceImplTest.class
 com\im\server\service\impl\ConversationServiceImplTest.class
+com\im\server\config\DatabaseCompatibilityInitializerTest.class
 com\im\server\config\JwtAuthenticationFilterTest.class

@@ -24,6 +24,7 @@ com\im\server\websocket\WebSocketSessionManager.class
 com\im\server\service\impl\UserSettingsServiceImpl.class
 com\im\server\controller\AuthController.class
 com\im\server\controller\ConversationController.class
+com\im\server\config\DatabaseCompatibilityInitializer.class
 com\im\server\config\WebSocketConfig.class
 com\im\server\mapper\FileUploadPartMapper.class
 com\im\server\mapper\MessageMapper.class
