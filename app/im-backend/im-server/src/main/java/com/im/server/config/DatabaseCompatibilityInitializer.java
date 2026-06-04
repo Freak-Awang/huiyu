@@ -34,6 +34,7 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         ensureUserSettingsTable();
+        ensureConversationAnnouncementColumns();
     }
 
     private void ensureUserSettingsTable() {
@@ -42,6 +43,28 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
             log.info("Database compatibility schema checked");
         } catch (DataAccessException e) {
             throw new IllegalStateException("Failed to initialize database compatibility schema", e);
+        }
+    }
+
+    private void ensureConversationAnnouncementColumns() {
+        addColumnIfMissing("im_conversation", "announcement",
+                "ALTER TABLE im_conversation ADD COLUMN announcement TEXT NULL COMMENT 'group announcement' AFTER owner_id");
+        addColumnIfMissing("im_conversation", "announcement_updated_by",
+                "ALTER TABLE im_conversation ADD COLUMN announcement_updated_by BIGINT NULL COMMENT 'announcement updater user id' AFTER announcement");
+        addColumnIfMissing("im_conversation", "announcement_updated_at",
+                "ALTER TABLE im_conversation ADD COLUMN announcement_updated_at DATETIME NULL COMMENT 'announcement update time' AFTER announcement_updated_by");
+    }
+
+    private void addColumnIfMissing(String tableName, String columnName, String ddl) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, Integer.class, tableName, columnName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute(ddl);
         }
     }
 }

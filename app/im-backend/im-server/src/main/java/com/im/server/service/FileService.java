@@ -7,6 +7,7 @@ import com.im.common.dto.FileUploadInitRequest;
 import com.im.common.dto.FileUploadVO;
 import com.im.common.dto.FileVO;
 import com.im.common.entity.ImFile;
+import com.im.common.result.PageResult;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,6 +30,8 @@ public interface FileService {
     FileUploadVO uploadChunk(Long userId, String uploadId, Integer partNumber, MultipartFile file);
 
     FileVO completeUpload(Long userId, String uploadId, FileUploadCompleteRequest request);
+
+    PageResult<FileVO> listConversationFiles(Long userId, Long conversationId, String type, String keyword, int page, int pageSize);
 
     void abortUpload(Long userId, String uploadId);
 

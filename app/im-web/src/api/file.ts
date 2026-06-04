@@ -15,6 +15,11 @@ export interface UploadedFile {
   sha256?: string
   status?: string
   expiresAt?: string
+  conversationId?: string
+  uploaderId?: string
+  uploaderName?: string
+  createdAt?: string
+  downloadCount?: number
   url: string
 }
 
@@ -28,7 +33,19 @@ interface RawUploadedFile {
   sha256?: string
   status?: string
   expiresAt?: string
+  conversationId?: number | string
+  uploaderId?: number | string
+  uploaderName?: string
+  createdAt?: string
+  downloadCount?: number
   url?: string
+}
+
+export interface FilePage {
+  records: UploadedFile[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface FileTransfer {
@@ -84,6 +101,11 @@ function normalizeUploadedFile(raw: RawUploadedFile): UploadedFile {
     sha256: raw.sha256,
     status: raw.status,
     expiresAt: raw.expiresAt,
+    conversationId: raw.conversationId != null ? String(raw.conversationId) : undefined,
+    uploaderId: raw.uploaderId != null ? String(raw.uploaderId) : undefined,
+    uploaderName: raw.uploaderName,
+    createdAt: raw.createdAt,
+    downloadCount: raw.downloadCount,
     url: apiAssetUrl(raw.url || `/api/files/download/${id}`),
   }
 }
@@ -297,6 +319,35 @@ export function getFileUrl(fileId: string) {
 
 export function acknowledgeFileDownload(fileId: string) {
   return http.post(`/api/files/ack/${fileId}`)
+}
+
+export function listConversationFiles(params: {
+  conversationId: string
+  type?: 'all' | 'image' | 'file'
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
+  return http.get<any>(`/api/conversations/${params.conversationId}/files`, {
+    params: {
+      type: params.type || 'all',
+      keyword: params.keyword || undefined,
+      page: params.page || 1,
+      pageSize: params.pageSize || 20,
+    },
+  }).then((res) => {
+    const page = res.data || {}
+    const records = Array.isArray(page) ? page : page.records || page.list || page.data || []
+    return {
+      ...res,
+      data: {
+        records: records.map(normalizeUploadedFile),
+        total: Number(page.total || 0),
+        page: Number(page.page || params.page || 1),
+        pageSize: Number(page.pageSize || params.pageSize || 20),
+      } as FilePage,
+    }
+  })
 }
 
 async function calculateFileSha256IfReasonable(file: File): Promise<string | undefined> {

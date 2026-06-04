@@ -57,6 +57,7 @@ class MessageServiceImplTest {
         ImMessage message = messageService.sendMessage(10L, allMentionRequest());
 
         assertThat(message.getContent()).contains("\"type\":\"all\"");
+        assertThat(message.getExpiresAt()).isNull();
         verify(messageMapper).insert(any(ImMessage.class));
     }
 

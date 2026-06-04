@@ -16,6 +16,12 @@ public class ConversationVO {
 
     private String avatar;
 
+    private String announcement;
+
+    private Long announcementUpdatedBy;
+
+    private LocalDateTime announcementUpdatedAt;
+
     private String lastMessage;
 
     private LocalDateTime lastMessageTime;

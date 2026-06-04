@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
-    private static final int MESSAGE_RETENTION_DAYS = 7;
     private static final String MESSAGE_TYPE_TEXT = "TEXT";
     private static final String MENTION_TYPE_ALL = "all";
     private static final String MENTION_ALL_USER_ID = "__ALL__";
@@ -74,15 +73,12 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException("Not a member of this conversation");
         }
 
-        LocalDateTime now = LocalDateTime.now();
         Long total = messageMapper.selectCount(
                 new LambdaQueryWrapper<ImMessage>()
-                        .eq(ImMessage::getConversationId, conversationId)
-                        .gt(ImMessage::getExpiresAt, now));
+                        .eq(ImMessage::getConversationId, conversationId));
 
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ImMessage::getConversationId, conversationId);
-        wrapper.gt(ImMessage::getExpiresAt, now);
         if (beforeMessageId != null) {
             wrapper.lt(ImMessage::getId, beforeMessageId);
         }
@@ -113,7 +109,6 @@ public class MessageServiceImpl implements MessageService {
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ImMessage::getConversationId, conversationId)
                 .ne(ImMessage::getStatus, "RECALLED")
-                .gt(ImMessage::getExpiresAt, LocalDateTime.now())
                 .like(ImMessage::getContent, keyword)
                 .orderByDesc(ImMessage::getCreateTime)
                 .last("LIMIT " + pageSize);
@@ -155,7 +150,7 @@ public class MessageServiceImpl implements MessageService {
         message.setStatus("SENT");
         message.setClientMsgId(request.getClientMsgId());
         message.setCreateTime(LocalDateTime.now());
-        message.setExpiresAt(LocalDateTime.now().plusDays(MESSAGE_RETENTION_DAYS));
+        message.setExpiresAt(null);
 
         messageMapper.insert(message);
         createDeliveryRows(message);
@@ -205,12 +200,9 @@ public class MessageServiceImpl implements MessageService {
                         .orderByAsc(ImMessageDelivery::getCreateTime)
                         .last("LIMIT " + Math.max(1, Math.min(limit, 200))));
 
-        LocalDateTime now = LocalDateTime.now();
         return pendingDeliveries.stream()
                 .map(delivery -> messageMapper.selectById(delivery.getMessageId()))
-                .filter(message -> message != null
-                        && message.getExpiresAt() != null
-                        && message.getExpiresAt().isAfter(now))
+                .filter(message -> message != null)
                 .map(message -> toMessageVO(message, userId))
                 .collect(Collectors.toList());
     }
@@ -311,15 +303,8 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public void cleanupExpiredMessages() {
-        List<ImMessage> expiredMessages = messageMapper.selectList(
-                new LambdaQueryWrapper<ImMessage>()
-                        .lt(ImMessage::getExpiresAt, LocalDateTime.now()));
-        for (ImMessage message : expiredMessages) {
-            messageDeliveryMapper.delete(
-                    new LambdaQueryWrapper<ImMessageDelivery>()
-                            .eq(ImMessageDelivery::getMessageId, message.getId()));
-            messageMapper.deleteById(message.getId());
-        }
+        // Chat messages are retained permanently. This method remains for API compatibility
+        // with older cleanup scheduling code and intentionally performs no deletion.
     }
 
     private void createDeliveryRows(ImMessage message) {

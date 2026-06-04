@@ -6,6 +6,9 @@ export interface Conversation {
   name: string
   avatar: string
   lastMessage: MessagePreview | null
+  announcement?: string
+  announcementUpdatedBy?: string
+  announcementUpdatedAt?: string
   members?: ConversationMember[]
   memberCount: number
   pinned: boolean
@@ -39,6 +42,9 @@ export interface RawConversation {
   name?: string | null
   avatar?: string | null
   lastMessage?: string | MessagePreview | null
+  announcement?: string | null
+  announcementUpdatedBy?: number | string | null
+  announcementUpdatedAt?: string | null
   lastMessageTime?: string | null
   unreadCount?: number | null
   mentionUnreadCount?: number | null
@@ -86,6 +92,9 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     type,
     name: raw.name || '',
     avatar: raw.avatar || '',
+    announcement: raw.announcement || '',
+    announcementUpdatedBy: raw.announcementUpdatedBy != null ? String(raw.announcementUpdatedBy) : undefined,
+    announcementUpdatedAt: raw.announcementUpdatedAt || '',
     lastMessage,
     members,
     memberCount: raw.memberCount ?? members.length,
@@ -144,4 +153,21 @@ export function pinConversation(convId: string, pinned: boolean) {
 
 export function muteConversation(convId: string, muted: boolean) {
   return http.put(`/api/conversations/${convId}/mute`, null, { params: { muted } })
+}
+
+export function updateConversationSettings(
+  convId: string,
+  data: { name?: string; announcement?: string },
+) {
+  return http.put<RawConversation>(`/api/conversations/${convId}/settings`, data).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
+  }))
+}
+
+export function updateMemberRole(convId: string, userId: string, role: 'admin' | 'member') {
+  return http.put<RawConversation>(`/api/conversations/${convId}/members/${userId}/role`, { role }).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
+  }))
 }

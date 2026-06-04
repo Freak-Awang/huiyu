@@ -14,6 +14,8 @@ E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\LoginRespo
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\MemberVO.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\MessageVO.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\SendMessageRequest.java
+E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\UpdateConversationSettingsRequest.java
+E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\UpdateMemberRoleRequest.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\dto\UserSettingsVO.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImConversation.java
 E:\CodeX\git\app\im-backend\im-common\src\main\java\com\im\common\entity\ImConversationMember.java

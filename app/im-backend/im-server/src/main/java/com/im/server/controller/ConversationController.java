@@ -3,8 +3,13 @@ package com.im.server.controller;
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.ConversationMembersRequest;
 import com.im.common.dto.CreateConversationRequest;
+import com.im.common.dto.FileVO;
+import com.im.common.dto.UpdateConversationSettingsRequest;
+import com.im.common.dto.UpdateMemberRoleRequest;
+import com.im.common.result.PageResult;
 import com.im.common.result.Result;
 import com.im.server.service.ConversationService;
+import com.im.server.service.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,6 +30,9 @@ public class ConversationController {
 
     @Autowired
     private ConversationService conversationService;
+
+    @Autowired
+    private FileService fileService;
 
     @GetMapping
     public Result<List<ConversationVO>> listConversations() {
@@ -54,6 +62,21 @@ public class ConversationController {
         return Result.ok();
     }
 
+    @PutMapping("/{id}/settings")
+    public Result<ConversationVO> updateSettings(@PathVariable("id") Long conversationId,
+                                                  @RequestBody UpdateConversationSettingsRequest request) {
+        Long userId = getCurrentUserId();
+        return Result.success(conversationService.updateSettings(conversationId, userId, request));
+    }
+
+    @PutMapping("/{id}/members/{userId}/role")
+    public Result<ConversationVO> updateMemberRole(@PathVariable("id") Long conversationId,
+                                                   @PathVariable Long userId,
+                                                   @RequestBody UpdateMemberRoleRequest request) {
+        Long currentUserId = getCurrentUserId();
+        return Result.success(conversationService.updateMemberRole(conversationId, userId, currentUserId, request));
+    }
+
     @PutMapping("/{id}/pin")
     public Result<Void> pinConversation(@PathVariable("id") Long conversationId,
                                          @RequestParam boolean pinned) {
@@ -74,6 +97,16 @@ public class ConversationController {
     public Result<ConversationVO> getConversation(@PathVariable("id") Long id) {
         Long userId = getCurrentUserId();
         return Result.success(conversationService.getById(id, userId));
+    }
+
+    @GetMapping("/{id}/files")
+    public Result<PageResult<FileVO>> listFiles(@PathVariable("id") Long conversationId,
+                                                @RequestParam(defaultValue = "all") String type,
+                                                @RequestParam(required = false) String keyword,
+                                                @RequestParam(defaultValue = "1") int page,
+                                                @RequestParam(defaultValue = "20") int pageSize) {
+        Long userId = getCurrentUserId();
+        return Result.success(fileService.listConversationFiles(userId, conversationId, type, keyword, page, pageSize));
     }
 
     private Long getCurrentUserId() {

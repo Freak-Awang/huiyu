@@ -1,5 +1,5 @@
 import electronUpdater from 'electron-updater'
-import { app, BrowserWindow, Menu, Tray, desktopCapturer, ipcMain, nativeImage, screen, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -17,6 +17,8 @@ const { autoUpdater } = electronUpdater
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let closeBehavior: 'tray' | 'exit' = 'tray'
+let unreadCount = 0
 
 interface ScreenshotResult {
   canceled: boolean
@@ -59,7 +61,7 @@ function createMainWindow() {
   })
 
   mainWindow.on('close', (event) => {
-    if (!isQuitting) {
+    if (!isQuitting && closeBehavior === 'tray') {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -91,6 +93,35 @@ function createTray() {
     ])
   )
   tray.on('double-click', () => mainWindow?.show())
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!mainWindow.isVisible()) {
+    mainWindow.show()
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+  mainWindow.focus()
+  mainWindow.flashFrame(false)
+}
+
+function updateUnreadBadge(count: number) {
+  unreadCount = Math.max(0, Math.floor(Number(count) || 0))
+  const label = unreadCount > 0 ? `Enterprise IM (${unreadCount}条未读)` : 'Enterprise IM'
+  tray?.setToolTip(label)
+  mainWindow?.setTitle(label)
+  app.setBadgeCount(unreadCount)
+
+  if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+    const overlay = unreadCount > 0
+      ? nativeImage.createFromDataURL(
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPElEQVR4AWNkwA38//8/AyWAiYFCwA0wYGBg+M/AwPCfAUMOKMREhYFBgAFGGhgaJLCJga5BkgQAIbAKGcMjtE8AAAAASUVORK5CYII='
+        )
+      : null
+    mainWindow.setOverlayIcon(overlay, unreadCount > 0 ? `${unreadCount}条未读` : '')
+  }
 }
 
 function createMenu() {
@@ -251,12 +282,39 @@ async function startScreenshot(): Promise<ScreenshotResult> {
 
 ipcMain.handle('app:getVersion', () => app.getVersion())
 ipcMain.handle('app:getPlatform', () => process.platform)
+ipcMain.handle('app:setCloseBehavior', (_event, behavior: 'tray' | 'exit') => {
+  closeBehavior = behavior === 'exit' ? 'exit' : 'tray'
+  return true
+})
 ipcMain.handle('app:openExternal', async (_event, url: string) => {
   if (/^https?:\/\//i.test(url)) {
     await shell.openExternal(url)
     return true
   }
   return false
+})
+ipcMain.handle('notification:setUnreadBadge', (_event, count: number) => {
+  updateUnreadBadge(count)
+  return true
+})
+ipcMain.handle('notification:show', (_event, payload: { title?: string; body?: string; conversationId?: string }) => {
+  const title = payload?.title || 'Enterprise IM'
+  const body = payload?.body || '收到一条新消息'
+  const conversationId = String(payload?.conversationId || '')
+  if (Notification.isSupported()) {
+    const notification = new Notification({ title, body })
+    notification.on('click', () => {
+      focusMainWindow()
+      if (conversationId) {
+        mainWindow?.webContents.send('notification:open-conversation', conversationId)
+      }
+    })
+    notification.show()
+  }
+  if (mainWindow && !mainWindow.isFocused()) {
+    mainWindow.flashFrame(true)
+  }
+  return true
 })
 ipcMain.handle('messages:upsert', async (_event, userId: string, message: LocalMessageRecord) => {
   await upsertLocalMessage(userId, message)

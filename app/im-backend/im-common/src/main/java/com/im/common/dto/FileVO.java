@@ -14,5 +14,10 @@ public class FileVO {
     private String sha256;
     private String status;
     private String url;
+    private Long conversationId;
+    private Long uploaderId;
+    private String uploaderName;
+    private LocalDateTime createdAt;
+    private Integer downloadCount;
     private LocalDateTime expiresAt;
 }

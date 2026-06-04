@@ -4,6 +4,16 @@ contextBridge.exposeInMainWorld('imDesktop', {
   getVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
   getPlatform: () => ipcRenderer.invoke('app:getPlatform') as Promise<string>,
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url) as Promise<boolean>,
+  setCloseBehavior: (behavior: 'tray' | 'exit') =>
+    ipcRenderer.invoke('app:setCloseBehavior', behavior) as Promise<boolean>,
+  showMessageNotification: (payload: { title: string; body: string; conversationId: string }) =>
+    ipcRenderer.invoke('notification:show', payload) as Promise<boolean>,
+  setUnreadBadge: (count: number) => ipcRenderer.invoke('notification:setUnreadBadge', count) as Promise<boolean>,
+  onNotificationOpenConversation: (handler: (conversationId: string) => void) => {
+    const listener = (_event: unknown, conversationId: string) => handler(conversationId)
+    ipcRenderer.on('notification:open-conversation', listener)
+    return () => ipcRenderer.removeListener('notification:open-conversation', listener)
+  },
   startScreenshot: () =>
     ipcRenderer.invoke('screenshot:start') as Promise<{ canceled: boolean; dataUrl?: string }>,
   upsertMessage: (userId: string, message: unknown) =>

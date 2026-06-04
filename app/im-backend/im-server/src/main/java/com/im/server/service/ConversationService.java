@@ -2,6 +2,8 @@ package com.im.server.service;
 
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
+import com.im.common.dto.UpdateConversationSettingsRequest;
+import com.im.common.dto.UpdateMemberRoleRequest;
 import java.util.List;
 
 public interface ConversationService {
@@ -17,6 +19,10 @@ public interface ConversationService {
     void pinConversation(Long conversationId, Long userId, boolean pinned);
 
     void muteConversation(Long conversationId, Long userId, boolean muted);
+
+    ConversationVO updateSettings(Long conversationId, Long operatorId, UpdateConversationSettingsRequest request);
+
+    ConversationVO updateMemberRole(Long conversationId, Long targetUserId, Long operatorId, UpdateMemberRoleRequest request);
 
     ConversationVO getById(Long id, Long userId);
 }

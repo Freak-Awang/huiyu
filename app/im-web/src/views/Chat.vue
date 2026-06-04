@@ -261,6 +261,15 @@
               <span>群成员</span>
             </button>
             <button
+              class="members-action-btn"
+              title="文件中心"
+              type="button"
+              @click="openFileDrawer"
+            >
+              <span class="members-action-icon">📁</span>
+              <span>文件</span>
+            </button>
+            <button
               class="action-btn"
               :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
               @click="togglePin"
@@ -577,6 +586,24 @@
           class="member-search"
           placeholder="搜索成员..."
         />
+        <div v-if="chatStore.currentConversation?.type === 'GROUP'" class="group-settings-box">
+          <label class="group-setting-field">
+            <span>群名称</span>
+            <input v-model="groupSettingsName" :disabled="!canManageCurrentGroup" />
+          </label>
+          <label class="group-setting-field">
+            <span>群公告</span>
+            <textarea v-model="groupSettingsAnnouncement" :disabled="!canManageCurrentGroup" rows="3"></textarea>
+          </label>
+          <button
+            v-if="canManageCurrentGroup"
+            type="button"
+            class="dialog-submit compact-submit"
+            @click="saveGroupSettings"
+          >
+            保存群设置
+          </button>
+        </div>
         <div v-if="canManageCurrentGroup" class="member-add-box">
           <input
             v-model="memberAddKeyword"
@@ -613,6 +640,14 @@
               </span>
             </div>
             <button
+              v-if="canUpdateMemberRole(member)"
+              type="button"
+              class="member-role-btn"
+              @click="toggleMemberRole(member)"
+            >
+              {{ member.role === 'admin' ? '取消管理员' : '设为管理员' }}
+            </button>
+            <button
               v-if="canRemoveGroupMember(member)"
               type="button"
               class="member-remove-btn"
@@ -622,6 +657,52 @@
             </button>
           </div>
           <div v-if="filteredGroupMembers.length === 0" class="empty-hint">暂无成员</div>
+        </div>
+      </div>
+
+      <div v-if="showFileDrawer" class="member-drawer file-drawer">
+        <div class="member-drawer-header">
+          <div class="member-drawer-title">
+            <span>文件中心</span>
+            <span>{{ fileTotal }}个文件</span>
+          </div>
+          <button class="dialog-close" @click="showFileDrawer = false">✕</button>
+        </div>
+        <div class="file-filter-row">
+          <button
+            v-for="item in fileTypeOptions"
+            :key="item.value"
+            type="button"
+            :class="{ active: fileType === item.value }"
+            @click="setFileType(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <input
+          v-model="fileSearchKeyword"
+          class="member-search"
+          placeholder="搜索文件..."
+          @keyup.enter="loadConversationFiles"
+        />
+        <div class="file-list">
+          <button
+            v-for="file in conversationFiles"
+            :key="file.id"
+            type="button"
+            class="file-row"
+            @click="openConversationFile(file)"
+          >
+            <span class="file-row-icon">{{ isImageFile(file) ? '🖼' : '📄' }}</span>
+            <span class="file-row-main">
+              <span class="file-row-name">{{ file.originalName || '未命名文件' }}</span>
+              <span class="file-row-meta">
+                {{ file.displaySize || formatFileSize(file.size || 0) }} · {{ file.uploaderName || '未知用户' }}
+              </span>
+            </span>
+          </button>
+          <div v-if="fileLoading" class="empty-hint">加载中...</div>
+          <div v-else-if="conversationFiles.length === 0" class="empty-hint">暂无文件</div>
         </div>
       </div>
     </div>
@@ -746,6 +827,8 @@ import {
   normalizeConversation,
   pinConversation,
   removeMember,
+  updateConversationSettings,
+  updateMemberRole,
   type Conversation,
   type ConversationMember,
 } from '../api/conversation'
@@ -769,6 +852,7 @@ import {
   SMALL_FILE_MAX_SIZE,
   acknowledgeFileDownload,
   getFileUrl,
+  listConversationFiles,
   uploadFile,
   uploadLargeFile,
   type LargeUploadProgress,
@@ -796,6 +880,7 @@ const onlineUsers = ref<Record<string, boolean>>({})
 const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
+let removeNotificationOpenListener: (() => void) | null = null
 
 // Filtered conversations
 const filteredConversations = computed(() => {
@@ -940,12 +1025,28 @@ const showMembersDrawer = ref(false)
 const memberSearch = ref('')
 const memberAddKeyword = ref('')
 const memberAddResults = ref<any[]>([])
+const groupSettingsName = ref('')
+const groupSettingsAnnouncement = ref('')
+const showFileDrawer = ref(false)
+const fileType = ref<'all' | 'image' | 'file'>('all')
+const fileSearchKeyword = ref('')
+const conversationFiles = ref<UploadedFile[]>([])
+const fileTotal = ref(0)
+const fileLoading = ref(false)
 const chatSearchKeyword = ref('')
 const chatSearchResults = ref<Message[]>([])
 const showSearchResults = ref(false)
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
+const totalUnreadCount = computed(() =>
+  Array.from(chatStore.unreadCounts.values()).reduce((sum, count) => sum + count, 0)
+)
+const fileTypeOptions: Array<{ value: 'all' | 'image' | 'file'; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'image', label: '图片' },
+  { value: 'file', label: '文件' },
+]
 interface PendingImage {
   id: string
   file: File
@@ -993,6 +1094,8 @@ const canManageCurrentGroup = computed(() => {
   return role === 'owner' || role === 'admin'
 })
 
+const isCurrentUserGroupOwner = computed(() => currentGroupMember.value?.role === 'owner')
+
 function getInitialReadReceipt(conv: Conversation) {
   const recipientCount = Math.max(0, (conv.memberCount || conv.members?.length || 1) - 1)
   return {
@@ -1027,8 +1130,10 @@ async function handleSelectConv(conv: any) {
     closeMentionPicker()
     closeEmojiPanel()
     showMembersDrawer.value = false
+    showFileDrawer.value = false
     lastMarkedReadMessageId = ''
     scrollToBottom(true)
+    updateUnreadBadge()
   } catch (err: any) {
     alert(err?.response?.data?.message || '加载消息失败')
   }
@@ -1173,10 +1278,29 @@ async function openMembersDrawer() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
   showMembersDrawer.value = true
+  showFileDrawer.value = false
   memberSearch.value = ''
   memberAddKeyword.value = ''
   memberAddResults.value = []
-  await chatStore.refreshConversation(conv.conversationId)
+  const refreshed = await chatStore.refreshConversation(conv.conversationId)
+  groupSettingsName.value = refreshed?.name || conv.name || ''
+  groupSettingsAnnouncement.value = refreshed?.announcement || conv.announcement || ''
+}
+
+async function saveGroupSettings() {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP') return
+  try {
+    const res = await updateConversationSettings(conv.conversationId, {
+      name: groupSettingsName.value.trim(),
+      announcement: groupSettingsAnnouncement.value,
+    })
+    chatStore.upsertConversation(res.data)
+    groupSettingsName.value = res.data.name
+    groupSettingsAnnouncement.value = res.data.announcement || ''
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '保存群设置失败')
+  }
 }
 
 function getMemberName(member: ConversationMember): string {
@@ -1194,7 +1318,73 @@ function canRemoveGroupMember(member: ConversationMember): boolean {
   if (!currentUserId) return false
   if (member.role === 'owner') return false
   if (member.userId === currentUserId) return true
-  return canManageCurrentGroup.value
+  if (isCurrentUserGroupOwner.value) return true
+  return currentGroupMember.value?.role === 'admin' && (member.role || 'member') === 'member'
+}
+
+function canUpdateMemberRole(member: ConversationMember): boolean {
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  return isCurrentUserGroupOwner.value && member.userId !== currentUserId && member.role !== 'owner'
+}
+
+async function toggleMemberRole(member: ConversationMember) {
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  const nextRole = member.role === 'admin' ? 'member' : 'admin'
+  try {
+    const res = await updateMemberRole(conv.conversationId, member.userId, nextRole)
+    chatStore.upsertConversation(res.data)
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '更新成员角色失败')
+  }
+}
+
+async function openFileDrawer() {
+  if (!chatStore.currentConversation) return
+  showFileDrawer.value = true
+  showMembersDrawer.value = false
+  await loadConversationFiles()
+}
+
+async function setFileType(type: 'all' | 'image' | 'file') {
+  fileType.value = type
+  await loadConversationFiles()
+}
+
+async function loadConversationFiles() {
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  fileLoading.value = true
+  try {
+    const res = await listConversationFiles({
+      conversationId: conv.conversationId,
+      type: fileType.value,
+      keyword: fileSearchKeyword.value.trim(),
+      page: 1,
+      pageSize: 50,
+    })
+    conversationFiles.value = res.data.records
+    fileTotal.value = res.data.total || res.data.records.length
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '加载文件中心失败')
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+function isImageFile(file: UploadedFile) {
+  return !!file.contentType?.startsWith('image/')
+}
+
+function openConversationFile(file: UploadedFile) {
+  if (isImageFile(file)) {
+    previewImage.value = file.url
+    return
+  }
+  acknowledgeFileDownload(file.id).catch(() => {
+    // Download still opens even if the acknowledgement cannot be recorded.
+  })
+  window.open(file.url, '_blank')
 }
 
 let addMemberSearchTimer: ReturnType<typeof setTimeout> | null = null
@@ -1551,6 +1741,7 @@ function markCurrentConversationReadAtBottom() {
   if (!convId || !lastReadMessageId || lastMarkedReadMessageId === lastReadMessageId) return
   lastMarkedReadMessageId = lastReadMessageId
   chatStore.clearUnread(convId)
+  updateUnreadBadge()
   const sentByWs = wsManager?.isConnected()
     ? wsManager.send('MESSAGE_READ', { conversationId: convId, lastReadMessageId })
     : false
@@ -1852,6 +2043,9 @@ function sendFileMessage(type: string, content: string) {
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
+  if (showFileDrawer.value) {
+    void loadConversationFiles()
+  }
   scrollToBottom(true)
 }
 
@@ -1885,11 +2079,12 @@ async function handleWsMessage(msg: WsMessage) {
         const body = settingsStore.notification.showPreview
           ? receivedMessage.displayContent || receivedMessage.content
           : '收到一条新消息'
-        showBrowserNotification(conv.name || receivedMessage.senderName, body)
+        showDesktopNotification(conv.name || receivedMessage.senderName, body, receivedMessage.conversationId)
       }
       if (isCurrentConversation && wasAtBottom) {
         scrollToBottom(true)
       }
+      updateUnreadBadge()
       break
     }
     case 'MESSAGE_UPDATED': {
@@ -1902,6 +2097,7 @@ async function handleWsMessage(msg: WsMessage) {
     case 'CONVERSATION_UPDATED': {
       if (msg.data) {
         chatStore.upsertConversation(normalizeConversation(msg.data))
+        updateUnreadBadge()
       }
       break
     }
@@ -1978,6 +2174,7 @@ function initWebSocket() {
     if (connected) {
       const currentConvId = chatStore.currentConversation?.conversationId
       chatStore.fetchConversations()
+      updateUnreadBadge()
       if (currentConvId) {
         chatStore.fetchMessages(currentConvId).then(() => {
           if (isMessageAreaNearBottom()) {
@@ -2002,6 +2199,14 @@ function messageMentionsCurrentUser(message: Message) {
   const currentUserId = String(authStore.currentUser?.userId ?? '')
   if (!currentUserId) return false
   return message.mentions.some((mention) => mention.userId === currentUserId || isAllMention(mention))
+}
+
+async function showDesktopNotification(title: string, body: string, conversationId: string) {
+  if (window.imDesktop?.showMessageNotification) {
+    await window.imDesktop.showMessageNotification({ title, body, conversationId }).catch(() => false)
+    return
+  }
+  showBrowserNotification(title, body)
 }
 
 function showBrowserNotification(title: string, body: string) {
@@ -2162,6 +2367,25 @@ function getFileInfo(content: string): { name: string; size: string; url: string
   }
 }
 
+function updateUnreadBadge() {
+  if (!window.imDesktop?.setUnreadBadge) return
+  window.imDesktop.setUnreadBadge(totalUnreadCount.value).catch(() => {
+    // Badge support varies by platform; unread state remains in the renderer.
+  })
+}
+
+async function openConversationFromNotification(conversationId: string) {
+  if (!conversationId) return
+  activeTab.value = 'chat'
+  let conv: Conversation | null | undefined = chatStore.conversations.find((item) => item.conversationId === conversationId)
+  if (!conv) {
+    conv = await chatStore.refreshConversation(conversationId)
+  }
+  if (conv) {
+    await handleSelectConv(conv)
+  }
+}
+
 function downloadFile(content: string) {
   const info = getFileInfo(content)
   if (info.url) {
@@ -2177,6 +2401,9 @@ function downloadFile(content: string) {
 
 async function handleLogout() {
   wsManager?.disconnect()
+  if (window.imDesktop?.setUnreadBadge) {
+    await window.imDesktop.setUnreadBadge(0).catch(() => false)
+  }
   await authStore.logout()
   settingsStore.resetLocal()
   router.push('/login')
@@ -2185,6 +2412,9 @@ async function handleLogout() {
 onMounted(async () => {
   loadRecentEmojiState()
   document.addEventListener('mousedown', handleDocumentMouseDown)
+  removeNotificationOpenListener = window.imDesktop?.onNotificationOpenConversation?.((conversationId) => {
+    void openConversationFromNotification(conversationId)
+  }) || null
   await authStore.init()
   if (authStore.isLoggedIn) {
     try {
@@ -2192,13 +2422,19 @@ onMounted(async () => {
     } catch {
       // Settings can be retried from the dialog if the backend is temporarily unavailable.
     }
+    if (window.imDesktop?.setCloseBehavior) {
+      await window.imDesktop.setCloseBehavior(settingsStore.general.closeBehavior).catch(() => false)
+    }
     await loadInitialChatData()
+    updateUnreadBadge()
     initWebSocket()
   }
 })
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown)
+  removeNotificationOpenListener?.()
+  removeNotificationOpenListener = null
   clearPendingImages()
   wsManager?.disconnect()
 })
@@ -2211,6 +2447,7 @@ watch(
     memberSearch.value = ''
     memberAddKeyword.value = ''
     memberAddResults.value = []
+    showFileDrawer.value = false
     clearPendingImages()
     closeMentionPicker()
     closeEmojiPanel()
@@ -2228,6 +2465,20 @@ watch(
       initWebSocket()
     } else {
       settingsStore.resetLocal()
+      updateUnreadBadge()
+    }
+  }
+)
+
+watch(totalUnreadCount, () => {
+  updateUnreadBadge()
+})
+
+watch(
+  () => settingsStore.general.closeBehavior,
+  (behavior) => {
+    if (window.imDesktop?.setCloseBehavior) {
+      window.imDesktop.setCloseBehavior(behavior).catch(() => false)
     }
   }
 )
@@ -3366,6 +3617,43 @@ watch(
   padding: 0 12px 10px;
 }
 
+.group-settings-box {
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.group-setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #666;
+  font-size: 12px;
+}
+
+.group-setting-field input,
+.group-setting-field textarea {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  color: #333;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: none;
+}
+
+.group-setting-field input:disabled,
+.group-setting-field textarea:disabled {
+  background: #f6f7f9;
+  color: #777;
+}
+
+.compact-submit {
+  margin-top: 0;
+  padding: 8px;
+}
+
 .member-add-input {
   margin: 0;
   width: 100%;
@@ -3446,6 +3734,91 @@ watch(
   cursor: pointer;
   font-size: 12px;
   padding: 5px 8px;
+}
+
+.member-role-btn {
+  border: none;
+  border-radius: 6px;
+  background: #eef0ff;
+  color: #4f63d8;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.file-drawer {
+  width: 360px;
+}
+
+.file-filter-row {
+  display: flex;
+  gap: 6px;
+  padding: 12px 12px 0;
+}
+
+.file-filter-row button {
+  border: none;
+  border-radius: 6px;
+  background: #f0f0f0;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.file-filter-row button.active {
+  background: #667eea;
+  color: #fff;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 12px;
+}
+
+.file-row {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 58px;
+  padding: 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.file-row:hover {
+  background: #f5f6fb;
+}
+
+.file-row-icon {
+  font-size: 24px;
+  width: 30px;
+}
+
+.file-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.file-row-name {
+  color: #333;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row-meta {
+  color: #999;
+  font-size: 11px;
 }
 
 /* Dialog */

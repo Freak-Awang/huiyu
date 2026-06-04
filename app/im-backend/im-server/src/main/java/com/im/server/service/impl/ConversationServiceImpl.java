@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
 import com.im.common.dto.MemberVO;
+import com.im.common.dto.UpdateConversationSettingsRequest;
+import com.im.common.dto.UpdateMemberRoleRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
@@ -39,6 +41,9 @@ public class ConversationServiceImpl implements ConversationService {
     private static final Logger log = LoggerFactory.getLogger(ConversationServiceImpl.class);
     private static final String MENTION_TYPE_ALL = "all";
     private static final String MENTION_ALL_USER_ID = "__ALL__";
+    private static final String ROLE_OWNER = "owner";
+    private static final String ROLE_ADMIN = "admin";
+    private static final String ROLE_MEMBER = "member";
 
     @Autowired
     private ConversationMapper conversationMapper;
@@ -78,14 +83,11 @@ public class ConversationServiceImpl implements ConversationService {
             LocalDateTime since = member.getLastReadTime() != null
                     ? member.getLastReadTime()
                     : member.getJoinTime();
-            LocalDateTime now = LocalDateTime.now();
-
             Long unreadCount = messageMapper.selectCount(
                     new LambdaQueryWrapper<ImMessage>()
                             .eq(ImMessage::getConversationId, conversation.getId())
                             .ne(ImMessage::getSenderId, userId)
                             .ne(ImMessage::getStatus, "RECALLED")
-                            .gt(ImMessage::getExpiresAt, now)
                             .gt(since != null, ImMessage::getCreateTime, since));
             vo.setUnreadCount(unreadCount != null ? unreadCount.intValue() : 0);
 
@@ -214,26 +216,17 @@ public class ConversationServiceImpl implements ConversationService {
     public void addMembers(Long conversationId, List<Long> userIds, Long operatorId) {
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
-            throw new RuntimeException("Conversation not found");
+            throw new BusinessException("Conversation not found");
         }
         if (conversation.getType() == null || conversation.getType() != 2) {
-            throw new RuntimeException("Only group conversations can add members");
+            throw new BusinessException("Only group conversations can add members");
         }
         if (userIds == null || userIds.isEmpty()) {
-            throw new RuntimeException("User ids are required");
+            throw new BusinessException("User ids are required");
         }
 
-        ImConversationMember operatorMember = conversationMemberMapper.selectOne(
-                new LambdaQueryWrapper<ImConversationMember>()
-                        .eq(ImConversationMember::getConversationId, conversationId)
-                        .eq(ImConversationMember::getUserId, operatorId));
-        if (operatorMember == null) {
-            throw new RuntimeException("Operator is not a member of this conversation");
-        }
-
-        if (!"owner".equals(operatorMember.getRole()) && !"admin".equals(operatorMember.getRole())) {
-            throw new RuntimeException("Only the owner or admin can add members");
-        }
+        ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
+        requireOwnerOrAdmin(operatorMember, "Only the owner or admin can add members");
 
         for (Long userId : userIds) {
             ImConversationMember existing = conversationMemberMapper.selectOne(
@@ -261,30 +254,21 @@ public class ConversationServiceImpl implements ConversationService {
     public void removeMember(Long conversationId, Long userId, Long operatorId) {
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
-            throw new RuntimeException("Conversation not found");
+            throw new BusinessException("Conversation not found");
         }
 
-        ImConversationMember operatorMember = conversationMemberMapper.selectOne(
-                new LambdaQueryWrapper<ImConversationMember>()
-                        .eq(ImConversationMember::getConversationId, conversationId)
-                        .eq(ImConversationMember::getUserId, operatorId));
-        if (operatorMember == null) {
-            throw new RuntimeException("Operator is not a member of this conversation");
-        }
+        ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
+        ImConversationMember targetMember = getMemberOrThrow(conversationId, userId, "User is not a member of this conversation");
 
-        ImConversationMember targetMember = conversationMemberMapper.selectOne(
-                new LambdaQueryWrapper<ImConversationMember>()
-                        .eq(ImConversationMember::getConversationId, conversationId)
-                        .eq(ImConversationMember::getUserId, userId));
-        if (targetMember == null) {
-            throw new RuntimeException("User is not a member of this conversation");
-        }
-
-        boolean isOwner = "owner".equals(operatorMember.getRole());
+        boolean isOwner = ROLE_OWNER.equals(operatorMember.getRole());
+        boolean isAdmin = ROLE_ADMIN.equals(operatorMember.getRole());
         boolean isSelf = userId.equals(operatorId);
 
-        if (!isOwner && !isSelf) {
-            throw new RuntimeException("Only the conversation owner can remove other members");
+        if (ROLE_OWNER.equals(targetMember.getRole())) {
+            throw new BusinessException(403, "The group owner cannot be removed");
+        }
+        if (!isSelf && !isOwner && !(isAdmin && ROLE_MEMBER.equals(targetMember.getRole()))) {
+            throw new BusinessException(403, "No permission to remove this member");
         }
 
         conversationMemberMapper.deleteById(targetMember.getId());
@@ -308,7 +292,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new RuntimeException("User is not a member of this conversation");
+            throw new BusinessException("User is not a member of this conversation");
         }
 
         member.setIsPinned(pinned ? 1 : 0);
@@ -322,11 +306,66 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new RuntimeException("User is not a member of this conversation");
+            throw new BusinessException("User is not a member of this conversation");
         }
 
         member.setIsMuted(muted ? 1 : 0);
         conversationMemberMapper.updateById(member);
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO updateSettings(Long conversationId, Long operatorId, UpdateConversationSettingsRequest request) {
+        ImConversation conversation = getGroupConversationOrThrow(conversationId);
+        ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
+        requireOwnerOrAdmin(operatorMember, "Only the owner or admin can update group settings");
+
+        boolean changed = false;
+        if (request != null && request.getName() != null) {
+            String name = request.getName().trim();
+            if (!StringUtils.hasText(name)) {
+                throw new BusinessException(400, "Group name cannot be empty");
+            }
+            conversation.setName(name);
+            changed = true;
+        }
+        if (request != null && request.getAnnouncement() != null) {
+            conversation.setAnnouncement(request.getAnnouncement().trim());
+            conversation.setAnnouncementUpdatedBy(operatorId);
+            conversation.setAnnouncementUpdatedAt(LocalDateTime.now());
+            changed = true;
+        }
+        if (changed) {
+            conversation.setUpdateTime(LocalDateTime.now());
+            conversationMapper.updateById(conversation);
+            notifyConversationUpdated(conversationId);
+        }
+        return buildConversationVO(conversationMapper.selectById(conversationId), operatorId);
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO updateMemberRole(Long conversationId, Long targetUserId, Long operatorId, UpdateMemberRoleRequest request) {
+        getGroupConversationOrThrow(conversationId);
+        ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
+        if (!ROLE_OWNER.equals(operatorMember.getRole())) {
+            throw new BusinessException(403, "Only the group owner can update member roles");
+        }
+        if (targetUserId.equals(operatorId)) {
+            throw new BusinessException(400, "The group owner role cannot be changed");
+        }
+        ImConversationMember targetMember = getMemberOrThrow(conversationId, targetUserId, "User is not a member of this conversation");
+        if (ROLE_OWNER.equals(targetMember.getRole())) {
+            throw new BusinessException(400, "The group owner role cannot be changed");
+        }
+        String role = request != null ? request.getRole() : null;
+        if (!ROLE_ADMIN.equals(role) && !ROLE_MEMBER.equals(role)) {
+            throw new BusinessException(400, "Role must be admin or member");
+        }
+        targetMember.setRole(role);
+        conversationMemberMapper.updateById(targetMember);
+        notifyConversationUpdated(conversationId);
+        return buildConversationVO(conversationMapper.selectById(conversationId), operatorId);
     }
 
     @Override
@@ -419,6 +458,9 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setType(conversation.getType());
         vo.setName(conversation.getName());
         vo.setAvatar(conversation.getAvatar());
+        vo.setAnnouncement(conversation.getAnnouncement());
+        vo.setAnnouncementUpdatedBy(conversation.getAnnouncementUpdatedBy());
+        vo.setAnnouncementUpdatedAt(conversation.getAnnouncementUpdatedAt());
         vo.setLastMessage(conversation.getLastMessage());
         vo.setLastMessageTime(conversation.getLastMessageTime());
         vo.setUnreadCount(0);
@@ -467,8 +509,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .eq(ImMessage::getConversationId, conversationId)
                 .eq(ImMessage::getMessageType, "TEXT")
                 .ne(ImMessage::getSenderId, userId)
-                .ne(ImMessage::getStatus, "RECALLED")
-                .gt(ImMessage::getExpiresAt, LocalDateTime.now());
+                .ne(ImMessage::getStatus, "RECALLED");
         if (since != null) {
             wrapper.gt(ImMessage::getCreateTime, since);
         }
@@ -514,5 +555,33 @@ public class ConversationServiceImpl implements ConversationService {
         }
         JsonNode userId = mention.get("userId");
         return userId != null && MENTION_ALL_USER_ID.equals(userId.asText());
+    }
+
+    private ImConversation getGroupConversationOrThrow(Long conversationId) {
+        ImConversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            throw new BusinessException("Conversation not found");
+        }
+        if (conversation.getType() == null || conversation.getType() != 2) {
+            throw new BusinessException(400, "Only group conversations can be managed");
+        }
+        return conversation;
+    }
+
+    private ImConversationMember getMemberOrThrow(Long conversationId, Long userId, String message) {
+        ImConversationMember member = conversationMemberMapper.selectOne(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId)
+                        .eq(ImConversationMember::getUserId, userId));
+        if (member == null) {
+            throw new BusinessException(message);
+        }
+        return member;
+    }
+
+    private void requireOwnerOrAdmin(ImConversationMember member, String message) {
+        if (!ROLE_OWNER.equals(member.getRole()) && !ROLE_ADMIN.equals(member.getRole())) {
+            throw new BusinessException(403, message);
+        }
     }
 }

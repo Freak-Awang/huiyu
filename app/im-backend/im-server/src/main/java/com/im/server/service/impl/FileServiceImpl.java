@@ -16,6 +16,7 @@ import com.im.common.entity.ImFileUpload;
 import com.im.common.entity.ImFileUploadPart;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
+import com.im.common.result.PageResult;
 import com.im.server.config.FileStorageProperties;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.FileMapper;
@@ -112,8 +113,9 @@ public class FileServiceImpl implements FileService {
             imFile.setStatus(STATUS_AVAILABLE);
             imFile.setDownloadCount(0);
             imFile.setCreateTime(LocalDateTime.now());
-            imFile.setTemporary(temporary ? 1 : 0);
-            imFile.setExpiresAt(temporary ? LocalDateTime.now().plusDays(properties.getRetentionDays()) : null);
+            boolean temporaryFile = temporary && conversationId == null;
+            imFile.setTemporary(temporaryFile ? 1 : 0);
+            imFile.setExpiresAt(temporaryFile ? LocalDateTime.now().plusDays(properties.getRetentionDays()) : null);
             fileMapper.insert(imFile);
             return imFile;
         } catch (Exception e) {
@@ -145,7 +147,7 @@ public class FileServiceImpl implements FileService {
         transfer.setUpdateTime(LocalDateTime.now());
         transfer.setExpiresAt(LocalDateTime.now().plusDays(properties.getRetentionDays()));
 
-        ImFile instantFile = findReusableFile(transfer.getSha256(), request.getFileSize());
+        ImFile instantFile = findReusableFile(transfer.getSha256(), request.getFileSize(), userId, request.getConversationId());
         if (instantFile != null) {
             transfer.setStatus(STATUS_COMPLETED);
             transfer.setFileId(instantFile.getId());
@@ -159,7 +161,7 @@ public class FileServiceImpl implements FileService {
     public FileUploadVO initUpload(Long userId, FileUploadInitRequest request) {
         validateTransferRequest(userId, request.getConversationId(), request.getFileName(), request.getFileSize());
         String sha256 = normalizeSha256(request.getSha256());
-        ImFile instantFile = findReusableFile(sha256, request.getFileSize());
+        ImFile instantFile = findReusableFile(sha256, request.getFileSize(), userId, request.getConversationId());
         if (instantFile != null) {
             FileUploadVO vo = new FileUploadVO();
             vo.setInstant(true);
@@ -287,8 +289,8 @@ public class FileServiceImpl implements FileService {
         imFile.setStatus(STATUS_AVAILABLE);
         imFile.setDownloadCount(0);
         imFile.setCreateTime(LocalDateTime.now());
-        imFile.setTemporary(1);
-        imFile.setExpiresAt(LocalDateTime.now().plusDays(properties.getRetentionDays()));
+        imFile.setTemporary(0);
+        imFile.setExpiresAt(null);
         fileMapper.insert(imFile);
 
         upload.setStatus(STATUS_COMPLETED);
@@ -310,6 +312,26 @@ public class FileServiceImpl implements FileService {
             storageClient.deleteQuietly(chunkKey);
         }
         return toFileVO(imFile);
+    }
+
+    @Override
+    public PageResult<FileVO> listConversationFiles(Long userId, Long conversationId, String type, String keyword, int page, int pageSize) {
+        assertConversationMember(userId, conversationId);
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        String normalizedType = StringUtils.hasText(type) ? type.trim().toLowerCase() : "all";
+
+        LambdaQueryWrapper<ImFile> countWrapper = buildConversationFileQuery(conversationId, normalizedType, keyword);
+        Long total = fileMapper.selectCount(countWrapper);
+
+        LambdaQueryWrapper<ImFile> pageWrapper = buildConversationFileQuery(conversationId, normalizedType, keyword);
+        pageWrapper.orderByDesc(ImFile::getCreateTime)
+                .last("LIMIT " + ((safePage - 1) * safePageSize) + ", " + safePageSize);
+
+        List<FileVO> records = fileMapper.selectList(pageWrapper).stream()
+                .map(this::toFileVO)
+                .collect(Collectors.toList());
+        return PageResult.success(records, total != null ? total : 0, safePage, safePageSize);
     }
 
     @Override
@@ -383,6 +405,10 @@ public class FileServiceImpl implements FileService {
             if (imFile.getExpiresAt() != null && imFile.getExpiresAt().isBefore(LocalDateTime.now())) {
                 throw new BusinessException(410, "File has expired");
             }
+            imFile.setConversationId(conversationId);
+            imFile.setTemporary(0);
+            imFile.setExpiresAt(null);
+            fileMapper.updateById(imFile);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -483,16 +509,19 @@ public class FileServiceImpl implements FileService {
                 .orderByAsc(ImFileUploadPart::getPartNumber));
     }
 
-    private ImFile findReusableFile(String sha256, Long fileSize) {
+    private ImFile findReusableFile(String sha256, Long fileSize, Long uploaderId, Long conversationId) {
         if (!StringUtils.hasText(sha256)) {
             return null;
         }
-        return fileMapper.selectOne(new LambdaQueryWrapper<ImFile>()
+        LambdaQueryWrapper<ImFile> wrapper = new LambdaQueryWrapper<ImFile>()
                 .eq(ImFile::getSha256, sha256)
+                .eq(ImFile::getUploaderId, uploaderId)
                 .eq(fileSize != null, ImFile::getFileSize, fileSize)
                 .eq(ImFile::getStatus, STATUS_AVAILABLE)
-                .gt(ImFile::getExpiresAt, LocalDateTime.now())
-                .last("LIMIT 1"));
+                .and(w -> w.isNull(ImFile::getExpiresAt).or().gt(ImFile::getExpiresAt, LocalDateTime.now()))
+                .and(w -> w.isNull(ImFile::getConversationId).or().eq(ImFile::getConversationId, conversationId))
+                .last("LIMIT 1");
+        return fileMapper.selectOne(wrapper);
     }
 
     private FileTransferVO toTransferVO(ImFileTransfer transfer) {
@@ -539,8 +568,30 @@ public class FileServiceImpl implements FileService {
         vo.setSha256(file.getSha256());
         vo.setStatus(file.getStatus());
         vo.setUrl("/api/files/download/" + file.getId());
+        vo.setConversationId(file.getConversationId());
+        vo.setUploaderId(file.getUploaderId());
+        SysUser uploader = userMapper.selectById(file.getUploaderId());
+        vo.setUploaderName(uploader != null ? uploader.getNickname() : null);
+        vo.setCreatedAt(file.getCreateTime());
+        vo.setDownloadCount(file.getDownloadCount());
         vo.setExpiresAt(file.getExpiresAt());
         return vo;
+    }
+
+    private LambdaQueryWrapper<ImFile> buildConversationFileQuery(Long conversationId, String type, String keyword) {
+        LambdaQueryWrapper<ImFile> wrapper = new LambdaQueryWrapper<ImFile>()
+                .eq(ImFile::getConversationId, conversationId)
+                .eq(ImFile::getStatus, STATUS_AVAILABLE)
+                .and(w -> w.isNull(ImFile::getExpiresAt).or().gt(ImFile::getExpiresAt, LocalDateTime.now()));
+        if ("image".equals(type)) {
+            wrapper.likeRight(ImFile::getContentType, "image/");
+        } else if ("file".equals(type)) {
+            wrapper.and(w -> w.isNull(ImFile::getContentType).or().notLikeRight(ImFile::getContentType, "image/"));
+        }
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(ImFile::getOriginalName, keyword.trim());
+        }
+        return wrapper;
     }
 
     private String displaySize(Long size) {

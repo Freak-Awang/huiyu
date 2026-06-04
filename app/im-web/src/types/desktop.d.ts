@@ -6,6 +6,14 @@ declare global {
       getVersion: () => Promise<string>
       getPlatform: () => Promise<string>
       openExternal: (url: string) => Promise<boolean>
+      setCloseBehavior?: (behavior: 'tray' | 'exit') => Promise<boolean>
+      showMessageNotification?: (payload: {
+        title: string
+        body: string
+        conversationId: string
+      }) => Promise<boolean>
+      setUnreadBadge?: (count: number) => Promise<boolean>
+      onNotificationOpenConversation?: (handler: (conversationId: string) => void) => () => void
       startScreenshot?: () => Promise<{ canceled: boolean; dataUrl?: string }>
       upsertMessage: (userId: string, message: unknown) => Promise<boolean>
       listMessages: (

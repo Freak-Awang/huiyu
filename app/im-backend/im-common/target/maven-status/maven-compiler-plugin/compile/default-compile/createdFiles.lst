@@ -2,10 +2,12 @@ com\im\common\entity\ImConversation.class
 com\im\common\exception\GlobalExceptionHandler.class
 com\im\common\config\WebConfig.class
 com\im\common\dto\LoginResponse.class
+com\im\common\dto\UpdateMemberRoleRequest.class
 com\im\common\entity\SysDept.class
 com\im\common\dto\LoginRequest.class
 com\im\common\util\JwtUtil.class
 com\im\common\dto\FileUploadCompleteRequest.class
+com\im\common\dto\UpdateConversationSettingsRequest.class
 com\im\common\exception\BusinessException.class
 com\im\common\entity\ImFileUpload.class
 com\im\common\dto\UserSettingsVO$GeneralSettings.class
