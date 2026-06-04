@@ -1,3 +1,4 @@
+import { autoUpdater } from 'electron-updater'
 import { app, BrowserWindow, Menu, Tray, desktopCapturer, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -292,6 +293,10 @@ app.whenReady().then(() => {
   createMenu()
   createMainWindow()
   createTray()
+
+  if (app.isPackaged) {
+  autoUpdater.checkForUpdatesAndNotify()
+}
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
