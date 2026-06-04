@@ -1,4 +1,4 @@
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import { app, BrowserWindow, Menu, Tray, desktopCapturer, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,6 +12,7 @@ import {
 } from './localMessages.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const { autoUpdater } = electronUpdater
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -295,8 +296,8 @@ app.whenReady().then(() => {
   createTray()
 
   if (app.isPackaged) {
-  autoUpdater.checkForUpdatesAndNotify()
-}
+    autoUpdater.checkForUpdatesAndNotify()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
