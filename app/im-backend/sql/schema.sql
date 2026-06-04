@@ -1,5 +1,5 @@
 -- ============================================
--- IM Backend Database Schema
+-- ArtTalk Backend Database Schema
 -- MySQL 8.0
 -- ============================================
 
