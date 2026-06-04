@@ -391,6 +391,19 @@
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
             <button type="button" @click="replyTarget = null">✕</button>
           </div>
+          <div v-if="activeFileUpload" class="file-upload-progress">
+            <div class="file-upload-main">
+              <span class="file-upload-name">{{ activeFileUpload.name }}</span>
+              <span class="file-upload-meta">
+                {{ activeFileUpload.percent }}% · {{ formatFileSize(activeFileUpload.speed) }}/s ·
+                {{ formatRemainingSeconds(activeFileUpload.remainingSeconds) }}
+              </span>
+            </div>
+            <div class="file-upload-bar">
+              <span :style="{ width: `${activeFileUpload.percent}%` }"></span>
+            </div>
+            <button class="file-upload-cancel" type="button" @click="cancelActiveFileUpload">取消</button>
+          </div>
           <div class="input-toolbar">
             <button
               ref="emojiButtonRef"
@@ -751,8 +764,16 @@ import {
   canUseLocalMessageStore,
   searchLocalMessages,
 } from '../utils/localMessageStore'
-import { acknowledgeFileDownload, uploadFile } from '../api/file'
-import { getFileUrl } from '../api/file'
+import {
+  LARGE_FILE_MAX_SIZE,
+  SMALL_FILE_MAX_SIZE,
+  acknowledgeFileDownload,
+  getFileUrl,
+  uploadFile,
+  uploadLargeFile,
+  type LargeUploadProgress,
+  type UploadedFile,
+} from '../api/file'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
   STICKERS,
@@ -901,6 +922,8 @@ const emojiPanelRef = ref<HTMLElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
+const activeFileUpload = ref<ActiveFileUpload | null>(null)
+let activeFileUploadAbort: AbortController | null = null
 const isSendingMessage = ref(false)
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
@@ -929,6 +952,12 @@ interface PendingImage {
   previewUrl: string
   name: string
   size: number
+}
+interface ActiveFileUpload {
+  name: string
+  percent: number
+  speed: number
+  remainingSeconds: number
 }
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
@@ -1694,7 +1723,7 @@ async function handleSendMessage() {
   try {
     for (const image of [...pendingImages.value]) {
       try {
-        const res = await uploadFile(image.file)
+        const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId)
         const url = res.data.url || getFileUrl(res.data.id)
         removePendingImage(image.id)
         sendFileMessage('IMAGE', url)
@@ -1739,19 +1768,66 @@ async function onSendFile(e: Event) {
   }
   const file = input.files?.[0]
   if (!file) return
+  if (file.size > LARGE_FILE_MAX_SIZE) {
+    alert('文件超过 50GB 上限')
+    input.value = ''
+    return
+  }
   try {
-    const res = await uploadFile(file)
-    const url = res.data.url || getFileUrl(res.data.id)
-    const fileData = JSON.stringify({
-      name: file.name,
-      url,
-      size: formatFileSize(file.size),
-    })
+    const convId = chatStore.currentConversation.conversationId
+    const uploaded = file.size > SMALL_FILE_MAX_SIZE
+      ? await uploadLargeFileWithUi(file, convId)
+      : (await uploadFile(file, convId)).data
+    const fileData = buildFileMessageContent(file, uploaded)
     sendFileMessage('FILE', fileData)
   } catch (err: any) {
     alert(err?.response?.data?.message || '上传文件失败')
   }
+  activeFileUpload.value = null
+  activeFileUploadAbort = null
   input.value = ''
+}
+
+async function uploadLargeFileWithUi(file: File, conversationId: string): Promise<UploadedFile> {
+  activeFileUploadAbort = new AbortController()
+  activeFileUpload.value = {
+    name: file.name,
+    percent: 0,
+    speed: 0,
+    remainingSeconds: 0,
+  }
+  return uploadLargeFile(file, {
+    conversationId,
+    signal: activeFileUploadAbort.signal,
+    onProgress: (progress: LargeUploadProgress) => {
+      activeFileUpload.value = {
+        name: file.name,
+        percent: progress.percent,
+        speed: progress.speed,
+        remainingSeconds: progress.remainingSeconds,
+      }
+    },
+  })
+}
+
+function cancelActiveFileUpload() {
+  activeFileUploadAbort?.abort()
+  activeFileUpload.value = null
+}
+
+function buildFileMessageContent(file: File, uploaded: UploadedFile): string {
+  const fileId = uploaded.id
+  return JSON.stringify({
+    fileId,
+    name: uploaded.originalName || file.name,
+    url: uploaded.url || getFileUrl(fileId),
+    size: uploaded.size || file.size,
+    displaySize: uploaded.displaySize || formatFileSize(uploaded.size || file.size),
+    contentType: uploaded.contentType || file.type,
+    sha256: uploaded.sha256,
+    status: uploaded.status || 'AVAILABLE',
+    expiresAt: uploaded.expiresAt,
+  })
 }
 
 function sendFileMessage(type: string, content: string) {
@@ -2060,12 +2136,27 @@ function formatFileSize(size: number): string {
   if (!size) return ''
   if (size < 1024) return `${size}B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`
-  return `${(size / (1024 * 1024)).toFixed(1)}MB`
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)}MB`
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)}GB`
 }
 
-function getFileInfo(content: string): { name: string; size: string; url: string } {
+function formatRemainingSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '即将完成'
+  if (seconds < 60) return `剩余 ${Math.ceil(seconds)} 秒`
+  if (seconds < 3600) return `剩余 ${Math.ceil(seconds / 60)} 分钟`
+  return `剩余 ${(seconds / 3600).toFixed(1)} 小时`
+}
+
+function getFileInfo(content: string): { name: string; size: string; url: string; status?: string; expiresAt?: string } {
   try {
-    return JSON.parse(content)
+    const parsed = JSON.parse(content)
+    return {
+      name: parsed.name || parsed.originalName || content,
+      size: parsed.displaySize || (typeof parsed.size === 'number' ? formatFileSize(parsed.size) : parsed.size || ''),
+      url: parsed.url || (parsed.fileId ? getFileUrl(String(parsed.fileId)) : ''),
+      status: parsed.status,
+      expiresAt: parsed.expiresAt,
+    }
   } catch {
     return { name: content, size: '', url: '' }
   }
@@ -2879,6 +2970,68 @@ watch(
   display: flex;
   gap: 8px;
   padding-bottom: 6px;
+}
+
+.file-upload-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.file-upload-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.file-upload-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-upload-meta {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.file-upload-bar {
+  grid-column: 1 / 2;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.file-upload-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 0.2s ease;
+}
+
+.file-upload-cancel {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
 }
 
 .tool-btn {

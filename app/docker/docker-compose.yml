@@ -31,6 +31,26 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    container_name: im-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: imadmin
+      MINIO_ROOT_PASSWORD: impassword
+      TZ: Asia/Shanghai
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ../im-backend
@@ -45,12 +65,19 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       FILE_UPLOAD_PATH: /app/upload
+      FILE_STORAGE: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: im-files
+      MINIO_ACCESS_KEY: imadmin
+      MINIO_SECRET_KEY: impassword
     volumes:
       - upload-data:/app/upload
     depends_on:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   nginx:
@@ -70,3 +97,4 @@ services:
 volumes:
   mysql-data:
   upload-data:
+  minio-data:

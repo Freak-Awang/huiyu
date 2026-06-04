@@ -29,4 +29,13 @@ public class RetentionCleanupJob {
             log.error("Retention cleanup failed", e);
         }
     }
+
+    @Scheduled(cron = "${retention.upload-cleanup.cron:0 0 * * * *}")
+    public void cleanupExpiredUploads() {
+        try {
+            fileService.cleanupExpiredUploads();
+        } catch (Exception e) {
+            log.error("Upload cleanup failed", e);
+        }
+    }
 }

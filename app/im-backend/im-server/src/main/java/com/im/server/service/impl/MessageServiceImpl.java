@@ -20,6 +20,7 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
+import com.im.server.service.FileService;
 import com.im.server.service.MessageService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired
     private WebSocketSessionManager sessionManager;
+
+    @Autowired
+    private FileService fileService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -131,6 +135,7 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException("Not a member of this conversation");
         }
         validateAllMentionPermission(request, member);
+        validateFileMessage(senderId, request);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
             LambdaQueryWrapper<ImMessage> dupWrapper = new LambdaQueryWrapper<>();
@@ -565,5 +570,11 @@ public class MessageServiceImpl implements MessageService {
         }
         JsonNode userId = mention.get("userId");
         return userId != null && MENTION_ALL_USER_ID.equals(userId.asText());
+    }
+
+    private void validateFileMessage(Long senderId, SendMessageRequest request) {
+        if ("FILE".equalsIgnoreCase(request.getMessageType())) {
+            fileService.validateFileMessage(senderId, request.getConversationId(), request.getContent());
+        }
     }
 }

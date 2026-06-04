@@ -18,6 +18,13 @@ public class ImFile {
     private Long fileSize;
     private String contentType;
     private Long uploaderId;
+    private Long conversationId;
+    private String sha256;
+    private String storageType;
+    private String bucket;
+    private String objectKey;
+    private String status;
+    private Integer downloadCount;
     private LocalDateTime createTime;
     private LocalDateTime expiresAt;
     private Integer temporary;
