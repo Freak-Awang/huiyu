@@ -1,5 +1,5 @@
 import electronUpdater from 'electron-updater'
-import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, ipcMain, nativeImage, screen, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -151,6 +151,42 @@ function createMenu() {
       },
     ])
   )
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true
+
+  autoUpdater.on('update-downloaded', async () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+
+    const updateDialogOptions: Electron.MessageBoxOptions = {
+      type: 'info',
+      title: '发现新版本',
+      message: '新版本已下载完成',
+      detail: '重启应用后将自动安装更新。',
+      buttons: ['立即重启安装', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+    }
+    const { response } =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showMessageBox(mainWindow, updateDialogOptions)
+        : await dialog.showMessageBox(updateDialogOptions)
+
+    if (response === 0) {
+      isQuitting = true
+      autoUpdater.quitAndInstall(false, true)
+    }
+  })
+
+  autoUpdater.on('error', (error) => {
+    console.error('Auto update failed:', error)
+  })
+
+  autoUpdater.checkForUpdates()
 }
 
 async function captureDisplay(display: Electron.Display): Promise<string> {
@@ -354,7 +390,7 @@ app.whenReady().then(() => {
   createTray()
 
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify()
+    setupAutoUpdater()
   }
 
   app.on('activate', () => {

@@ -589,20 +589,36 @@
         <div v-if="chatStore.currentConversation?.type === 'GROUP'" class="group-settings-box">
           <label class="group-setting-field">
             <span>群名称</span>
-            <input v-model="groupSettingsName" :disabled="!canManageCurrentGroup" />
+            <input
+              type="text"
+              :value="groupSettingsName"
+              :disabled="!canManageCurrentGroup"
+              @input="onGroupNameInput"
+              @keydown.stop
+              @mousedown.stop
+            />
           </label>
           <label class="group-setting-field">
             <span>群公告</span>
-            <textarea v-model="groupSettingsAnnouncement" :disabled="!canManageCurrentGroup" rows="3"></textarea>
+            <textarea
+              :value="groupSettingsAnnouncement"
+              :disabled="!canManageCurrentGroup"
+              rows="3"
+              @input="onGroupAnnouncementInput"
+              @keydown.stop
+              @mousedown.stop
+            ></textarea>
           </label>
           <button
             v-if="canManageCurrentGroup"
             type="button"
             class="dialog-submit compact-submit"
+            :disabled="groupSettingsSaving"
             @click="saveGroupSettings"
           >
-            保存群设置
+            {{ groupSettingsSaving ? '保存中...' : '保存群设置' }}
           </button>
+          <p v-if="groupSettingsStatus" class="group-settings-status">{{ groupSettingsStatus }}</p>
         </div>
         <div v-if="canManageCurrentGroup" class="member-add-box">
           <input
@@ -1027,6 +1043,8 @@ const memberAddKeyword = ref('')
 const memberAddResults = ref<any[]>([])
 const groupSettingsName = ref('')
 const groupSettingsAnnouncement = ref('')
+const groupSettingsSaving = ref(false)
+const groupSettingsStatus = ref('')
 const showFileDrawer = ref(false)
 const fileType = ref<'all' | 'image' | 'file'>('all')
 const fileSearchKeyword = ref('')
@@ -1282,24 +1300,48 @@ async function openMembersDrawer() {
   memberSearch.value = ''
   memberAddKeyword.value = ''
   memberAddResults.value = []
+  groupSettingsStatus.value = ''
   const refreshed = await chatStore.refreshConversation(conv.conversationId)
   groupSettingsName.value = refreshed?.name || conv.name || ''
   groupSettingsAnnouncement.value = refreshed?.announcement || conv.announcement || ''
 }
 
+function onGroupNameInput(event: Event) {
+  groupSettingsName.value = (event.target as HTMLInputElement).value
+  groupSettingsStatus.value = ''
+}
+
+function onGroupAnnouncementInput(event: Event) {
+  groupSettingsAnnouncement.value = (event.target as HTMLTextAreaElement).value
+  groupSettingsStatus.value = ''
+}
+
 async function saveGroupSettings() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
+  const name = groupSettingsName.value.trim()
+  if (!name) {
+    groupSettingsStatus.value = '群名称不能为空'
+    return
+  }
+  groupSettingsSaving.value = true
+  groupSettingsStatus.value = ''
   try {
     const res = await updateConversationSettings(conv.conversationId, {
-      name: groupSettingsName.value.trim(),
+      name,
       announcement: groupSettingsAnnouncement.value,
     })
     chatStore.upsertConversation(res.data)
     groupSettingsName.value = res.data.name
     groupSettingsAnnouncement.value = res.data.announcement || ''
+    groupSettingsStatus.value = '群设置已保存'
   } catch (err: any) {
-    alert(err?.response?.data?.message || '保存群设置失败')
+    const message = err?.response?.data?.message || err?.message || ''
+    groupSettingsStatus.value = message.includes('No static resource') || err?.response?.status === 404
+      ? '保存失败：后端服务未更新或未重启，请重启后端后再试'
+      : message || '保存群设置失败'
+  } finally {
+    groupSettingsSaving.value = false
   }
 }
 
@@ -3652,6 +3694,18 @@ watch(
 .compact-submit {
   margin-top: 0;
   padding: 8px;
+}
+
+.compact-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.group-settings-status {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: -2px 0 0;
 }
 
 .member-add-input {
