@@ -15,7 +15,7 @@
     <artifactId>im-backend</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
-    <name>ArtTalk Backend</name>
+    <name>IM Backend</name>
 
     <modules>
         <module>im-common</module>

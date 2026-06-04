@@ -20,7 +20,8 @@
           :class="{ active: activeSection === item.key }"
           @click="activeSection = item.key"
         >
-          <span>{{ item.icon }}</span>
+          <img v-if="item.iconSrc" :src="item.iconSrc" alt="" />
+          <span v-else>{{ item.icon }}</span>
           <span>{{ item.label }}</span>
         </button>
       </aside>
@@ -167,6 +168,7 @@ import {
 } from '../utils/localMessageStore'
 import { clearRecentUsageCache } from '../utils/recentUsage'
 import type { GeneralSettings, NotificationSettings } from '../api/settings'
+import settingsIcon from '../assets/icons/settings.svg'
 
 const emit = defineEmits<{
   close: []
@@ -182,8 +184,8 @@ const activeSection = ref<SectionKey>('general')
 const storageStats = ref<LocalMessageStats | null>(null)
 const statusText = ref('')
 
-const sections: Array<{ key: SectionKey; label: string; icon: string; hint: string }> = [
-  { key: 'general', label: '通用设置', icon: '⚙', hint: '界面、快捷键和窗口偏好' },
+const sections: Array<{ key: SectionKey; label: string; icon: string; iconSrc?: string; hint: string }> = [
+  { key: 'general', label: '通用设置', icon: '', iconSrc: settingsIcon, hint: '界面、快捷键和窗口偏好' },
   { key: 'notification', label: '消息通知', icon: '🔔', hint: '桌面通知和消息提醒策略' },
   { key: 'storage', label: '存储管理', icon: '🗄', hint: '查看和清理本机缓存' },
 ]
@@ -363,6 +365,11 @@ function flashStatus(text: string) {
   background: #fff;
   color: #4f63d8;
   box-shadow: 0 1px 3px rgba(31, 35, 48, 0.08);
+}
+
+.settings-nav-item img {
+  width: 18px;
+  height: 18px;
 }
 
 .settings-panel {

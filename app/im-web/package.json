@@ -1,9 +1,9 @@
 {
-  "name": "arttalk-desktop",
+  "name": "im-web",
   "private": true,
   "version": "0.0.3",
-  "description": "ArtTalk desktop client",
-  "author": "ArtTalk",
+  "description": "Enterprise IM desktop client",
+  "author": "Enterprise IM",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -34,7 +34,7 @@
   },
   "build": {
     "appId": "com.im.desktop",
-    "productName": "ArtTalk",
+    "productName": "Enterprise IM",
     "directories": {
       "output": "release"
     },

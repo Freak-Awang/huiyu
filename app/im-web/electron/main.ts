@@ -50,7 +50,7 @@ function createMainWindow() {
     height: 760,
     minWidth: 960,
     minHeight: 640,
-    title: 'ArtTalk',
+    title: 'Enterprise IM',
     backgroundColor: '#ffffff',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -79,7 +79,7 @@ function createTray() {
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAM0lEQVR4AWMYmWL8z0ABYBw1gGE0DBgYGBh+MDAw7Gf4//8/AxKdgYEBiI5Eo2EAAJp8CwY0Vb4pAAAAAElFTkSuQmCC'
   )
   tray = new Tray(icon)
-  tray.setToolTip('ArtTalk')
+  tray.setToolTip('Enterprise IM')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: () => mainWindow?.show() },
@@ -109,7 +109,7 @@ function focusMainWindow() {
 
 function updateUnreadBadge(count: number) {
   unreadCount = Math.max(0, Math.floor(Number(count) || 0))
-  const label = unreadCount > 0 ? `ArtTalk (${unreadCount}条未读)` : 'ArtTalk'
+  const label = unreadCount > 0 ? `Enterprise IM (${unreadCount}条未读)` : 'Enterprise IM'
   tray?.setToolTip(label)
   mainWindow?.setTitle(label)
   app.setBadgeCount(unreadCount)
@@ -334,7 +334,7 @@ ipcMain.handle('notification:setUnreadBadge', (_event, count: number) => {
   return true
 })
 ipcMain.handle('notification:show', (_event, payload: { title?: string; body?: string; conversationId?: string }) => {
-  const title = payload?.title || 'ArtTalk'
+  const title = payload?.title || 'Enterprise IM'
   const body = payload?.body || '收到一条新消息'
   const conversationId = String(payload?.conversationId || '')
   if (Notification.isSupported()) {

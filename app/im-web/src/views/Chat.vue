@@ -15,7 +15,7 @@
           @click="activeTab = 'chat'"
           title="消息"
         >
-          <span class="nav-icon">💬</span>
+          <img :src="messageIcon" class="nav-icon" alt="消息" />
           <span class="nav-label">消息</span>
         </div>
         <div
@@ -24,7 +24,7 @@
           @click="activeTab = 'contacts'"
           title="通讯录"
         >
-          <span class="nav-icon">👥</span>
+          <img :src="contactsIcon" class="nav-icon" alt="通讯录" />
           <span class="nav-label">通讯录</span>
         </div>
       </div>
@@ -40,8 +40,12 @@
             {{ (authStore.currentUser?.nickname || 'U')[0] }}
           </span>
         </div>
-        <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="设置">⚙</button>
-        <button class="logout-btn" @click="handleLogout" title="退出登录">↪</button>
+        <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="设置">
+          <img :src="settingsIcon" alt="设置" />
+        </button>
+        <button class="logout-btn" @click="handleLogout" title="退出登录">
+          <img :src="powerIcon" alt="退出登录" />
+        </button>
       </div>
     </div>
 
@@ -257,7 +261,7 @@
               type="button"
               @click="openMembersDrawer"
             >
-              <span class="members-action-icon">👥</span>
+              <img :src="contactsIcon" class="members-action-icon" alt="群成员" />
               <span>群成员</span>
             </button>
             <button
@@ -266,7 +270,7 @@
               type="button"
               @click="openFileDrawer"
             >
-              <span class="members-action-icon">📁</span>
+              <img :src="fileIcon" class="members-action-icon" alt="文件" />
               <span>文件</span>
             </button>
             <button
@@ -420,13 +424,15 @@
               title="表情"
               type="button"
               @click="toggleEmojiPanel"
-            >😊</button>
+            >
+              <img :src="emojiIcon" alt="表情" />
+            </button>
             <label class="tool-btn" title="发送图片">
               📷
               <input type="file" accept="image/*" multiple hidden @change="onSendImage" />
             </label>
             <label class="tool-btn" title="发送文件">
-              📁
+              <img :src="fileIcon" alt="发送文件" />
               <input type="file" hidden @change="onSendFile" />
             </label>
             <button
@@ -436,7 +442,9 @@
               type="button"
               :disabled="isTakingScreenshot"
               @click="takeScreenshot"
-            >✂</button>
+            >
+              <img :src="screenshotIcon" alt="屏幕截图" />
+            </button>
           </div>
           <div v-if="pendingImages.length" class="pending-image-list">
             <div
@@ -568,7 +576,7 @@
 
       <template v-else>
         <div class="no-conversation">
-          <div class="no-conv-icon">💬</div>
+          <img :src="messageIcon" class="no-conv-icon" alt="消息" />
           <p>选择一个会话开始聊天</p>
         </div>
       </template>
@@ -882,6 +890,13 @@ import {
   type Sticker,
 } from '../constants/stickers'
 import { RECENT_EMOJIS_KEY, RECENT_STICKERS_KEY } from '../utils/recentUsage'
+import messageIcon from '../assets/icons/message.svg'
+import contactsIcon from '../assets/icons/contacts.svg'
+import settingsIcon from '../assets/icons/settings.svg'
+import powerIcon from '../assets/icons/power.svg'
+import fileIcon from '../assets/icons/file.svg'
+import emojiIcon from '../assets/icons/emoji.svg'
+import screenshotIcon from '../assets/icons/screenshot.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -2575,7 +2590,8 @@ watch(
 }
 
 .nav-icon {
-  font-size: 22px;
+  width: 22px;
+  height: 22px;
 }
 
 .nav-label {
@@ -2614,8 +2630,18 @@ watch(
   background: none;
   border: none;
   color: #aaa;
-  font-size: 16px;
   cursor: pointer;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.logout-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .settings-btn {
@@ -2624,8 +2650,15 @@ watch(
   border-radius: 8px;
   background: transparent;
   color: #aaa;
-  font-size: 18px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .logout-btn:hover,
@@ -2975,8 +3008,8 @@ watch(
 }
 
 .members-action-icon {
-  font-size: 15px;
-  line-height: 1;
+  width: 15px;
+  height: 15px;
 }
 
 .chat-search-input {
@@ -3328,7 +3361,6 @@ watch(
 }
 
 .tool-btn {
-  font-size: 18px;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -3336,6 +3368,14 @@ watch(
   border: none;
   background: none;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .tool-btn:hover {
@@ -3597,7 +3637,8 @@ watch(
 }
 
 .no-conv-icon {
-  font-size: 64px;
+  width: 64px;
+  height: 64px;
   margin-bottom: 16px;
 }
 

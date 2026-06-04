@@ -3,8 +3,8 @@
     <div class="login-card">
       <div class="login-logo">
         <div class="logo-icon">&#x1F4AC;</div>
-        <h1>绘语</h1>
-        <p>绘语 ArtTalk</p>
+        <h1>企业IM</h1>
+        <p>企业即时通讯平台</p>
       </div>
       <form class="login-form" @submit.prevent="handleLogin">
         <div v-if="showServerConfig" class="form-item">

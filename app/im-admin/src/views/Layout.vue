@@ -3,7 +3,7 @@
     <el-aside width="220px">
       <div class="sidebar">
         <div class="logo">
-          <h2>绘语管理后台</h2>
+          <h2>企业管理后台</h2>
         </div>
         <el-menu
           :default-active="activeMenu"

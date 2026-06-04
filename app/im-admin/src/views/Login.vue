@@ -2,7 +2,7 @@
   <div class="login-container">
     <el-card class="login-card">
       <template #header>
-        <h2 class="login-title">绘语管理后台</h2>
+        <h2 class="login-title">企业IM管理后台</h2>
       </template>
       <el-form
         ref="formRef"
