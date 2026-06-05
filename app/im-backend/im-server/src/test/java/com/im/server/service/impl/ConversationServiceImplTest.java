@@ -76,6 +76,8 @@ class ConversationServiceImplTest {
         ConversationVO vo = conversationService.getById(1L, 11L);
 
         assertThat(vo.getMentionUnreadCount()).isEqualTo(1);
+        assertThat(vo.getMembers()).anySatisfy(member ->
+                assertThat(member.getSignature()).isEqualTo("签名" + member.getUserId()));
     }
 
     @Test
@@ -132,6 +134,7 @@ class ConversationServiceImplTest {
         SysUser user = new SysUser();
         user.setId(userId);
         user.setNickname("用户" + userId);
+        user.setSignature("签名" + userId);
         return user;
     }
 

@@ -491,6 +491,7 @@ public class ConversationServiceImpl implements ConversationService {
             memberVO.setUserId(cm.getUserId());
             memberVO.setNickname(user != null ? user.getNickname() : null);
             memberVO.setAvatar(user != null ? user.getAvatar() : null);
+            memberVO.setSignature(user != null ? user.getSignature() : null);
             memberVO.setRole(cm.getRole());
             memberVOs.add(memberVO);
 

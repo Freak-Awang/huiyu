@@ -6,6 +6,7 @@ export interface Message {
   senderId: string
   senderName: string
   senderAvatar: string
+  senderSignature: string
   messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content: string
   displayContent: string
@@ -63,6 +64,7 @@ export interface RawMessage {
   senderId?: number | string
   senderName?: string | null
   senderAvatar?: string | null
+  senderSignature?: string | null
   messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content?: string | null
   clientMsgId?: string | null
@@ -96,6 +98,7 @@ export function normalizeMessage(raw: RawMessage): Message {
     senderId: String(raw.senderId ?? ''),
     senderName: raw.senderName || '',
     senderAvatar: raw.senderAvatar || '',
+    senderSignature: raw.senderSignature || '',
     messageType,
     content,
     displayContent: messageType === 'STICKER' ? parseStickerDisplayName(content) : parsedText.text,

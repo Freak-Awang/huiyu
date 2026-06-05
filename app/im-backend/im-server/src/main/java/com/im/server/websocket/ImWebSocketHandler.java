@@ -253,6 +253,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             SysUser sender = userMapper.selectById(senderId);
             receiveData.put("senderName", sender != null ? sender.getNickname() : "");
             receiveData.put("senderAvatar", sender != null ? sender.getAvatar() : "");
+            receiveData.put("senderSignature", sender != null ? sender.getSignature() : "");
             receiveData.put("messageType", msg.getMessageType());
             receiveData.put("content", msg.getContent());
             receiveData.put("clientMsgId", msg.getClientMsgId());

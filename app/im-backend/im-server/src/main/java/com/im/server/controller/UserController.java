@@ -49,7 +49,8 @@ public class UserController {
                 userId,
                 body.get("nickname"),
                 body.get("email"),
-                body.get("phone"));
+                body.get("phone"),
+                body.get("signature"));
         return Result.success(user);
     }
 

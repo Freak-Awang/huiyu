@@ -11,5 +11,7 @@ public class MemberVO {
 
     private String avatar;
 
+    private String signature;
+
     private String role;
 }

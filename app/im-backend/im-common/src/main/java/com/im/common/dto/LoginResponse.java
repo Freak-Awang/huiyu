@@ -12,5 +12,6 @@ public class LoginResponse {
     private Long userId;
     private String nickname;
     private String avatar;
+    private String signature;
     private String role;
 }

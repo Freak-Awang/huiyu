@@ -17,6 +17,8 @@ public class MessageVO {
 
     private String senderAvatar;
 
+    private String senderSignature;
+
     private String messageType;
 
     private String content;

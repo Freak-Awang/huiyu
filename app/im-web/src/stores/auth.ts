@@ -2,12 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login as loginApi, logout as logoutApi } from '../api/auth'
 import { getProfile } from '../api/user'
+import { toServerUrl } from '../config/runtime'
 
 export interface UserInfo {
   userId: string
   username: string
   nickname: string
   avatar: string
+  signature: string
   role: string
   email?: string
   phone?: string
@@ -33,7 +35,8 @@ export const useAuthStore = defineStore('auth', () => {
         userId: String(u.userId || u.id),
         username: u.username || username,
         nickname: u.nickname || '',
-        avatar: u.avatar || '',
+        avatar: normalizeAvatar(u.avatar),
+        signature: u.signature || '',
         role: u.role || '',
         email: u.email || '',
         phone: u.phone || '',
@@ -68,7 +71,8 @@ export const useAuthStore = defineStore('auth', () => {
         userId: String(data.userId || data.id || ''),
         username: data.username || '',
         nickname: data.nickname || '',
-        avatar: data.avatar || '',
+        avatar: normalizeAvatar(data.avatar),
+        signature: data.signature || '',
         role: data.role || '',
         email: data.email || '',
         phone: data.phone || '',
@@ -88,5 +92,18 @@ export const useAuthStore = defineStore('auth', () => {
     return loadFromStorage()
   }
 
-  return { token, user, isLoggedIn, currentUser, login, logout, loadFromStorage, init }
+  function updateCurrentUser(patch: Partial<UserInfo>) {
+    if (!user.value) return
+    user.value = {
+      ...user.value,
+      ...patch,
+      avatar: patch.avatar !== undefined ? normalizeAvatar(patch.avatar) : user.value.avatar,
+    }
+  }
+
+  function normalizeAvatar(avatar?: string | null) {
+    return avatar ? toServerUrl(avatar) : ''
+  }
+
+  return { token, user, isLoggedIn, currentUser, login, logout, loadFromStorage, init, updateCurrentUser }
 })

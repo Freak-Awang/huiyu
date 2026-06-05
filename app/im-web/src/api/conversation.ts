@@ -23,6 +23,7 @@ export interface ConversationMember {
   userId: string
   nickname?: string
   avatar?: string
+  signature?: string
   role?: string
 }
 

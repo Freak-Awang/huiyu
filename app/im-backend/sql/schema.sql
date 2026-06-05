@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     email VARCHAR(128) DEFAULT NULL COMMENT 'email',
     phone VARCHAR(20) DEFAULT NULL COMMENT 'phone',
     avatar VARCHAR(256) DEFAULT NULL COMMENT 'avatar URL',
+    signature VARCHAR(128) DEFAULT NULL COMMENT 'personal signature',
     dept_id BIGINT DEFAULT NULL COMMENT 'department id',
     role VARCHAR(32) NOT NULL DEFAULT 'user' COMMENT 'admin/user',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '0=disabled, 1=enabled',

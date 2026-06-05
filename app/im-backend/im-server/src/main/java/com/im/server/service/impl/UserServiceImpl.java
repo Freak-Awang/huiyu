@@ -3,6 +3,7 @@ package com.im.server.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.im.common.entity.SysUser;
+import com.im.common.exception.BusinessException;
 import com.im.common.result.PageResult;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.UserService;
@@ -16,6 +17,8 @@ import java.util.List;
 
 @Service
 public class UserServiceImpl implements UserService {
+
+    private static final int MAX_SIGNATURE_LENGTH = 128;
 
     @Autowired
     private UserMapper userMapper;
@@ -108,13 +111,28 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public SysUser updateProfile(Long userId, String nickname, String email, String phone) {
+    public SysUser updateProfile(Long userId, String nickname, String email, String phone, String signature) {
         SysUser user = getById(userId);
         user.setNickname(nickname);
         user.setEmail(email);
         user.setPhone(phone);
+        user.setSignature(normalizeSignature(signature));
         user.setUpdateTime(LocalDateTime.now());
         userMapper.updateById(user);
         return user;
+    }
+
+    private String normalizeSignature(String signature) {
+        if (signature == null) {
+            return null;
+        }
+        String trimmed = signature.trim();
+        if (!StringUtils.hasText(trimmed)) {
+            return null;
+        }
+        if (trimmed.length() > MAX_SIGNATURE_LENGTH) {
+            throw new BusinessException(400, "个性签名最多128字");
+        }
+        return trimmed;
     }
 }

@@ -5,6 +5,7 @@ export interface UserProfile {
   username: string
   nickname: string
   avatar: string
+  signature: string
   email: string
   phone: string
   deptId: string

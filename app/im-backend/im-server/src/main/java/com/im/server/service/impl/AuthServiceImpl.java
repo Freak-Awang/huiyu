@@ -52,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
         response.setUserId(user.getId());
         response.setNickname(user.getNickname());
         response.setAvatar(user.getAvatar());
+        response.setSignature(user.getSignature());
         response.setRole(user.getRole());
         return response;
     }
@@ -85,6 +86,7 @@ public class AuthServiceImpl implements AuthService {
         response.setUserId(user.getId());
         response.setNickname(user.getNickname());
         response.setAvatar(user.getAvatar());
+        response.setSignature(user.getSignature());
         response.setRole(user.getRole());
         return response;
     }

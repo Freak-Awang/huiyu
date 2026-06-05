@@ -405,6 +405,7 @@ public class MessageServiceImpl implements MessageService {
             SysUser sender = userMapper.selectById(message.getSenderId());
             data.put("senderName", sender != null ? sender.getNickname() : "");
             data.put("senderAvatar", sender != null ? sender.getAvatar() : "");
+            data.put("senderSignature", sender != null ? sender.getSignature() : "");
             data.put("messageType", message.getMessageType());
             data.put("content", message.getContent());
             data.put("status", message.getStatus());
@@ -436,6 +437,7 @@ public class MessageServiceImpl implements MessageService {
         if (user != null) {
             vo.setSenderName(user.getNickname());
             vo.setSenderAvatar(user.getAvatar());
+            vo.setSenderSignature(user.getSignature());
         }
 
         fillReadReceipt(vo, message, viewerId);

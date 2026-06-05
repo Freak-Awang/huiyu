@@ -29,7 +29,11 @@
         </div>
       </div>
       <div class="sidebar-footer">
-        <div class="user-avatar-small" :title="authStore.currentUser?.nickname">
+        <div
+          class="user-avatar-small"
+          :title="authStore.currentUser?.nickname"
+          @click="showProfileDialog = true"
+        >
           <img
             v-if="authStore.currentUser?.avatar"
             :src="authStore.currentUser.avatar"
@@ -166,6 +170,7 @@
               </div>
               <div class="contact-info">
                 <span class="contact-name">{{ user.nickname || user.username }}</span>
+                <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
                 <span class="contact-dept">{{ user.deptName || '' }}</span>
               </div>
             </div>
@@ -194,6 +199,7 @@
                   </div>
                   <div class="contact-info">
                     <span class="contact-name">{{ user.nickname || user.username }}</span>
+                    <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
                   </div>
                 </div>
               </template>
@@ -221,6 +227,7 @@
                       </div>
                       <div class="contact-info">
                         <span class="contact-name">{{ user.nickname || user.username }}</span>
+                        <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
                       </div>
                     </div>
                   </template>
@@ -313,12 +320,14 @@
               class="message-item"
               :class="{ 'message-self': msg.senderId === authStore.currentUser?.userId }"
             >
-              <div class="message-avatar">
+              <div class="message-avatar" :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)">
                 <img v-if="msg.senderAvatar" :src="msg.senderAvatar" alt="" />
                 <span v-else>{{ (msg.senderName || 'U')[0] }}</span>
               </div>
               <div class="message-body">
-                <div class="message-sender">{{ msg.senderName }}</div>
+                <div class="message-sender" :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)">
+                  {{ msg.senderName }}
+                </div>
                 <div class="message-content">
                   <template v-if="msg.status === 'RECALLED'">
                     <div class="text-bubble recalled-bubble">消息已撤回</div>
@@ -659,6 +668,7 @@
             </div>
             <div class="member-info">
               <span class="member-name">{{ getMemberName(member) }}</span>
+              <span v-if="member.signature" class="member-signature">{{ member.signature }}</span>
               <span class="member-role" :class="`member-role-${member.role || 'member'}`">
                 {{ formatMemberRole(member.role) }}
               </span>
@@ -831,6 +841,10 @@
       @recent-cache-cleared="clearRecentEmojiState"
       @local-cache-cleared="handleLocalCacheCleared"
     />
+    <ProfileDialog
+      v-if="showProfileDialog"
+      @close="showProfileDialog = false"
+    />
   </div>
 </template>
 
@@ -841,6 +855,7 @@ import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import SettingsDialog from '../components/SettingsDialog.vue'
+import ProfileDialog from '../components/ProfileDialog.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUsersByDept, searchUsers } from '../api/user'
@@ -905,6 +920,7 @@ const settingsStore = useSettingsStore()
 
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const showSettingsDialog = ref(false)
+const showProfileDialog = ref(false)
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
 const onlineUsers = ref<Record<string, boolean>>({})
@@ -1364,6 +1380,10 @@ function getMemberName(member: ConversationMember): string {
   return member.nickname || `用户${member.userId}`
 }
 
+function getUserSignatureTitle(name: string, signature?: string): string {
+  return signature ? `${name || '用户'}：${signature}` : name || ''
+}
+
 function formatMemberRole(role?: string): string {
   if (role === 'owner') return '群主'
   if (role === 'admin') return '管理员'
@@ -1693,6 +1713,7 @@ function sendSticker(sticker: Sticker) {
     senderId: authStore.currentUser.userId,
     senderName: authStore.currentUser.nickname,
     senderAvatar: authStore.currentUser.avatar || '',
+    senderSignature: authStore.currentUser.signature || '',
     messageType: 'STICKER',
     content,
     displayContent: `[表情] ${sticker.name}`,
@@ -1934,6 +1955,7 @@ function sendTextMessage() {
     senderId: authStore.currentUser.userId,
     senderName: authStore.currentUser.nickname,
     senderAvatar: authStore.currentUser.avatar || '',
+    senderSignature: authStore.currentUser.signature || '',
     messageType: 'TEXT',
     content,
     displayContent: text,
@@ -2089,6 +2111,7 @@ function sendFileMessage(type: string, content: string) {
     senderId: authStore.currentUser.userId,
     senderName: authStore.currentUser.nickname,
     senderAvatar: authStore.currentUser.avatar || '',
+    senderSignature: authStore.currentUser.signature || '',
     messageType: type as any,
     content,
     displayContent: content,
@@ -2626,6 +2649,10 @@ watch(
   object-fit: cover;
 }
 
+.user-avatar-small:hover {
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.28);
+}
+
 .logout-btn {
   background: none;
   border: none;
@@ -2937,6 +2964,15 @@ watch(
 .contact-name {
   font-size: 13px;
   color: #333;
+}
+
+.contact-signature {
+  max-width: 150px;
+  overflow: hidden;
+  color: #8a8f99;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .contact-dept {
@@ -3805,6 +3841,16 @@ watch(
   text-overflow: ellipsis;
 }
 
+.member-signature {
+  max-width: 170px;
+  overflow: hidden;
+  color: #8a8f99;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .member-role {
   border-radius: 4px;
   color: #8a8f99;
@@ -4128,8 +4174,10 @@ watch(
 .dark-theme .panel-title,
 .dark-theme .conv-name,
 .dark-theme .contact-name,
+.dark-theme .contact-signature,
 .dark-theme .dept-name,
 .dark-theme .chat-header-name,
+.dark-theme .member-signature,
 .dark-theme .message-sender {
   color: #edf0f5;
 }

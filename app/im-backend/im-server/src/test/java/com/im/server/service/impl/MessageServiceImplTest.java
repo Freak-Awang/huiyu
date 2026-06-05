@@ -1,10 +1,13 @@
 package com.im.server.service.impl;
 
 import com.im.common.dto.SendMessageRequest;
+import com.im.common.result.PageResult;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
+import com.im.common.dto.MessageVO;
 import com.im.common.exception.BusinessException;
+import com.im.common.entity.SysUser;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
@@ -105,6 +108,29 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    @Test
+    void getMessagesIncludesSenderSignature() {
+        ImMessage message = new ImMessage();
+        message.setId(100L);
+        message.setConversationId(1L);
+        message.setSenderId(10L);
+        message.setMessageType("TEXT");
+        message.setContent("hello");
+        message.setStatus("SENT");
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(11L, "member"));
+        when(messageMapper.selectCount(any())).thenReturn(1L);
+        when(messageMapper.selectList(any())).thenReturn(List.of(message));
+        when(userMapper.selectById(10L)).thenReturn(user(10L));
+        when(messageDeliveryMapper.selectCount(any())).thenReturn(0L);
+
+        PageResult<MessageVO> page = messageService.getMessages(11L, 1L, null, 50);
+
+        assertThat(page.getData()).singleElement().satisfies(vo -> {
+            assertThat(vo.getSenderName()).isEqualTo("用户10");
+            assertThat(vo.getSenderSignature()).isEqualTo("签名10");
+        });
+    }
+
     private void arrangeSend(String role, int conversationType) {
         arrangeSenderAndConversation(role, conversationType);
         when(messageMapper.insert(any(ImMessage.class))).thenAnswer(invocation -> {
@@ -152,5 +178,13 @@ class MessageServiceImplTest {
         member.setIsPinned(0);
         member.setIsMuted(0);
         return member;
+    }
+
+    private SysUser user(Long userId) {
+        SysUser user = new SysUser();
+        user.setId(userId);
+        user.setNickname("用户" + userId);
+        user.setSignature("签名" + userId);
+        return user;
     }
 }

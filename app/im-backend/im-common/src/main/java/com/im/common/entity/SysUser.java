@@ -18,6 +18,7 @@ public class SysUser {
     private String email;
     private String phone;
     private String avatar;
+    private String signature;
     private Long deptId;
     private String role;
     private Integer status;
