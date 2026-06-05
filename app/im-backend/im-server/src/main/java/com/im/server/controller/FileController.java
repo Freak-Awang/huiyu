@@ -18,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -109,7 +110,7 @@ public class FileController {
             @PathVariable Long fileId,
             @RequestHeader(value = "Range", required = false) String rangeHeader) {
         try {
-            ImFile imFile = fileService.getDownloadableFile(getCurrentUserId(), fileId);
+            ImFile imFile = fileService.getDownloadableFile(getOptionalCurrentUserId(), fileId);
             Range range = parseRange(rangeHeader, imFile.getFileSize());
             StoredObject object = fileService.openFile(imFile, range.start, range.length);
             fileService.incrementDownloadCount(fileId);
@@ -190,6 +191,22 @@ public class FileController {
     private Long getCurrentUserId() {
         String userIdStr = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Long.parseLong(userIdStr);
+    }
+
+    private Long getOptionalCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof String userIdStr)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(userIdStr);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private record Range(long start, long end, long length, boolean partial) {

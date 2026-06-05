@@ -477,6 +477,12 @@ public class FileServiceImpl implements FileService {
     }
 
     private boolean canAccessFile(Long userId, ImFile imFile) {
+        if (isPublicStandaloneFile(imFile)) {
+            return true;
+        }
+        if (userId == null) {
+            return false;
+        }
         if (userId.equals(imFile.getUploaderId())) {
             return true;
         }
@@ -490,6 +496,10 @@ public class FileServiceImpl implements FileService {
         return conversationMemberMapper.selectOne(new LambdaQueryWrapper<ImConversationMember>()
                 .eq(ImConversationMember::getConversationId, imFile.getConversationId())
                 .eq(ImConversationMember::getUserId, userId)) != null;
+    }
+
+    private boolean isPublicStandaloneFile(ImFile imFile) {
+        return imFile.getConversationId() == null && Integer.valueOf(0).equals(imFile.getTemporary());
     }
 
     private ImFileUpload getOwnedUpload(Long userId, String uploadId) {
