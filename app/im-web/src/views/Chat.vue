@@ -32,7 +32,7 @@
         <div
           class="user-avatar-small"
           :title="authStore.currentUser?.nickname"
-          @click="showProfileDialog = true"
+          @click="openOwnProfile"
         >
           <img
             v-if="authStore.currentUser?.avatar"
@@ -43,6 +43,27 @@
           <span v-else class="avatar-placeholder">
             {{ (authStore.currentUser?.nickname || 'U')[0] }}
           </span>
+          <span class="sidebar-presence-dot" :class="`presence-${selfPresence}`"></span>
+        </div>
+        <button
+          class="presence-switch"
+          type="button"
+          :title="selfPresenceLabel"
+          @click="presenceMenuOpen = !presenceMenuOpen"
+        >
+          {{ selfPresenceLabel.slice(0, 2) }}
+        </button>
+        <div v-if="presenceMenuOpen" class="presence-menu">
+          <button
+            v-for="option in PRESENCE_OPTIONS"
+            :key="option.value"
+            type="button"
+            :class="{ active: manualPresence === option.value }"
+            @click="setManualPresence(option.value)"
+          >
+            <span class="presence-dot-inline" :class="`presence-${option.value}`"></span>
+            <span>{{ option.label }}</span>
+          </button>
         </div>
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="设置">
           <img :src="settingsIcon" alt="设置" />
@@ -83,7 +104,11 @@
               <div class="conv-avatar">
                 <img v-if="conv.avatar" :src="conv.avatar" alt="" />
                 <span v-else>{{ (conv.name || '群')[0] }}</span>
-                <span v-if="onlineUsers[conv.members?.[0]?.userId ?? '']" class="online-dot"></span>
+                <span
+                  v-if="showConversationPresence(conv)"
+                  class="online-dot"
+                  :class="`presence-${getConversationPresence(conv)}`"
+                ></span>
               </div>
               <div class="conv-info">
                 <div class="conv-top">
@@ -116,7 +141,11 @@
             <div class="conv-avatar">
               <img v-if="conv.avatar" :src="conv.avatar" alt="" />
               <span v-else>{{ (conv.name || '群')[0] }}</span>
-              <span v-if="onlineUsers[conv.members?.[0]?.userId ?? '']" class="online-dot"></span>
+              <span
+                v-if="showConversationPresence(conv)"
+                class="online-dot"
+                :class="`presence-${getConversationPresence(conv)}`"
+              ></span>
             </div>
             <div class="conv-info">
               <div class="conv-top">
@@ -164,9 +193,10 @@
               class="contact-item"
               @dblclick="createSingleChat(user)"
             >
-              <div class="contact-avatar">
+              <div class="contact-avatar" @click.stop="openUserProfile(user)">
                 <img v-if="user.avatar" :src="user.avatar" alt="" />
                 <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
               </div>
               <div class="contact-info">
                 <span class="contact-name">{{ user.nickname || user.username }}</span>
@@ -193,9 +223,10 @@
                   class="contact-item"
                   @dblclick="createSingleChat(user)"
                 >
-                  <div class="contact-avatar">
+                  <div class="contact-avatar" @click.stop="openUserProfile(user)">
                     <img v-if="user.avatar" :src="user.avatar" alt="" />
                     <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                    <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                   </div>
                   <div class="contact-info">
                     <span class="contact-name">{{ user.nickname || user.username }}</span>
@@ -221,9 +252,10 @@
                       class="contact-item"
                       @dblclick="createSingleChat(user)"
                     >
-                      <div class="contact-avatar">
+                      <div class="contact-avatar" @click.stop="openUserProfile(user)">
                         <img v-if="user.avatar" :src="user.avatar" alt="" />
                         <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                        <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                       </div>
                       <div class="contact-info">
                         <span class="contact-name">{{ user.nickname || user.username }}</span>
@@ -320,7 +352,11 @@
               class="message-item"
               :class="{ 'message-self': msg.senderId === authStore.currentUser?.userId }"
             >
-              <div class="message-avatar" :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)">
+              <div
+                class="message-avatar"
+                :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)"
+                @click="openMessageProfile(msg)"
+              >
                 <img v-if="msg.senderAvatar" :src="msg.senderAvatar" alt="" />
                 <span v-else>{{ (msg.senderName || 'U')[0] }}</span>
               </div>
@@ -368,7 +404,7 @@
                           :alt="getStickerInfo(msg.content)?.name"
                         />
                       </template>
-                      <span v-else class="sticker-error">表情加载失败</span>
+                      <span v-else class="sticker-error">本地表情不可用</span>
                     </div>
                   </template>
                 </div>
@@ -560,7 +596,44 @@
                     </button>
                   </div>
                 </div>
-                <div class="sticker-grid">
+                <div class="emoji-section">
+                  <div class="emoji-section-title sticker-section-header">
+                    <span>我的表情</span>
+                    <button type="button" class="sticker-manage-btn" @click="pickCustomSticker">添加</button>
+                  </div>
+                  <input
+                    ref="customStickerInputRef"
+                    type="file"
+                    :accept="CUSTOM_STICKER_LIMITS.accept"
+                    hidden
+                    @change="onCustomStickerSelected"
+                  />
+                  <div v-if="customStickers.length" class="sticker-grid">
+                    <div
+                      v-for="sticker in customStickers"
+                      :key="sticker.id"
+                      class="custom-sticker-option"
+                    >
+                      <button
+                        type="button"
+                        class="sticker-option"
+                        :title="sticker.name"
+                        @click="sendSticker(sticker)"
+                      >
+                        <img :src="sticker.url" :alt="sticker.name" />
+                      </button>
+                      <div class="custom-sticker-actions">
+                        <button type="button" @click="renameCustomSticker(sticker)">重命名</button>
+                        <button type="button" @click="removeCustomSticker(sticker)">删除</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="sticker-empty">还没有自定义表情</div>
+                  <div v-if="customStickerError" class="sticker-error-text">{{ customStickerError }}</div>
+                </div>
+                <div class="emoji-section">
+                  <div class="emoji-section-title">内置表情</div>
+                  <div class="sticker-grid">
                   <button
                     v-for="sticker in STICKERS"
                     :key="sticker.id"
@@ -571,6 +644,7 @@
                   >
                     <img :src="sticker.url" :alt="sticker.name" />
                   </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -662,9 +736,10 @@
             :key="member.userId"
             class="member-row"
           >
-            <div class="member-avatar">
+            <div class="member-avatar" @click="openUserProfile(member)">
               <img v-if="member.avatar" :src="member.avatar" alt="" />
               <span v-else>{{ getMemberName(member)[0] }}</span>
+              <span class="online-dot" :class="`presence-${getUserPresence(member)}`"></span>
             </div>
             <div class="member-info">
               <span class="member-name">{{ getMemberName(member) }}</span>
@@ -843,7 +918,11 @@
     />
     <ProfileDialog
       v-if="showProfileDialog"
+      :user="selectedProfileUser"
+      :presence="getProfilePresence(selectedProfileUser)"
       @close="showProfileDialog = false"
+      @saved="handleProfileSaved"
+      @start-chat="startProfileChat"
     />
   </div>
 </template>
@@ -851,7 +930,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import SettingsDialog from '../components/SettingsDialog.vue'
@@ -905,6 +984,21 @@ import {
   type Sticker,
 } from '../constants/stickers'
 import { RECENT_EMOJIS_KEY, RECENT_STICKERS_KEY } from '../utils/recentUsage'
+import {
+  CUSTOM_STICKER_LIMITS,
+  addCustomStickerRecord,
+  deleteCustomStickerRecord,
+  listCustomStickerRecords,
+  renameCustomStickerRecord,
+  type CustomStickerRecord,
+} from '../utils/customStickers'
+import {
+  PRESENCE_OPTIONS,
+  getPresenceLabel,
+  isPresenceOnline,
+  normalizePresenceStatus,
+  type PresenceStatus,
+} from '../utils/presence'
 import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
 import settingsIcon from '../assets/icons/settings.svg'
@@ -921,13 +1015,18 @@ const settingsStore = useSettingsStore()
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const showSettingsDialog = ref(false)
 const showProfileDialog = ref(false)
+const selectedProfileUser = ref<any | null>(null)
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
-const onlineUsers = ref<Record<string, boolean>>({})
+const presenceByUser = ref<Record<string, PresenceStatus>>({})
+const manualPresence = ref<PresenceStatus>('online')
+const presenceMenuOpen = ref(false)
 const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
 let removeNotificationOpenListener: (() => void) | null = null
+let idleTimer: ReturnType<typeof setTimeout> | null = null
+let autoAway = false
 
 // Filtered conversations
 const filteredConversations = computed(() => {
@@ -1051,6 +1150,7 @@ const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
+const customStickerInputRef = ref<HTMLInputElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
@@ -1068,6 +1168,8 @@ const emojiActiveTab = ref<'emoji' | 'sticker'>('emoji')
 const emojiActiveGroup = ref(0)
 const recentEmojis = ref<string[]>([])
 const recentStickers = ref<Sticker[]>([])
+const customStickers = ref<Sticker[]>([])
+const customStickerError = ref('')
 const showMembersDrawer = ref(false)
 const memberSearch = ref('')
 const memberAddKeyword = ref('')
@@ -1091,6 +1193,8 @@ const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreensh
 const totalUnreadCount = computed(() =>
   Array.from(chatStore.unreadCounts.values()).reduce((sum, count) => sum + count, 0)
 )
+const selfPresence = computed(() => presenceByUser.value[String(authStore.currentUser?.userId || '')] || manualPresence.value)
+const selfPresenceLabel = computed(() => getPresenceLabel(selfPresence.value))
 const fileTypeOptions: Array<{ value: 'all' | 'image' | 'file'; label: string }> = [
   { value: 'all', label: '全部' },
   { value: 'image', label: '图片' },
@@ -1154,6 +1258,132 @@ function getInitialReadReceipt(conv: Conversation) {
   }
 }
 
+function getUserId(user: any): string {
+  return String(user?.userId || user?.id || '')
+}
+
+function getUserPresence(user: any): PresenceStatus {
+  const userId = getUserId(user)
+  return userId ? presenceByUser.value[userId] || 'offline' : 'offline'
+}
+
+function getProfilePresence(user: any): PresenceStatus {
+  if (!user) return selfPresence.value
+  return getUserPresence(user)
+}
+
+function getConversationPresence(conv: Conversation): PresenceStatus {
+  if (conv.type === 'GROUP') return 'offline'
+  const userId = conv.members?.find((member) => member.userId !== authStore.currentUser?.userId)?.userId
+    || conv.members?.[0]?.userId
+  return userId ? presenceByUser.value[String(userId)] || 'offline' : 'offline'
+}
+
+function showConversationPresence(conv: Conversation): boolean {
+  return conv.type !== 'GROUP' && isPresenceOnline(getConversationPresence(conv))
+}
+
+function requestConversationPresence(conversationId?: string) {
+  if (!conversationId || !wsManager?.isConnected()) return
+  wsManager.send('ONLINE_STATUS', { conversationId })
+}
+
+function requestUserPresence(userId?: string) {
+  if (!userId || !wsManager?.isConnected()) return
+  wsManager.send('ONLINE_STATUS', { userId })
+}
+
+function applySelfPresence(status: PresenceStatus) {
+  const userId = String(authStore.currentUser?.userId || '')
+  if (userId) {
+    presenceByUser.value[userId] = status
+  }
+}
+
+function setManualPresence(status: PresenceStatus) {
+  manualPresence.value = status
+  autoAway = false
+  presenceMenuOpen.value = false
+  applySelfPresence(status)
+  if (wsManager?.isConnected()) {
+    wsManager.send('ONLINE_STATUS', { status })
+  }
+  resetIdleTimer()
+}
+
+function resetIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+  if (manualPresence.value !== 'online') return
+  idleTimer = setTimeout(() => {
+    autoAway = true
+    applySelfPresence('away')
+    if (wsManager?.isConnected()) {
+      wsManager.send('ONLINE_STATUS', { status: 'away' })
+    }
+  }, 5 * 60 * 1000)
+}
+
+function handleUserActivity() {
+  if (manualPresence.value !== 'online') return
+  if (autoAway) {
+    autoAway = false
+    applySelfPresence('online')
+    if (wsManager?.isConnected()) {
+      wsManager.send('ONLINE_STATUS', { status: 'online' })
+    }
+  }
+  resetIdleTimer()
+}
+
+function openOwnProfile() {
+  selectedProfileUser.value = authStore.currentUser
+  showProfileDialog.value = true
+  presenceMenuOpen.value = false
+}
+
+function openUserProfile(user: any) {
+  if (getUserId(user) === authStore.currentUser?.userId) {
+    openOwnProfile()
+    return
+  }
+  selectedProfileUser.value = user
+  showProfileDialog.value = true
+  requestUserPresence(getUserId(user))
+}
+
+function openMessageProfile(message: Message) {
+  if (message.senderId === authStore.currentUser?.userId) {
+    openOwnProfile()
+    return
+  }
+  openUserProfile({
+    userId: message.senderId,
+    nickname: message.senderName,
+    avatar: message.senderAvatar,
+    signature: message.senderSignature,
+  })
+}
+
+function handleProfileSaved(user: UserInfo) {
+  selectedProfileUser.value = user
+  for (const conv of chatStore.conversations) {
+    if (!conv.members) continue
+    conv.members = conv.members.map((member) =>
+      member.userId === user.userId
+        ? { ...member, nickname: user.nickname, avatar: user.avatar, signature: user.signature }
+        : member,
+    )
+  }
+}
+
+async function startProfileChat(user: any) {
+  showProfileDialog.value = false
+  await createSingleChat(user)
+}
+
 const mentionCandidates = computed(() => {
   const conv = chatStore.currentConversation
   const currentUserId = String(authStore.currentUser?.userId ?? '')
@@ -1176,6 +1406,7 @@ function matchesAllMentionKeyword(keyword: string): boolean {
 async function handleSelectConv(conv: any) {
   try {
     await chatStore.selectConversation(conv.conversationId)
+    requestConversationPresence(conv.conversationId)
     closeMentionPicker()
     closeEmojiPanel()
     showMembersDrawer.value = false
@@ -1731,7 +1962,12 @@ function sendSticker(sticker: Sticker) {
 }
 
 function getStickerInfo(content: string): Sticker | null {
-  return parseStickerContent(content)
+  const parsed = parseStickerContent(content)
+  if (!parsed) return null
+  if (parsed.source === 'custom' || parsed.localOnly) {
+    return customStickers.value.find((sticker) => sticker.id === parsed.id) || null
+  }
+  return parsed
 }
 
 function getImageUrl(content: string): string {
@@ -1754,7 +1990,7 @@ function rememberEmoji(emoji: string) {
 
 function rememberSticker(sticker: Sticker) {
   recentStickers.value = [sticker, ...recentStickers.value.filter((item) => item.id !== sticker.id)].slice(0, 12)
-  localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => item.id)))
+  localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => stickerStorageKey(item))))
 }
 
 function loadRecentEmojiState() {
@@ -1768,10 +2004,10 @@ function loadRecentEmojiState() {
   }
 
   try {
-    const storedStickerIds = JSON.parse(localStorage.getItem(RECENT_STICKERS_KEY) || '[]')
-    recentStickers.value = Array.isArray(storedStickerIds)
-      ? storedStickerIds
-          .map((id) => STICKERS.find((sticker) => sticker.id === id))
+    const storedStickerKeys = JSON.parse(localStorage.getItem(RECENT_STICKERS_KEY) || '[]')
+    recentStickers.value = Array.isArray(storedStickerKeys)
+      ? storedStickerKeys
+          .map((key) => findStickerByStorageKey(String(key)))
           .filter((sticker): sticker is Sticker => !!sticker)
           .slice(0, 12)
       : []
@@ -1785,6 +2021,92 @@ function clearRecentEmojiState() {
   recentStickers.value = []
 }
 
+function stickerStorageKey(sticker: Sticker): string {
+  return `${sticker.source === 'custom' || sticker.localOnly ? 'custom' : 'builtin'}:${sticker.id}`
+}
+
+function findStickerByStorageKey(key: string): Sticker | undefined {
+  const [source, id] = key.includes(':') ? key.split(':', 2) : ['builtin', key]
+  return source === 'custom'
+    ? customStickers.value.find((sticker) => sticker.id === id)
+    : STICKERS.find((sticker) => sticker.id === id)
+}
+
+function toCustomSticker(record: CustomStickerRecord): Sticker {
+  return {
+    id: record.id,
+    name: record.name,
+    url: URL.createObjectURL(record.blob),
+    source: 'custom',
+    localOnly: true,
+    mimeType: record.mimeType,
+    size: record.size,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
+}
+
+function revokeCustomStickerUrls() {
+  for (const sticker of customStickers.value) {
+    if (sticker.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(sticker.url)
+    }
+  }
+}
+
+async function loadCustomStickerState() {
+  customStickerError.value = ''
+  try {
+    const records = await listCustomStickerRecords()
+    revokeCustomStickerUrls()
+    customStickers.value = records.map(toCustomSticker)
+    loadRecentEmojiState()
+  } catch (err: any) {
+    customStickerError.value = err?.message || '自定义表情加载失败'
+  }
+}
+
+function pickCustomSticker() {
+  customStickerError.value = ''
+  customStickerInputRef.value?.click()
+}
+
+async function onCustomStickerSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    await addCustomStickerRecord(file)
+    await loadCustomStickerState()
+  } catch (err: any) {
+    customStickerError.value = err?.message || '添加自定义表情失败'
+  }
+}
+
+async function renameCustomSticker(sticker: Sticker) {
+  const nextName = window.prompt('表情名称', sticker.name)
+  if (nextName === null) return
+  try {
+    await renameCustomStickerRecord(sticker.id, nextName)
+    await loadCustomStickerState()
+  } catch (err: any) {
+    customStickerError.value = err?.message || '重命名失败'
+  }
+}
+
+async function removeCustomSticker(sticker: Sticker) {
+  if (!window.confirm(`删除表情“${sticker.name}”？`)) return
+  try {
+    await deleteCustomStickerRecord(sticker.id)
+    recentStickers.value = recentStickers.value.filter((item) => stickerStorageKey(item) !== stickerStorageKey(sticker))
+    localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => stickerStorageKey(item))))
+    await loadCustomStickerState()
+  } catch (err: any) {
+    customStickerError.value = err?.message || '删除失败'
+  }
+}
+
 function handleLocalCacheCleared() {
   chatStore.messages.clear()
   if (chatStore.currentConversation) {
@@ -1793,12 +2115,16 @@ function handleLocalCacheCleared() {
 }
 
 function handleDocumentMouseDown(event: MouseEvent) {
-  if (!showEmojiPanel.value) return
   const target = event.target as Node
-  if (emojiPanelRef.value?.contains(target) || emojiButtonRef.value?.contains(target)) {
-    return
+  if (presenceMenuOpen.value && !(target instanceof Element && target.closest('.presence-menu, .presence-switch'))) {
+    presenceMenuOpen.value = false
   }
-  closeEmojiPanel()
+  if (showEmojiPanel.value) {
+    if (emojiPanelRef.value?.contains(target) || emojiButtonRef.value?.contains(target)) {
+      return
+    }
+    closeEmojiPanel()
+  }
 }
 
 // Scroll
@@ -2225,10 +2551,20 @@ async function handleWsMessage(msg: WsMessage) {
       const data = msg.data
       if (data && typeof data === 'object') {
         if (data.userId !== undefined) {
-          onlineUsers.value[String(data.userId)] = !!data.online
+          const status = data.status !== undefined
+            ? normalizePresenceStatus(data.status)
+            : (data.online ? 'online' : 'offline')
+          presenceByUser.value[String(data.userId)] = status
         } else {
-          for (const [uid, online] of Object.entries(data)) {
-            onlineUsers.value[uid] = !!online
+          for (const [uid, payload] of Object.entries(data)) {
+            if (payload && typeof payload === 'object') {
+              const statusPayload = payload as { status?: unknown; online?: unknown }
+              presenceByUser.value[uid] = statusPayload.status !== undefined
+                ? normalizePresenceStatus(statusPayload.status)
+                : (statusPayload.online ? 'online' : 'offline')
+            } else {
+              presenceByUser.value[uid] = payload ? 'online' : 'offline'
+            }
           }
         }
       }
@@ -2253,9 +2589,12 @@ function initWebSocket() {
     wsConnected.value = connected
     if (connected) {
       const currentConvId = chatStore.currentConversation?.conversationId
+      applySelfPresence(manualPresence.value)
+      wsManager?.send('ONLINE_STATUS', { status: manualPresence.value })
       chatStore.fetchConversations()
       updateUnreadBadge()
       if (currentConvId) {
+        requestConversationPresence(currentConvId)
         chatStore.fetchMessages(currentConvId).then(() => {
           if (isMessageAreaNearBottom()) {
             markCurrentConversationReadAtBottom()
@@ -2269,6 +2608,7 @@ function initWebSocket() {
 
 function shouldNotifyMessage(message: Message, conversation: Conversation) {
   const notification = settingsStore.notification
+  if (selfPresence.value === 'dnd') return false
   if (conversation.muted || notification.doNotDisturb || !notification.desktop) return false
   if (chatStore.currentConversation?.conversationId === message.conversationId) return false
   if (notification.mentionOnly && !messageMentionsCurrentUser(message)) return false
@@ -2490,8 +2830,11 @@ async function handleLogout() {
 }
 
 onMounted(async () => {
-  loadRecentEmojiState()
+  await loadCustomStickerState()
   document.addEventListener('mousedown', handleDocumentMouseDown)
+  window.addEventListener('mousemove', handleUserActivity)
+  window.addEventListener('keydown', handleUserActivity)
+  resetIdleTimer()
   removeNotificationOpenListener = window.imDesktop?.onNotificationOpenConversation?.((conversationId) => {
     void openConversationFromNotification(conversationId)
   }) || null
@@ -2506,6 +2849,7 @@ onMounted(async () => {
       await window.imDesktop.setCloseBehavior(settingsStore.general.closeBehavior).catch(() => false)
     }
     await loadInitialChatData()
+    applySelfPresence(manualPresence.value)
     updateUnreadBadge()
     initWebSocket()
   }
@@ -2513,9 +2857,16 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown)
+  window.removeEventListener('mousemove', handleUserActivity)
+  window.removeEventListener('keydown', handleUserActivity)
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
   removeNotificationOpenListener?.()
   removeNotificationOpenListener = null
   clearPendingImages()
+  revokeCustomStickerUrls()
   wsManager?.disconnect()
 })
 
@@ -2538,6 +2889,7 @@ watch(
   () => authStore.isLoggedIn,
   (val) => {
     if (val) {
+      applySelfPresence(manualPresence.value)
       settingsStore.load().catch(() => {
         // Keep defaults if settings cannot be loaded.
       })
@@ -2622,6 +2974,7 @@ watch(
 }
 
 .sidebar-footer {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2630,6 +2983,7 @@ watch(
 }
 
 .user-avatar-small {
+  position: relative;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -2651,6 +3005,70 @@ watch(
 
 .user-avatar-small:hover {
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.28);
+}
+
+.sidebar-presence-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #2e2e2e;
+  border-radius: 50%;
+}
+
+.presence-switch {
+  width: 34px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f5f5f5;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.presence-switch:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.presence-menu {
+  position: absolute;
+  left: 54px;
+  bottom: 74px;
+  z-index: 50;
+  width: 132px;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+}
+
+.presence-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #273142;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.presence-menu button:hover,
+.presence-menu button.active {
+  background: #eef3ff;
+}
+
+.presence-dot-inline {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
 }
 
 .logout-btn {
@@ -2821,10 +3239,17 @@ watch(
   right: 0;
   width: 10px;
   height: 10px;
-  background: #4caf50;
+  background: #9ca3af;
   border: 2px solid #fff;
   border-radius: 50%;
 }
+
+.presence-online { background: #22c55e; }
+.presence-busy { background: #ef4444; }
+.presence-away { background: #f59e0b; }
+.presence-dnd { background: #8b5cf6; }
+.presence-invisible,
+.presence-offline { background: #9ca3af; }
 
 .conv-info {
   flex: 1;
@@ -2937,6 +3362,7 @@ watch(
 }
 
 .contact-avatar {
+  position: relative;
   width: 34px;
   height: 34px;
   min-width: 34px;
@@ -3136,6 +3562,7 @@ watch(
 }
 
 .message-avatar {
+  position: relative;
   width: 34px;
   height: 34px;
   min-width: 34px;
@@ -3624,6 +4051,57 @@ watch(
   object-fit: contain;
 }
 
+.sticker-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sticker-manage-btn {
+  border: none;
+  border-radius: 5px;
+  background: #eef3ff;
+  color: #4f63d8;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.custom-sticker-option {
+  min-width: 0;
+}
+
+.custom-sticker-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.custom-sticker-actions button {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 3px;
+}
+
+.custom-sticker-actions button:hover {
+  color: #4f63d8;
+}
+
+.sticker-empty,
+.sticker-error-text {
+  color: #8a8f99;
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.sticker-error-text {
+  color: #d93026;
+}
+
 .mention-option {
   display: flex;
   align-items: center;
@@ -3642,6 +4120,7 @@ watch(
 
 .mention-avatar,
 .member-avatar {
+  position: relative;
   width: 28px;
   height: 28px;
   min-width: 28px;

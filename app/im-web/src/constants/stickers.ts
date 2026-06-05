@@ -9,6 +9,12 @@ export interface Sticker {
   id: string
   name: string
   url: string
+  source?: 'builtin' | 'custom'
+  localOnly?: boolean
+  mimeType?: string
+  size?: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export const STICKERS: Sticker[] = [
@@ -26,6 +32,21 @@ export function parseStickerContent(content: string): Sticker | null {
     if (
       parsed &&
       typeof parsed === 'object' &&
+      parsed.source === 'custom' &&
+      typeof parsed.id === 'string' &&
+      typeof parsed.name === 'string'
+    ) {
+      return {
+        id: parsed.id,
+        name: parsed.name,
+        url: typeof parsed.url === 'string' ? parsed.url : '',
+        source: 'custom',
+        localOnly: true,
+      }
+    }
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
       typeof parsed.id === 'string' &&
       typeof parsed.name === 'string' &&
       typeof parsed.url === 'string'
@@ -39,9 +60,13 @@ export function parseStickerContent(content: string): Sticker | null {
 }
 
 export function buildStickerContent(sticker: Sticker): string {
-  return JSON.stringify({
+  const payload: Record<string, unknown> = {
     id: sticker.id,
     name: sticker.name,
-    url: sticker.url,
-  })
+    source: sticker.source || 'builtin',
+  }
+  if (!sticker.localOnly) {
+    payload.url = sticker.url
+  }
+  return JSON.stringify(payload)
 }

@@ -30,6 +30,13 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ImWebSocketHandler.class);
 
     private static final String REDIS_ONLINE_PREFIX = "online:";
+    private static final String REDIS_PRESENCE_PREFIX = "presence:";
+    private static final String PRESENCE_ONLINE = "online";
+    private static final String PRESENCE_BUSY = "busy";
+    private static final String PRESENCE_AWAY = "away";
+    private static final String PRESENCE_DND = "dnd";
+    private static final String PRESENCE_INVISIBLE = "invisible";
+    private static final String PRESENCE_OFFLINE = "offline";
     private static final String CMD_PING = "PING";
     private static final String CMD_PONG = "PONG";
     private static final String CMD_MESSAGE_SEND = "MESSAGE_SEND";
@@ -76,9 +83,10 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
         sessionManager.addSession(userId, session);
         redisTemplate.opsForValue().set(REDIS_ONLINE_PREFIX + userId, "1");
+        redisTemplate.opsForValue().set(REDIS_PRESENCE_PREFIX + userId, PRESENCE_ONLINE);
         log.info("User {} connected, session={}", userId, session.getId());
 
-        notifyOnlineStatusChange(userId, true);
+        notifyOnlineStatusChange(userId, PRESENCE_ONLINE);
     }
 
     @Override
@@ -141,9 +149,10 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
         sessionManager.removeSession(userId);
         redisTemplate.delete(REDIS_ONLINE_PREFIX + userId);
+        redisTemplate.delete(REDIS_PRESENCE_PREFIX + userId);
         log.info("User {} disconnected, session={}", userId, session.getId());
 
-        notifyOnlineStatusChange(userId, false);
+        notifyOnlineStatusChange(userId, PRESENCE_OFFLINE);
     }
 
     private void handlePing(WebSocketSession session, String seq) {
@@ -276,6 +285,11 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private void handleOnlineStatus(WebSocketSession session, Long userId, JsonNode root, String seq) {
         try {
             JsonNode data = root.get("data");
+            String nextStatus = data != null && data.has("status") ? normalizePresenceStatus(data.get("status").asText()) : null;
+            if (nextStatus != null && !PRESENCE_OFFLINE.equals(nextStatus)) {
+                redisTemplate.opsForValue().set(REDIS_PRESENCE_PREFIX + userId, nextStatus);
+                notifyOnlineStatusChange(userId, nextStatus);
+            }
             Long targetUserId = data != null && data.has("userId") ? data.get("userId").asLong() : null;
             Long queryConversationId = data != null && data.has("conversationId") ? data.get("conversationId").asLong() : null;
 
@@ -292,12 +306,16 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
                 List<ImConversationMember> members = conversationMemberMapper.selectList(wrapper);
                 for (ImConversationMember member : members) {
                     if (!member.getUserId().equals(userId)) {
-                        boolean online = sessionManager.isOnline(member.getUserId());
-                        statusData.put(String.valueOf(member.getUserId()), online);
+                        ObjectNode memberStatus = statusData.putObject(String.valueOf(member.getUserId()));
+                        putPresencePayload(memberStatus, member.getUserId(), false);
                     }
                 }
             } else if (targetUserId != null) {
-                statusData.put(String.valueOf(targetUserId), sessionManager.isOnline(targetUserId));
+                ObjectNode memberStatus = statusData.putObject(String.valueOf(targetUserId));
+                putPresencePayload(memberStatus, targetUserId, targetUserId.equals(userId));
+            } else if (nextStatus != null) {
+                statusData.put("userId", userId);
+                putPresencePayload(statusData, userId, true);
             }
 
             sessionManager.sendToUser(userId, objectMapper.writeValueAsString(response));
@@ -306,7 +324,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void notifyOnlineStatusChange(Long userId, boolean online) {
+    private void notifyOnlineStatusChange(Long userId, String status) {
         try {
             LambdaQueryWrapper<ImConversationMember> convWrapper = new LambdaQueryWrapper<>();
             convWrapper.eq(ImConversationMember::getUserId, userId);
@@ -333,7 +351,9 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             statusMsg.put("cmd", CMD_ONLINE_STATUS);
             ObjectNode statusData = statusMsg.putObject("data");
             statusData.put("userId", userId);
-            statusData.put("online", online);
+            String visibleStatus = visiblePresenceStatus(userId, false, status);
+            statusData.put("status", visibleStatus);
+            statusData.put("online", !PRESENCE_OFFLINE.equals(visibleStatus));
 
             String messageJson = objectMapper.writeValueAsString(statusMsg);
 
@@ -345,5 +365,41 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("Error notifying online status change for userId={}", userId, e);
         }
+    }
+
+    private void putPresencePayload(ObjectNode node, Long userId, boolean self) {
+        String status = currentPresenceStatus(userId);
+        String visibleStatus = visiblePresenceStatus(userId, self, status);
+        node.put("status", visibleStatus);
+        node.put("online", !PRESENCE_OFFLINE.equals(visibleStatus));
+    }
+
+    private String currentPresenceStatus(Long userId) {
+        if (!sessionManager.isOnline(userId)) {
+            return PRESENCE_OFFLINE;
+        }
+        String stored = redisTemplate.opsForValue().get(REDIS_PRESENCE_PREFIX + userId);
+        return normalizePresenceStatus(stored);
+    }
+
+    private String visiblePresenceStatus(Long userId, boolean self, String status) {
+        String normalized = normalizePresenceStatus(status);
+        if (!sessionManager.isOnline(userId) || PRESENCE_OFFLINE.equals(normalized)) {
+            return PRESENCE_OFFLINE;
+        }
+        if (!self && PRESENCE_INVISIBLE.equals(normalized)) {
+            return PRESENCE_OFFLINE;
+        }
+        return normalized;
+    }
+
+    private String normalizePresenceStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return PRESENCE_ONLINE;
+        }
+        return switch (status) {
+            case PRESENCE_BUSY, PRESENCE_AWAY, PRESENCE_DND, PRESENCE_INVISIBLE, PRESENCE_OFFLINE -> status;
+            default -> PRESENCE_ONLINE;
+        };
     }
 }
