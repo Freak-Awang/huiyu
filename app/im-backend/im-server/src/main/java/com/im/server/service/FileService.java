@@ -1,6 +1,7 @@
 package com.im.server.service;
 
 import com.im.common.dto.FileTransferInitRequest;
+import com.im.common.dto.FileTransferStatusRequest;
 import com.im.common.dto.FileTransferVO;
 import com.im.common.dto.FileUploadCompleteRequest;
 import com.im.common.dto.FileUploadInitRequest;
@@ -22,6 +23,10 @@ public interface FileService {
     ImFile getById(Long id);
 
     FileTransferVO initTransfer(Long userId, FileTransferInitRequest request);
+
+    FileTransferVO updateTransferStatus(Long userId, String transferId, FileTransferStatusRequest request);
+
+    FileTransferVO fallbackTransfer(Long userId, String transferId, FileTransferStatusRequest request);
 
     FileUploadVO initUpload(Long userId, FileUploadInitRequest request);
 

@@ -1,6 +1,7 @@
 package com.im.server.controller;
 
 import com.im.common.dto.FileTransferInitRequest;
+import com.im.common.dto.FileTransferStatusRequest;
 import com.im.common.dto.FileTransferVO;
 import com.im.common.dto.FileUploadCompleteRequest;
 import com.im.common.dto.FileUploadInitRequest;
@@ -71,6 +72,22 @@ public class FileController {
     @PostMapping("/transfer/init")
     public Result<FileTransferVO> initTransfer(@RequestBody FileTransferInitRequest request) {
         return Result.success(fileService.initTransfer(getCurrentUserId(), request));
+    }
+
+    @PostMapping("/transfer/{transferId}/status")
+    public Result<FileTransferVO> updateTransferStatus(
+            @PathVariable String transferId,
+            @RequestBody(required = false) FileTransferStatusRequest request) {
+        FileTransferStatusRequest body = request != null ? request : new FileTransferStatusRequest();
+        return Result.success(fileService.updateTransferStatus(getCurrentUserId(), transferId, body));
+    }
+
+    @PostMapping("/transfer/{transferId}/fallback")
+    public Result<FileTransferVO> fallbackTransfer(
+            @PathVariable String transferId,
+            @RequestBody(required = false) FileTransferStatusRequest request) {
+        FileTransferStatusRequest body = request != null ? request : new FileTransferStatusRequest();
+        return Result.success(fileService.fallbackTransfer(getCurrentUserId(), transferId, body));
     }
 
     @PostMapping("/uploads/init")

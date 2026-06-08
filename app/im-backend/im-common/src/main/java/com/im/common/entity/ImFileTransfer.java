@@ -22,6 +22,7 @@ public class ImFileTransfer {
     private String mode;
     private String status;
     private Long fileId;
+    private String fallbackReason;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private LocalDateTime expiresAt;

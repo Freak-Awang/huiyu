@@ -15,4 +15,6 @@ public class FileTransferVO {
     private String contentType;
     private String sha256;
     private LocalDateTime expiresAt;
+    private String fallbackReason;
+    private Boolean receiverOnline;
 }

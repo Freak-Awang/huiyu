@@ -44,6 +44,13 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private static final String CMD_MESSAGE_RECEIVE = "MESSAGE_RECEIVE";
     private static final String CMD_MESSAGE_READ = "MESSAGE_READ";
     private static final String CMD_ONLINE_STATUS = "ONLINE_STATUS";
+    private static final String CMD_FILE_P2P_INVITE = "FILE_P2P_INVITE";
+    private static final String CMD_FILE_P2P_ACCEPT = "FILE_P2P_ACCEPT";
+    private static final String CMD_FILE_P2P_REJECT = "FILE_P2P_REJECT";
+    private static final String CMD_FILE_P2P_SIGNAL = "FILE_P2P_SIGNAL";
+    private static final String CMD_FILE_P2P_PROGRESS = "FILE_P2P_PROGRESS";
+    private static final String CMD_FILE_P2P_COMPLETE = "FILE_P2P_COMPLETE";
+    private static final String CMD_FILE_P2P_FAILED = "FILE_P2P_FAILED";
 
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
@@ -121,6 +128,15 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
                     break;
                 case CMD_ONLINE_STATUS:
                     handleOnlineStatus(session, senderId, root, seq);
+                    break;
+                case CMD_FILE_P2P_INVITE:
+                case CMD_FILE_P2P_ACCEPT:
+                case CMD_FILE_P2P_REJECT:
+                case CMD_FILE_P2P_SIGNAL:
+                case CMD_FILE_P2P_PROGRESS:
+                case CMD_FILE_P2P_COMPLETE:
+                case CMD_FILE_P2P_FAILED:
+                    handleFileP2pRelay(senderId, cmd, root);
                     break;
                 default:
                     log.debug("Unknown command: {}", cmd);
@@ -322,6 +338,40 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("Error handling ONLINE_STATUS from userId={}", userId, e);
         }
+    }
+
+    private void handleFileP2pRelay(Long senderId, String cmd, JsonNode root) {
+        try {
+            JsonNode data = root.get("data");
+            if (data == null || !data.has("conversationId") || !data.has("targetUserId")) {
+                return;
+            }
+            Long conversationId = data.get("conversationId").asLong();
+            Long targetUserId = data.get("targetUserId").asLong();
+            if (targetUserId.equals(senderId) || !isConversationMember(conversationId, senderId)
+                    || !isConversationMember(conversationId, targetUserId)) {
+                return;
+            }
+            if (!sessionManager.isOnline(targetUserId)) {
+                return;
+            }
+
+            ObjectNode relay = objectMapper.createObjectNode();
+            relay.put("cmd", cmd);
+            ObjectNode relayData = data.deepCopy();
+            relayData.put("senderId", senderId);
+            relayData.put("timestamp", System.currentTimeMillis());
+            relay.set("data", relayData);
+            sessionManager.sendToUser(targetUserId, objectMapper.writeValueAsString(relay));
+        } catch (Exception e) {
+            log.error("Error relaying {} from userId={}", cmd, senderId, e);
+        }
+    }
+
+    private boolean isConversationMember(Long conversationId, Long userId) {
+        return conversationMemberMapper.selectOne(new LambdaQueryWrapper<ImConversationMember>()
+                .eq(ImConversationMember::getConversationId, conversationId)
+                .eq(ImConversationMember::getUserId, userId)) != null;
     }
 
     private void notifyOnlineStatusChange(Long userId, String status) {

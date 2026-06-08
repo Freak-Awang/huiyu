@@ -58,6 +58,8 @@ export interface FileTransfer {
   contentType?: string
   sha256?: string
   expiresAt?: string
+  fallbackReason?: string
+  receiverOnline?: boolean
 }
 
 export interface FileUploadStatus {
@@ -82,6 +84,7 @@ export interface LargeUploadProgress {
 
 export interface LargeUploadOptions {
   conversationId: string
+  transfer?: FileTransfer
   onProgress?: (progress: LargeUploadProgress) => void
   signal?: AbortSignal
 }
@@ -150,20 +153,37 @@ export function uploadAvatar(file: File) {
 
 export function initFileTransfer(params: {
   conversationId: string
+  receiverId?: string
   fileName: string
   fileSize: number
   contentType?: string
   sha256?: string
   mode?: string
+  preferredMode?: 'AUTO' | 'SERVER' | 'P2P'
+  archiveRequired?: boolean
 }) {
   return http.post<FileTransfer>('/api/files/transfer/init', {
     conversationId: params.conversationId,
+    receiverId: params.receiverId ? Number(params.receiverId) : undefined,
     fileName: params.fileName,
     fileSize: params.fileSize,
     contentType: params.contentType,
     sha256: params.sha256,
-    mode: params.mode || 'SERVER',
+    mode: params.mode,
+    preferredMode: params.preferredMode || params.mode || 'AUTO',
+    archiveRequired: !!params.archiveRequired,
   })
+}
+
+export function updateFileTransferStatus(
+  transferId: string,
+  params: { status?: string; fallbackReason?: string },
+) {
+  return http.post<FileTransfer>(`/api/files/transfer/${transferId}/status`, params)
+}
+
+export function fallbackFileTransfer(transferId: string, fallbackReason?: string) {
+  return http.post<FileTransfer>(`/api/files/transfer/${transferId}/fallback`, { fallbackReason })
 }
 
 export function initChunkedUpload(params: {
@@ -233,16 +253,17 @@ export async function uploadLargeFile(file: File, options: LargeUploadOptions): 
   }
 
   if (!uploadStatus) {
-    const transferRes = await initFileTransfer({
+    const transfer = options.transfer || (await initFileTransfer({
       conversationId: options.conversationId,
       fileName: file.name,
       fileSize: file.size,
       contentType: file.type,
       sha256,
-    })
+      preferredMode: 'SERVER',
+    })).data
     uploadStatus = (await initChunkedUpload({
       conversationId: options.conversationId,
-      transferId: transferRes.data.transferId,
+      transferId: transfer.transferId,
       fileName: file.name,
       fileSize: file.size,
       contentType: file.type,

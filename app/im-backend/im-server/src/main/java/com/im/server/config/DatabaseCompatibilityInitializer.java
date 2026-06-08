@@ -35,6 +35,7 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         ensureUserSettingsTable();
         ensureConversationAnnouncementColumns();
+        ensureFileTransferColumns();
     }
 
     private void ensureUserSettingsTable() {
@@ -53,6 +54,11 @@ public class DatabaseCompatibilityInitializer implements ApplicationRunner {
                 "ALTER TABLE im_conversation ADD COLUMN announcement_updated_by BIGINT NULL COMMENT 'announcement updater user id' AFTER announcement");
         addColumnIfMissing("im_conversation", "announcement_updated_at",
                 "ALTER TABLE im_conversation ADD COLUMN announcement_updated_at DATETIME NULL COMMENT 'announcement update time' AFTER announcement_updated_by");
+    }
+
+    private void ensureFileTransferColumns() {
+        addColumnIfMissing("im_file_transfer", "fallback_reason",
+                "ALTER TABLE im_file_transfer ADD COLUMN fallback_reason VARCHAR(256) DEFAULT NULL COMMENT 'server fallback reason' AFTER file_id");
     }
 
     private void addColumnIfMissing(String tableName, String columnName, String ddl) {

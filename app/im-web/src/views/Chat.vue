@@ -969,10 +969,14 @@ import {
   LARGE_FILE_MAX_SIZE,
   SMALL_FILE_MAX_SIZE,
   acknowledgeFileDownload,
+  fallbackFileTransfer,
   getFileUrl,
+  initFileTransfer,
   listConversationFiles,
+  updateFileTransferStatus,
   uploadFile,
   uploadLargeFile,
+  type FileTransfer,
   type LargeUploadProgress,
   type UploadedFile,
 } from '../api/file'
@@ -999,6 +1003,10 @@ import {
   normalizePresenceStatus,
   type PresenceStatus,
 } from '../utils/presence'
+import {
+  P2pFileTransferManager,
+  type P2pTransferProgress,
+} from '../utils/p2pFileTransfer'
 import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
 import settingsIcon from '../assets/icons/settings.svg'
@@ -1024,6 +1032,7 @@ const presenceMenuOpen = ref(false)
 const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
+let p2pFileTransferManager: P2pFileTransferManager | null = null
 let removeNotificationOpenListener: (() => void) | null = null
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 let autoAway = false
@@ -1212,6 +1221,7 @@ interface ActiveFileUpload {
   percent: number
   speed: number
   remainingSeconds: number
+  phase?: 'hashing' | 'starting' | 'uploading' | 'waiting' | 'p2p' | 'fallback' | 'completed'
 }
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
@@ -2372,10 +2382,12 @@ async function onSendFile(e: Event) {
   try {
     const convId = chatStore.currentConversation.conversationId
     const uploaded = file.size > SMALL_FILE_MAX_SIZE
-      ? await uploadLargeFileWithUi(file, convId)
+      ? await transferLargeFileWithP2pFallback(file, chatStore.currentConversation)
       : (await uploadFile(file, convId)).data
-    const fileData = buildFileMessageContent(file, uploaded)
-    sendFileMessage('FILE', fileData)
+    if (uploaded) {
+      const fileData = buildFileMessageContent(file, uploaded)
+      sendFileMessage('FILE', fileData)
+    }
   } catch (err: any) {
     alert(err?.response?.data?.message || '上传文件失败')
   }
@@ -2384,16 +2396,18 @@ async function onSendFile(e: Event) {
   input.value = ''
 }
 
-async function uploadLargeFileWithUi(file: File, conversationId: string): Promise<UploadedFile> {
+async function uploadLargeFileWithUi(file: File, conversationId: string, transfer?: FileTransfer): Promise<UploadedFile> {
   activeFileUploadAbort = new AbortController()
   activeFileUpload.value = {
     name: file.name,
     percent: 0,
     speed: 0,
     remainingSeconds: 0,
+    phase: 'starting',
   }
   return uploadLargeFile(file, {
     conversationId,
+    transfer,
     signal: activeFileUploadAbort.signal,
     onProgress: (progress: LargeUploadProgress) => {
       activeFileUpload.value = {
@@ -2401,13 +2415,70 @@ async function uploadLargeFileWithUi(file: File, conversationId: string): Promis
         percent: progress.percent,
         speed: progress.speed,
         remainingSeconds: progress.remainingSeconds,
+        phase: progress.status,
       }
     },
   })
 }
 
+async function transferLargeFileWithP2pFallback(file: File, conversation: Conversation | null): Promise<UploadedFile | null> {
+  if (!conversation) {
+    throw new Error('conversation is required')
+  }
+  const receiverId = getSingleConversationPeerId(conversation)
+  const transfer = (await initFileTransfer({
+    conversationId: conversation.conversationId,
+    receiverId,
+    fileName: file.name,
+    fileSize: file.size,
+    contentType: file.type,
+    preferredMode: 'AUTO',
+    archiveRequired: false,
+  })).data
+
+  if (transfer.mode === 'P2P' && receiverId && wsManager?.isConnected() && p2pFileTransferManager) {
+    try {
+      await updateFileTransferStatus(transfer.transferId, { status: 'P2P_TRANSFERRING' })
+      await p2pFileTransferManager.startSender(file, transfer, conversation.conversationId, receiverId)
+      await updateFileTransferStatus(transfer.transferId, { status: 'P2P_COMPLETED' })
+      activeFileUpload.value = null
+      alert('P2P file transfer completed')
+      return null
+    } catch (error: any) {
+      await fallbackFileTransfer(transfer.transferId, error?.message || 'p2p failed').catch(() => undefined)
+      activeFileUpload.value = {
+        name: file.name,
+        percent: 0,
+        speed: 0,
+        remainingSeconds: 0,
+        phase: 'fallback',
+      }
+      return uploadLargeFileWithUi(file, conversation.conversationId, transfer)
+    }
+  }
+
+  return uploadLargeFileWithUi(file, conversation.conversationId, transfer)
+}
+
+function getSingleConversationPeerId(conversation: Conversation | null): string | undefined {
+  if (!conversation || conversation.type !== 'SINGLE') return undefined
+  const currentUserId = String(authStore.currentUser?.userId || '')
+  return conversation.members?.find((member) => String(member.userId) !== currentUserId)?.userId
+}
+
+function applyP2pProgress(progress: P2pTransferProgress) {
+  activeFileUpload.value = {
+    name: progress.name,
+    percent: progress.percent,
+    speed: progress.speed,
+    remainingSeconds: progress.remainingSeconds,
+    phase: progress.phase,
+  }
+}
+
 function cancelActiveFileUpload() {
   activeFileUploadAbort?.abort()
+  p2pFileTransferManager?.abortAll()
   activeFileUpload.value = null
 }
 
@@ -2457,6 +2528,9 @@ function sendFileMessage(type: string, content: string) {
 
 // WebSocket message handler
 async function handleWsMessage(msg: WsMessage) {
+  if (p2pFileTransferManager?.handleMessage(msg)) {
+    return
+  }
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
       const data = msg.data
@@ -2583,6 +2657,8 @@ function initWebSocket() {
   if (wsManager) {
     wsManager.disconnect()
   }
+  p2pFileTransferManager?.abortAll()
+  p2pFileTransferManager = null
   const token = authStore.token
   if (!token) return
   wsManager = new WebSocketManager(token, handleWsMessage, (connected) => {
@@ -2602,6 +2678,12 @@ function initWebSocket() {
         })
       }
     }
+  })
+  p2pFileTransferManager = new P2pFileTransferManager({
+    currentUserId: () => authStore.currentUser?.userId,
+    sendWs: (cmd, data) => wsManager?.send(cmd, data) || false,
+    onProgress: applyP2pProgress,
+    onNotice: (message) => alert(message),
   })
   wsManager.connect()
 }
@@ -2820,6 +2902,7 @@ function downloadFile(content: string) {
 }
 
 async function handleLogout() {
+  p2pFileTransferManager?.abortAll()
   wsManager?.disconnect()
   if (window.imDesktop?.setUnreadBadge) {
     await window.imDesktop.setUnreadBadge(0).catch(() => false)
@@ -2867,6 +2950,7 @@ onUnmounted(() => {
   removeNotificationOpenListener = null
   clearPendingImages()
   revokeCustomStickerUrls()
+  p2pFileTransferManager?.abortAll()
   wsManager?.disconnect()
 })
 

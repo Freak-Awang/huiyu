@@ -4,11 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.im.common.dto.FileTransferInitRequest;
+import com.im.common.dto.FileTransferStatusRequest;
 import com.im.common.dto.FileTransferVO;
 import com.im.common.dto.FileUploadCompleteRequest;
 import com.im.common.dto.FileUploadInitRequest;
 import com.im.common.dto.FileUploadVO;
 import com.im.common.dto.FileVO;
+import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImFile;
 import com.im.common.entity.ImFileTransfer;
@@ -19,6 +21,7 @@ import com.im.common.exception.BusinessException;
 import com.im.common.result.PageResult;
 import com.im.server.config.FileStorageProperties;
 import com.im.server.mapper.ConversationMemberMapper;
+import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.FileMapper;
 import com.im.server.mapper.FileTransferMapper;
 import com.im.server.mapper.FileUploadMapper;
@@ -27,6 +30,7 @@ import com.im.server.mapper.UserMapper;
 import com.im.server.service.FileService;
 import com.im.server.service.storage.FileStorageClient;
 import com.im.server.service.storage.StoredObject;
+import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -46,16 +50,27 @@ public class FileServiceImpl implements FileService {
     private static final String STATUS_COMPLETED = "COMPLETED";
     private static final String STATUS_ABORTED = "ABORTED";
     private static final String STATUS_EXPIRED = "EXPIRED";
+    private static final String STATUS_WAITING_UPLOAD = "WAITING_UPLOAD";
+    private static final String STATUS_P2P_NEGOTIATING = "P2P_NEGOTIATING";
+    private static final String STATUS_P2P_TRANSFERRING = "P2P_TRANSFERRING";
+    private static final String STATUS_P2P_COMPLETED = "P2P_COMPLETED";
+    private static final String STATUS_FALLBACK_UPLOAD = "FALLBACK_UPLOAD";
+    private static final String STATUS_FAILED = "FAILED";
     private static final String PART_STATUS_UPLOADED = "UPLOADED";
+    private static final String MODE_SERVER = "SERVER";
+    private static final String MODE_P2P = "P2P";
+    private static final String PREFERRED_AUTO = "AUTO";
 
     private final FileMapper fileMapper;
     private final FileTransferMapper transferMapper;
     private final FileUploadMapper uploadMapper;
     private final FileUploadPartMapper uploadPartMapper;
+    private final ConversationMapper conversationMapper;
     private final ConversationMemberMapper conversationMemberMapper;
     private final UserMapper userMapper;
     private final FileStorageClient storageClient;
     private final FileStorageProperties properties;
+    private final WebSocketSessionManager sessionManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public FileServiceImpl(
@@ -63,18 +78,22 @@ public class FileServiceImpl implements FileService {
             FileTransferMapper transferMapper,
             FileUploadMapper uploadMapper,
             FileUploadPartMapper uploadPartMapper,
+            ConversationMapper conversationMapper,
             ConversationMemberMapper conversationMemberMapper,
             UserMapper userMapper,
             FileStorageClient storageClient,
-            FileStorageProperties properties) {
+            FileStorageProperties properties,
+            WebSocketSessionManager sessionManager) {
         this.fileMapper = fileMapper;
         this.transferMapper = transferMapper;
         this.uploadMapper = uploadMapper;
         this.uploadPartMapper = uploadPartMapper;
+        this.conversationMapper = conversationMapper;
         this.conversationMemberMapper = conversationMemberMapper;
         this.userMapper = userMapper;
         this.storageClient = storageClient;
         this.properties = properties;
+        this.sessionManager = sessionManager;
     }
 
     @Override
@@ -133,6 +152,7 @@ public class FileServiceImpl implements FileService {
     public FileTransferVO initTransfer(Long userId, FileTransferInitRequest request) {
         validateTransferRequest(userId, request.getConversationId(), request.getFileName(), request.getFileSize());
 
+        TransferRoute route = decideTransferRoute(userId, request);
         ImFileTransfer transfer = new ImFileTransfer();
         transfer.setTransferId(UUID.randomUUID().toString());
         transfer.setSenderId(userId);
@@ -141,8 +161,9 @@ public class FileServiceImpl implements FileService {
         transfer.setFileSize(request.getFileSize());
         transfer.setContentType(request.getContentType());
         transfer.setSha256(normalizeSha256(request.getSha256()));
-        transfer.setMode(StringUtils.hasText(request.getMode()) ? request.getMode() : "SERVER");
-        transfer.setStatus("WAITING_UPLOAD");
+        transfer.setMode(route.mode());
+        transfer.setStatus(MODE_P2P.equals(route.mode()) ? STATUS_P2P_NEGOTIATING : STATUS_WAITING_UPLOAD);
+        transfer.setFallbackReason(route.fallbackReason());
         transfer.setCreateTime(LocalDateTime.now());
         transfer.setUpdateTime(LocalDateTime.now());
         transfer.setExpiresAt(LocalDateTime.now().plusDays(properties.getRetentionDays()));
@@ -151,8 +172,40 @@ public class FileServiceImpl implements FileService {
         if (instantFile != null) {
             transfer.setStatus(STATUS_COMPLETED);
             transfer.setFileId(instantFile.getId());
+            transfer.setMode(MODE_SERVER);
+            transfer.setFallbackReason("instant file reuse");
         }
         transferMapper.insert(transfer);
+        return toTransferVO(transfer, route.receiverOnline());
+    }
+
+    @Override
+    @Transactional
+    public FileTransferVO updateTransferStatus(Long userId, String transferId, FileTransferStatusRequest request) {
+        ImFileTransfer transfer = getOwnedTransfer(userId, transferId);
+        String status = normalizeTransferStatus(request != null ? request.getStatus() : null);
+        if (status != null) {
+            transfer.setStatus(status);
+        }
+        if (request != null && StringUtils.hasText(request.getFallbackReason())) {
+            transfer.setFallbackReason(request.getFallbackReason().trim());
+        }
+        transfer.setUpdateTime(LocalDateTime.now());
+        transferMapper.updateById(transfer);
+        return toTransferVO(transfer);
+    }
+
+    @Override
+    @Transactional
+    public FileTransferVO fallbackTransfer(Long userId, String transferId, FileTransferStatusRequest request) {
+        ImFileTransfer transfer = getOwnedTransfer(userId, transferId);
+        transfer.setMode(MODE_SERVER);
+        transfer.setStatus(STATUS_FALLBACK_UPLOAD);
+        transfer.setFallbackReason(request != null && StringUtils.hasText(request.getFallbackReason())
+                ? request.getFallbackReason().trim()
+                : "p2p fallback");
+        transfer.setUpdateTime(LocalDateTime.now());
+        transferMapper.updateById(transfer);
         return toTransferVO(transfer);
     }
 
@@ -458,6 +511,71 @@ public class FileServiceImpl implements FileService {
         validateUploadSize(fileSize == null ? 0 : fileSize, properties.getMaxSize(), "File exceeds 50GB limit");
     }
 
+    private TransferRoute decideTransferRoute(Long userId, FileTransferInitRequest request) {
+        String preferredMode = normalizedPreferredMode(request);
+        if (MODE_SERVER.equals(preferredMode)) {
+            return new TransferRoute(MODE_SERVER, false, "server mode requested");
+        }
+        if (Boolean.TRUE.equals(request.getArchiveRequired())) {
+            return new TransferRoute(MODE_SERVER, false, "archive required");
+        }
+        long smallFileMaxSize = properties.getSmallFileMaxSize() != null ? properties.getSmallFileMaxSize() : 104857600L;
+        if (request.getFileSize() == null || request.getFileSize() <= smallFileMaxSize) {
+            return new TransferRoute(MODE_SERVER, false, "small file");
+        }
+
+        ImConversation conversation = conversationMapper.selectById(request.getConversationId());
+        if (conversation == null) {
+            throw new BusinessException(404, "Conversation not found");
+        }
+        if (conversation.getType() == null || conversation.getType() != 1) {
+            return new TransferRoute(MODE_SERVER, false, "group files use file center");
+        }
+
+        Long receiverId = resolveSingleChatReceiver(userId, request);
+        if (receiverId == null) {
+            return new TransferRoute(MODE_SERVER, false, "receiver not found");
+        }
+        boolean receiverOnline = sessionManager.isOnline(receiverId);
+        if (!receiverOnline) {
+            return new TransferRoute(MODE_SERVER, false, "receiver offline");
+        }
+        return new TransferRoute(MODE_P2P, true, null);
+    }
+
+    private String normalizedPreferredMode(FileTransferInitRequest request) {
+        String requested = StringUtils.hasText(request.getPreferredMode()) ? request.getPreferredMode() : request.getMode();
+        if (!StringUtils.hasText(requested)) {
+            return PREFERRED_AUTO;
+        }
+        String upper = requested.trim().toUpperCase();
+        if (MODE_SERVER.equals(upper) || MODE_P2P.equals(upper)) {
+            return upper;
+        }
+        return PREFERRED_AUTO;
+    }
+
+    private Long resolveSingleChatReceiver(Long userId, FileTransferInitRequest request) {
+        List<ImConversationMember> members = conversationMemberMapper.selectList(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, request.getConversationId()));
+        if (members == null || members.size() != 2) {
+            return null;
+        }
+        Long requestedReceiverId = request.getReceiverId();
+        if (requestedReceiverId != null && !requestedReceiverId.equals(userId)) {
+            boolean valid = members.stream().anyMatch(member -> requestedReceiverId.equals(member.getUserId()));
+            if (valid) {
+                return requestedReceiverId;
+            }
+        }
+        return members.stream()
+                .map(ImConversationMember::getUserId)
+                .filter(memberId -> !memberId.equals(userId))
+                .findFirst()
+                .orElse(null);
+    }
+
     private void validateUploadSize(long size, long maxSize, String message) {
         if (size <= 0) {
             throw new BusinessException(400, "File is empty");
@@ -512,6 +630,29 @@ public class FileServiceImpl implements FileService {
         return upload;
     }
 
+    private ImFileTransfer getOwnedTransfer(Long userId, String transferId) {
+        ImFileTransfer transfer = transferMapper.selectOne(new LambdaQueryWrapper<ImFileTransfer>()
+                .eq(ImFileTransfer::getTransferId, transferId)
+                .eq(ImFileTransfer::getSenderId, userId));
+        if (transfer == null) {
+            throw new BusinessException(404, "Transfer not found");
+        }
+        return transfer;
+    }
+
+    private String normalizeTransferStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        String normalized = status.trim().toUpperCase();
+        return switch (normalized) {
+            case STATUS_WAITING_UPLOAD, STATUS_P2P_NEGOTIATING, STATUS_P2P_TRANSFERRING,
+                    STATUS_P2P_COMPLETED, STATUS_FALLBACK_UPLOAD, STATUS_COMPLETED,
+                    STATUS_FAILED, STATUS_EXPIRED -> normalized;
+            default -> throw new BusinessException(400, "Invalid transfer status");
+        };
+    }
+
     private List<ImFileUploadPart> listParts(String uploadId) {
         return uploadPartMapper.selectList(new LambdaQueryWrapper<ImFileUploadPart>()
                 .eq(ImFileUploadPart::getUploadId, uploadId)
@@ -535,6 +676,10 @@ public class FileServiceImpl implements FileService {
     }
 
     private FileTransferVO toTransferVO(ImFileTransfer transfer) {
+        return toTransferVO(transfer, null);
+    }
+
+    private FileTransferVO toTransferVO(ImFileTransfer transfer, Boolean receiverOnline) {
         FileTransferVO vo = new FileTransferVO();
         vo.setTransferId(transfer.getTransferId());
         vo.setMode(transfer.getMode());
@@ -545,7 +690,12 @@ public class FileServiceImpl implements FileService {
         vo.setContentType(transfer.getContentType());
         vo.setSha256(transfer.getSha256());
         vo.setExpiresAt(transfer.getExpiresAt());
+        vo.setFallbackReason(transfer.getFallbackReason());
+        vo.setReceiverOnline(receiverOnline);
         return vo;
+    }
+
+    private record TransferRoute(String mode, Boolean receiverOnline, String fallbackReason) {
     }
 
     private FileUploadVO toUploadVO(ImFileUpload upload) {

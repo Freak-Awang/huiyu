@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS im_file_transfer (
     mode VARCHAR(32) NOT NULL DEFAULT 'SERVER' COMMENT 'SERVER/P2P',
     status VARCHAR(32) NOT NULL COMMENT 'transfer status',
     file_id BIGINT DEFAULT NULL COMMENT 'completed file id',
+    fallback_reason VARCHAR(256) DEFAULT NULL COMMENT 'server fallback reason',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
     expires_at DATETIME DEFAULT NULL COMMENT 'offline file expiry',
