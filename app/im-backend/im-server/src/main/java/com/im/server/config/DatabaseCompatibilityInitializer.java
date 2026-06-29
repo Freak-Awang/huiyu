@@ -8,6 +8,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+/**
+ * ?????DatabaseCompatibilityInitializer centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Component
 public class DatabaseCompatibilityInitializer implements ApplicationRunner {
 

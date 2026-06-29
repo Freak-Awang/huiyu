@@ -1,3 +1,4 @@
+// ?????recentUsage isolates reusable client-side behavior from Vue components.
 export const RECENT_EMOJIS_KEY = 'im_recent_emojis'
 export const RECENT_STICKERS_KEY = 'im_recent_stickers'
 

@@ -42,6 +42,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * ?????FileServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class FileServiceImpl implements FileService {
 
@@ -150,6 +153,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileTransferVO initTransfer(Long userId, FileTransferInitRequest request) {
+        // 先记录 transfer intent，再决定走 server upload、P2P negotiation 或 instant reuse，便于前端恢复进度。
         validateTransferRequest(userId, request.getConversationId(), request.getFileName(), request.getFileSize());
 
         TransferRoute route = decideTransferRoute(userId, request);
@@ -168,6 +172,7 @@ public class FileServiceImpl implements FileService {
         transfer.setUpdateTime(LocalDateTime.now());
         transfer.setExpiresAt(LocalDateTime.now().plusDays(properties.getRetentionDays()));
 
+        // sha256 + size 命中时直接复用已有对象，避免同会话重复上传大文件。
         ImFile instantFile = findReusableFile(transfer.getSha256(), request.getFileSize(), userId, request.getConversationId());
         if (instantFile != null) {
             transfer.setStatus(STATUS_COMPLETED);
@@ -198,6 +203,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileTransferVO fallbackTransfer(Long userId, String transferId, FileTransferStatusRequest request) {
+        // P2P 失败后切回 server upload，但保留同一个 transferId 让 UI 进度和消息草稿继续关联。
         ImFileTransfer transfer = getOwnedTransfer(userId, transferId);
         transfer.setMode(MODE_SERVER);
         transfer.setStatus(STATUS_FALLBACK_UPLOAD);
@@ -212,6 +218,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileUploadVO initUpload(Long userId, FileUploadInitRequest request) {
+        // Chunked upload 初始化会优先检查秒传；没有命中才创建 upload session 和 part rows。
         validateTransferRequest(userId, request.getConversationId(), request.getFileName(), request.getFileSize());
         String sha256 = normalizeSha256(request.getSha256());
         ImFile instantFile = findReusableFile(sha256, request.getFileSize(), userId, request.getConversationId());
@@ -304,6 +311,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileVO completeUpload(Long userId, String uploadId, FileUploadCompleteRequest request) {
+        // 完成上传只在所有 part 都已落库后合并对象，避免半成品文件进入可下载列表。
         ImFileUpload upload = getOwnedUpload(userId, uploadId);
         if (!STATUS_UPLOADING.equals(upload.getStatus())) {
             if (upload.getFileId() != null) {
@@ -512,6 +520,7 @@ public class FileServiceImpl implements FileService {
     }
 
     private TransferRoute decideTransferRoute(Long userId, FileTransferInitRequest request) {
+        // AUTO prefers P2P only for large single-chat files and online receivers; otherwise server storage is safer.
         String preferredMode = normalizedPreferredMode(request);
         if (MODE_SERVER.equals(preferredMode)) {
             return new TransferRoute(MODE_SERVER, false, "server mode requested");
@@ -661,6 +670,7 @@ public class FileServiceImpl implements FileService {
     }
 
     private ImFile findReusableFile(String sha256, Long fileSize, Long uploaderId, Long conversationId) {
+        // Reuse is scoped by checksum/size and visibility so a user cannot attach another conversation's private file.
         if (!StringUtils.hasText(sha256)) {
             return null;
         }

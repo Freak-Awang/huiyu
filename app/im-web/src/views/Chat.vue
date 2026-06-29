@@ -928,6 +928,8 @@
 </template>
 
 <script setup lang="ts">
+// ?????Chat composes route-level UI behavior and data loading for this screen.
+
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, type UserInfo } from '../stores/auth'
@@ -1489,6 +1491,7 @@ function dataUrlToFile(dataUrl: string, fileName: string): File {
 }
 
 async function takeScreenshot() {
+  // 截图只在桌面 bridge 可用时进入 native flow，结果按图片草稿处理，沿用现有发送流程。
   if (!window.imDesktop?.startScreenshot || isTakingScreenshot.value) return
   if (!chatStore.currentConversation || !authStore.currentUser) {
     alert('请先选择会话')
@@ -2150,6 +2153,7 @@ function getLastReadableMessageId() {
 }
 
 function markCurrentConversationReadAtBottom() {
+  // 只有滚动到底部时才上报已读，避免用户查看旧消息时误清空未读状态。
   const convId = chatStore.currentConversation?.conversationId
   const lastReadMessageId = getLastReadableMessageId()
   if (!convId || !lastReadMessageId || lastMarkedReadMessageId === lastReadMessageId) return
@@ -2177,6 +2181,7 @@ function scrollToBottom(markRead = false) {
 }
 
 async function onMessageScroll() {
+  // 顶部触发历史分页，底部触发已读；两者都依赖当前滚动位置而不是额外按钮。
   const el = messageAreaRef.value
   if (el && el.scrollTop === 0 && !loadingOlderMessages) {
     const conv = chatStore.currentConversation
@@ -2200,6 +2205,7 @@ async function onMessageScroll() {
 
 // Send message
 function sendOutgoingMessage(msg: Message) {
+  // Local optimistic messages enter the store first; this method only owns WebSocket delivery and failure marking.
   if (!wsManager || !wsConnected.value || !wsManager.isConnected()) {
     if (msg.clientMsgId) {
       chatStore.setMessageStatus(msg.clientMsgId, 'FAILED')
@@ -2315,6 +2321,7 @@ function sendTextMessage() {
 }
 
 async function handleSendMessage() {
+  // 发送入口统一处理图片草稿和文本，保证一次点击可以先上传图片再发送文本消息。
   if (isSendingMessage.value) return
   const hasText = !!messageText.value.trim()
   const hasImages = pendingImages.value.length > 0
@@ -2366,6 +2373,7 @@ async function onSendImage(e: Event) {
 }
 
 async function onSendFile(e: Event) {
+  // 小文件直接 server upload；大文件先初始化 transfer，再按后端建议尝试 P2P 或 fallback upload。
   const input = e.target as HTMLInputElement
   if (!chatStore.currentConversation || !authStore.currentUser) {
     alert('请先选择会话')
@@ -2422,6 +2430,7 @@ async function uploadLargeFileWithUi(file: File, conversationId: string, transfe
 }
 
 async function transferLargeFileWithP2pFallback(file: File, conversation: Conversation | null): Promise<UploadedFile | null> {
+  // P2P 成功时不创建文件中心消息；失败时沿用同一个 transferId 回退到 server chunk upload。
   if (!conversation) {
     throw new Error('conversation is required')
   }
@@ -2528,11 +2537,13 @@ function sendFileMessage(type: string, content: string) {
 
 // WebSocket message handler
 async function handleWsMessage(msg: WsMessage) {
+  // P2P signaling is consumed before chat command dispatch so file negotiation does not leak into message handling.
   if (p2pFileTransferManager?.handleMessage(msg)) {
     return
   }
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
+      // Incoming messages update conversation state, ACK delivery, optionally notify, then only auto-scroll if user was at bottom.
       const data = msg.data
       const receivedMessage = normalizeMessage({
         ...data,
@@ -2587,6 +2598,7 @@ async function handleWsMessage(msg: WsMessage) {
       break
     }
     case 'MESSAGE_READ': {
+      // Read receipts may arrive as aggregated receipts or a boundary; support both backend payload shapes.
       const data = msg.data
       if (data?.conversationId && data?.readerId) {
         const convId = String(data.conversationId)
@@ -2653,6 +2665,7 @@ async function handleWsMessage(msg: WsMessage) {
 }
 
 function initWebSocket() {
+  // Reinitialization tears down stale managers first so login changes and reconnects cannot reuse old user state.
   if (!authStore.isLoggedIn) return
   if (wsManager) {
     wsManager.disconnect()

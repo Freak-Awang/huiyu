@@ -5,6 +5,9 @@ import com.im.common.dto.CreateConversationRequest;
 import com.im.common.dto.UpdateConversationSettingsRequest;
 import com.im.common.dto.UpdateMemberRoleRequest;
 import java.util.List;
+/**
+ * ?????ConversationService defines the service contract used by controllers and async workflows.
+ */
 
 public interface ConversationService {
 

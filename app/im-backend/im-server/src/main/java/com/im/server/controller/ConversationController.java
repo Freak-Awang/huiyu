@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * ?????ConversationController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ */
 @RestController
 @RequestMapping("/api/conversations")
 public class ConversationController {

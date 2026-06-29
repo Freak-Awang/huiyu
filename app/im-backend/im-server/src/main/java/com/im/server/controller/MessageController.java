@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * ?????MessageController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ */
 @RestController
 @RequestMapping("/api/messages")
 public class MessageController {

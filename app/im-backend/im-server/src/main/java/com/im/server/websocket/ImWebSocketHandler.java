@@ -24,6 +24,9 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * ?????ImWebSocketHandler owns realtime session routing and WebSocket message delivery semantics.
+ */
 @Component
 public class ImWebSocketHandler extends TextWebSocketHandler {
 
@@ -78,6 +81,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        // 握手阶段已解析 userId；连接建立后立即写入内存 session 和 Redis presence，供消息路由和在线状态查询使用。
         Long userId = (Long) session.getAttributes().get("userId");
         if (userId == null) {
             log.warn("No userId in session attributes, closing connection");
@@ -98,6 +102,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        // WebSocket payload 使用 cmd 分发：聊天消息落库，ACK/READ 更新投递状态，P2P 信令只做在线中继。
         Long senderId = (Long) session.getAttributes().get("userId");
         if (senderId == null) {
             return;
@@ -187,6 +192,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
     private void handleMessageSend(WebSocketSession session, Long senderId, JsonNode root, String seq) {
         try {
+            // MESSAGE_SEND reuses MessageService so HTTP and WebSocket sends share validation, idempotency, and delivery rows.
             JsonNode data = root.get("data");
             if (data == null) {
                 return;

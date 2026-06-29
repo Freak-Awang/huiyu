@@ -1,3 +1,4 @@
+// ?????chat keeps shared UI state and side effects in one Pinia store.
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
@@ -104,6 +105,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function fetchMessages(convId: string, beforeId?: string) {
     if (canUseLocalMessageStore()) {
+      // Desktop mode reads local history first so the chat opens instantly and still works during transient server outages.
       const localMessages = await listLocalMessages(convId, beforeId, 50)
       const existingRaw = messages.value.get(convId)
       const existing = Array.isArray(existingRaw) ? existingRaw : []
@@ -114,6 +116,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       try {
         const res = await getMessages(convId, beforeId)
+        // Server data remains authoritative for delivery/read status and replaces optimistic local records by id/clientMsgId.
         mergeServerMessages(convId, [...res.data.records].reverse())
       } catch {
         // Local history remains usable if the server is unavailable.
@@ -144,6 +147,7 @@ export const useChatStore = defineStore('chat', () => {
     let changed = false
 
     for (const serverMessage of serverMessages) {
+      // Match by server messageId first, then clientMsgId so optimistic sends collapse into the persisted message.
       const index = nextMessages.findIndex((msg) =>
         (serverMessage.messageId && msg.messageId === serverMessage.messageId) ||
         (serverMessage.clientMsgId && msg.clientMsgId === serverMessage.clientMsgId)
@@ -218,6 +222,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function upsertMessage(msg: Message) {
+    // Realtime messages, ACKs, retries, and local cache replay all converge through this path to keep ordering stable.
     const convMessagesRaw = messages.value.get(msg.conversationId)
     const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
     const existingIndex = convMessages.findIndex((m) =>
@@ -252,6 +257,7 @@ export const useChatStore = defineStore('chat', () => {
     currentUserId?: string,
     countAsUnread = true,
   ): Promise<Conversation | null> {
+    // Receiving a message may create/refresh the conversation first so sidebar badges and previews have a target.
     const conv = await ensureConversation(msg.conversationId)
     addMessage(msg)
     const isOwnMessage = !!currentUserId && msg.senderId === currentUserId
@@ -268,6 +274,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function markAsRead(convId: string, lastReadMessageId?: string) {
+    // Clear local badges optimistically; backend read receipts will reconcile other participants through WebSocket.
     clearUnread(convId)
     try {
       await markRead(convId, lastReadMessageId)

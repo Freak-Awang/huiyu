@@ -7,6 +7,9 @@ import io.minio.MinioClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * ?????FileStorageConfig centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Configuration
 public class FileStorageConfig {
 

@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * ?????AuthServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class AuthServiceImpl implements AuthService {
 

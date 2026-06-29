@@ -5,6 +5,9 @@ import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
+/**
+ * ?????PageResult standardizes response envelopes returned by backend APIs.
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class PageResult<T> extends Result<List<T>> {

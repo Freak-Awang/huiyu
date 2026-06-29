@@ -1,3 +1,4 @@
+// ?????stickers groups static UI data that is reused across chat interactions.
 import smileUrl from '../assets/stickers/smile.svg'
 import laughUrl from '../assets/stickers/laugh.svg'
 import heartUrl from '../assets/stickers/heart.svg'

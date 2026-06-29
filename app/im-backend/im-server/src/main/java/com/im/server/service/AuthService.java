@@ -2,6 +2,9 @@ package com.im.server.service;
 
 import com.im.common.dto.LoginRequest;
 import com.im.common.dto.LoginResponse;
+/**
+ * ?????AuthService defines the service contract used by controllers and async workflows.
+ */
 
 public interface AuthService {
 

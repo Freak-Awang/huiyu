@@ -28,6 +28,8 @@
 </template>
 
 <script setup lang="ts">
+// ?????ScreenshotOverlay contains reusable UI behavior with local interaction state.
+
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 interface Rect {

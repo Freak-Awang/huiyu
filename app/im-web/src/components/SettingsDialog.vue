@@ -158,6 +158,8 @@
 </template>
 
 <script setup lang="ts">
+// ?????SettingsDialog contains reusable UI behavior with local interaction state.
+
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'

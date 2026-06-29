@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * ?????AdminUserController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ */
 @RestController
 @RequestMapping("/api/admin/users")
 public class AdminUserController {

@@ -1,3 +1,4 @@
+// ?????runtime centralizes framework configuration so infrastructure behavior stays explicit.
 const SERVER_ORIGIN_KEY = 'imServerOrigin'
 
 function stripTrailingSlash(value: string) {

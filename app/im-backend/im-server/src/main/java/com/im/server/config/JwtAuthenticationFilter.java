@@ -18,6 +18,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * ?????JwtAuthenticationFilter centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -33,6 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Login, CORS preflight, public downloads, and WebSocket handshakes bypass this HTTP bearer-token filter by design.
         String path = request.getRequestURI();
         String method = request.getMethod();
         boolean isPublicFileDownload = path.startsWith("/api/files/download/")
@@ -71,6 +75,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + token))) {
+            // Logout revokes the exact JWT through Redis blacklist without waiting for token expiry.
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"message\":\"Token has been revoked\"}");

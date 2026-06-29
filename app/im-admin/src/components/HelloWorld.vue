@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// ?????HelloWorld contains reusable UI behavior with local interaction state.
+
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
 import heroImg from '../assets/hero.png'

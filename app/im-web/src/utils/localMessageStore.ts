@@ -1,3 +1,4 @@
+// ?????localMessageStore isolates reusable client-side behavior from Vue components.
 import { normalizeMessage, type Message, type RawMessage } from '../api/message'
 
 export function getLocalMessageUserId() {

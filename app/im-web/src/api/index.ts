@@ -1,3 +1,4 @@
+// ?????index wraps backend API calls so views and stores do not depend on raw HTTP details.
 import axios from 'axios'
 import router from '../router'
 import { getApiBaseUrl } from '../config/runtime'

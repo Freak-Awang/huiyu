@@ -2,6 +2,9 @@ package com.im.common.result;
 
 import lombok.Data;
 
+/**
+ * ?????Result standardizes response envelopes returned by backend APIs.
+ */
 @Data
 public class Result<T> {
     private int code;

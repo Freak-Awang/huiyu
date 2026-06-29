@@ -4,6 +4,9 @@ import com.im.common.dto.DeptVO;
 import com.im.common.entity.SysDept;
 
 import java.util.List;
+/**
+ * ?????DeptService defines the service contract used by controllers and async workflows.
+ */
 
 public interface DeptService {
 

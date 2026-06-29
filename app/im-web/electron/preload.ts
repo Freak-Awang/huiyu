@@ -1,3 +1,4 @@
+// ?????Preload exposes a narrow, typed desktop bridge while keeping renderer isolation enabled.
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('imDesktop', {

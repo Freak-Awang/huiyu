@@ -1,3 +1,4 @@
+// ?????Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
 import electronUpdater from 'electron-updater'
 import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
@@ -45,6 +46,7 @@ function delay(ms: number) {
 }
 
 function createMainWindow() {
+  // 主窗口保持 renderer sandbox/contextIsolation，所有 native capability 都通过 preload IPC 白名单暴露。
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
@@ -154,6 +156,7 @@ function createMenu() {
 }
 
 function setupAutoUpdater() {
+  // Auto updater downloads silently, then prompts after the payload is ready so update UX does not interrupt daily chat.
   autoUpdater.autoDownload = true
 
   autoUpdater.on('update-downloaded', async () => {
@@ -190,6 +193,7 @@ function setupAutoUpdater() {
 }
 
 async function captureDisplay(display: Electron.Display): Promise<string> {
+  // Capture uses the physical display scale so the screenshot overlay can map selection coordinates precisely.
   const thumbnailSize = {
     width: Math.round(display.size.width * display.scaleFactor),
     height: Math.round(display.size.height * display.scaleFactor),
@@ -244,6 +248,7 @@ function isScreenshotSender(event: Electron.IpcMainInvokeEvent): boolean {
 }
 
 async function startScreenshot(): Promise<ScreenshotResult> {
+  // Screenshot runs in a temporary transparent window and restores the main window only when we hid it for capture.
   if (!mainWindow || mainWindow.isDestroyed()) {
     return { canceled: true }
   }
@@ -316,6 +321,7 @@ async function startScreenshot(): Promise<ScreenshotResult> {
   }
 }
 
+// IPC handlers are the only native surface exposed to the renderer; keep payloads narrow and serializable.
 ipcMain.handle('app:getVersion', () => app.getVersion())
 ipcMain.handle('app:getPlatform', () => process.platform)
 ipcMain.handle('app:setCloseBehavior', (_event, behavior: 'tray' | 'exit') => {
@@ -353,6 +359,7 @@ ipcMain.handle('notification:show', (_event, payload: { title?: string; body?: s
   return true
 })
 ipcMain.handle('messages:upsert', async (_event, userId: string, message: LocalMessageRecord) => {
+  // Renderer stores every confirmed/optimistic message so local history survives app restarts.
   await upsertLocalMessage(userId, message)
   return true
 })

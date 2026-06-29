@@ -1,3 +1,4 @@
+// ?????index defines route guards and view mapping for the application shell.
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 

@@ -11,6 +11,9 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * ?????WebSocketSessionManager owns realtime session routing and WebSocket message delivery semantics.
+ */
 @Component
 public class WebSocketSessionManager {
 
@@ -19,6 +22,7 @@ public class WebSocketSessionManager {
     private final ConcurrentHashMap<Long, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
     public void addSession(Long userId, WebSocketSession session) {
+        // 每个用户只保留一个活跃 session，新连接会替换旧连接，避免多端重复收到同一实时事件。
         WebSocketSession oldSession = sessions.put(userId, session);
         if (oldSession != null && oldSession.isOpen()) {
             try {
@@ -51,6 +55,7 @@ public class WebSocketSessionManager {
             return;
         }
         synchronized (session) {
+            // Spring WebSocket session is synchronized here because concurrent sends on the same session can interleave.
             try {
                 if (session.isOpen()) {
                     session.sendMessage(new TextMessage(message));

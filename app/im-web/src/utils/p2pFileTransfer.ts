@@ -1,3 +1,4 @@
+// ?????p2pFileTransfer isolates reusable client-side behavior from Vue components.
 import type { FileTransfer } from '../api/file'
 import type { WsMessage } from './websocket'
 
@@ -78,6 +79,7 @@ export class P2pFileTransferManager {
     this.options.onProgress?.(this.progressSnapshot(session, 0, 'waiting'))
 
     return new Promise((resolve, reject) => {
+      // The sender waits for receiver acceptance before creating the data channel; timeout triggers server fallback upstream.
       session.resolve = resolve
       session.reject = reject
       session.acceptTimer = setTimeout(() => {
@@ -98,6 +100,7 @@ export class P2pFileTransferManager {
     const transferId = String(data.transferId || '')
     if (!transferId) return true
 
+    // Signaling messages are delivered through the app WebSocket; binary file data stays on the WebRTC data channel.
     switch (msg.cmd) {
       case 'FILE_P2P_INVITE':
         void this.handleInvite(data)
@@ -154,6 +157,7 @@ export class P2pFileTransferManager {
       return
     }
 
+    // Receiver prepares the RTCPeerConnection before ACCEPT so the sender can immediately start SDP negotiation.
     this.sessions.set(transferId, session)
     await this.prepareReceiver(session)
     this.send('FILE_P2P_ACCEPT', session, {})
@@ -261,6 +265,7 @@ export class P2pFileTransferManager {
       channel.send(JSON.stringify({ type: 'file-start', fileName: session.fileName, fileSize: session.fileSize }))
       let offset = 0
       while (offset < session.file.size) {
+        // bufferedAmount applies backpressure so large transfers do not exhaust renderer memory.
         await this.waitForBufferedAmount(channel)
         const end = Math.min(offset + CHUNK_SIZE, session.file.size)
         channel.send(await session.file.slice(offset, end).arrayBuffer())
@@ -293,6 +298,7 @@ export class P2pFileTransferManager {
 
     const chunk = data instanceof Blob ? data : new Blob([data])
     if (session.writable) {
+      // File System Access API streams large received files directly to disk when the browser supports it.
       await session.writable.write(chunk)
     } else {
       session.chunks.push(chunk)

@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * ?????UserSettingsServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class UserSettingsServiceImpl implements UserSettingsService {
 

@@ -32,6 +32,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * ?????MessageServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class MessageServiceImpl implements MessageService {
 
@@ -122,6 +125,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public ImMessage sendMessage(Long senderId, SendMessageRequest request) {
+        // 发送消息的核心边界：先确认成员身份和业务权限，再写消息与 delivery rows，保证离线同步有数据可拉取。
         LambdaQueryWrapper<ImConversationMember> memberWrapper = new LambdaQueryWrapper<>();
         memberWrapper.eq(ImConversationMember::getConversationId, request.getConversationId())
                 .eq(ImConversationMember::getUserId, senderId);
@@ -133,6 +137,7 @@ public class MessageServiceImpl implements MessageService {
         validateFileMessage(senderId, request);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
+            // clientMsgId provides idempotency for retries from unstable network or desktop resume.
             LambdaQueryWrapper<ImMessage> dupWrapper = new LambdaQueryWrapper<>();
             dupWrapper.eq(ImMessage::getSenderId, senderId)
                     .eq(ImMessage::getClientMsgId, request.getClientMsgId());
@@ -153,6 +158,7 @@ public class MessageServiceImpl implements MessageService {
         message.setExpiresAt(null);
 
         messageMapper.insert(message);
+        // Delivery rows are created synchronously so unread counts and pending-message replay stay consistent.
         createDeliveryRows(message);
 
         ImConversation conversation = conversationMapper.selectById(request.getConversationId());
@@ -171,6 +177,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public MessageVO recallMessage(Long userId, Long messageId) {
+        // 撤回只允许发送者在短窗口内执行，并通过 WebSocket 推送让在线端替换本地消息状态。
         ImMessage message = messageMapper.selectById(messageId);
         if (message == null) {
             throw new BusinessException("Message not found");
@@ -308,6 +315,7 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void createDeliveryRows(ImMessage message) {
+        // 每个成员一条 delivery 记录；发送者立即标记 delivered/read，其他成员等待 ACK 或 read receipt。
         List<ImConversationMember> members = conversationMemberMapper.selectList(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getConversationId, message.getConversationId()));
@@ -333,6 +341,7 @@ public class MessageServiceImpl implements MessageService {
             LocalDateTime readTime,
             List<Long> readMessageIds) {
         try {
+            // 已读回执只推给同会话在线成员，前端据此更新 readCount/readStatus，不依赖轮询。
             List<ImConversationMember> members = conversationMemberMapper.selectList(
                     new LambdaQueryWrapper<ImConversationMember>()
                             .eq(ImConversationMember::getConversationId, conversationId));
@@ -393,6 +402,7 @@ public class MessageServiceImpl implements MessageService {
 
     private void pushMessageUpdated(ImMessage message) {
         try {
+            // 撤回等状态变更只推送精简 payload，避免 WebSocket 消息承载完整历史查询语义。
             List<ImConversationMember> members = conversationMemberMapper.selectList(
                     new LambdaQueryWrapper<ImConversationMember>()
                             .eq(ImConversationMember::getConversationId, message.getConversationId()));
@@ -514,6 +524,7 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void validateAllMentionPermission(SendMessageRequest request, ImConversationMember senderMember) {
+        // @all is intentionally restricted to owner/admin so large groups cannot be globally interrupted by any member.
         if (!MESSAGE_TYPE_TEXT.equalsIgnoreCase(request.getMessageType()) || !containsAllMention(request.getContent())) {
             return;
         }

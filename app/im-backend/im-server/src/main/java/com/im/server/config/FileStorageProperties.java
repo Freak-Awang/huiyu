@@ -3,6 +3,9 @@ package com.im.server.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**
+ * ?????FileStorageProperties centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Component
 @ConfigurationProperties(prefix = "file")
 public class FileStorageProperties {

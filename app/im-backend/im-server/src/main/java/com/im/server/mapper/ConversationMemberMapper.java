@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.im.common.entity.ImConversationMember;
 import org.apache.ibatis.annotations.Mapper;
 
+/**
+ * ?????ConversationMemberMapper maps domain persistence operations to MyBatis-Plus data access.
+ */
 @Mapper
 public interface ConversationMemberMapper extends BaseMapper<ImConversationMember> {
 }

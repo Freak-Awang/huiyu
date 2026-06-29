@@ -47,6 +47,8 @@
 </template>
 
 <script setup lang="ts">
+// ?????Login composes route-level UI behavior and data loading for this screen.
+
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'

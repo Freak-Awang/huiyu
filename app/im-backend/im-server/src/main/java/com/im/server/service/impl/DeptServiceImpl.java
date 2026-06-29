@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * ?????DeptServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class DeptServiceImpl implements DeptService {
 

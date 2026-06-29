@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * ?????RetentionCleanupJob centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Component
 public class RetentionCleanupJob {
 
@@ -20,6 +23,7 @@ public class RetentionCleanupJob {
     @Scheduled(cron = "${retention.cleanup.cron:0 15 3 * * *}")
     public void cleanupExpiredContent() {
         try {
+            // Temporary standalone files expire by policy; scheduled failure is logged but never blocks the app.
             fileService.cleanupExpiredTemporaryFiles();
         } catch (Exception e) {
             log.error("Retention cleanup failed", e);
@@ -29,6 +33,7 @@ public class RetentionCleanupJob {
     @Scheduled(cron = "${retention.upload-cleanup.cron:0 0 * * * *}")
     public void cleanupExpiredUploads() {
         try {
+            // Upload sessions are cleaned separately because partial chunks can accumulate much faster than final files.
             fileService.cleanupExpiredUploads();
         } catch (Exception e) {
             log.error("Upload cleanup failed", e);

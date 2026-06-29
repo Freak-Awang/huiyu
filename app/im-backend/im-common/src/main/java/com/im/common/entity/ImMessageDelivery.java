@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * ?????ImMessageDelivery mirrors a persisted domain table and keeps ORM mapping metadata with the model.
+ */
 @Data
 @TableName("im_message_delivery")
 public class ImMessageDelivery {

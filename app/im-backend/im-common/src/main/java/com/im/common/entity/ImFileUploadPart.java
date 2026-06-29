@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * ?????ImFileUploadPart mirrors a persisted domain table and keeps ORM mapping metadata with the model.
+ */
 @Data
 @TableName("im_file_upload_part")
 public class ImFileUploadPart {

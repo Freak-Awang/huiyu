@@ -1,3 +1,4 @@
+// ?????Local message persistence keeps desktop chat history available when the network is unavailable.
 import { app } from 'electron'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -46,6 +47,7 @@ async function readStore(): Promise<LocalMessageStore> {
     const parsed = JSON.parse(raw) as LocalMessageStore
     return parsed && parsed.users ? parsed : { users: {} }
   } catch {
+    // Corrupt or missing cache should never block the desktop app; server sync can repopulate it.
     return { users: {} }
   }
 }
@@ -85,6 +87,7 @@ export async function upsertLocalMessage(userId: string, message: LocalMessageRe
     return messageKey(item) === key
   })
   if (index >= 0) {
+    // Merge server-confirmed fields into optimistic local messages instead of duplicating the same send.
     bucket[index] = { ...bucket[index], ...message }
   } else {
     bucket.push(message)
@@ -99,6 +102,7 @@ export async function listLocalMessages(
   beforeMessageId?: string,
   pageSize = 50,
 ) {
+  // Pagination mirrors backend history loading: newest page by default, older page before a known message id.
   const store = await readStore()
   const bucket = sortMessages([...(store.users[userId]?.conversations[conversationId] || [])])
   const limit = Math.max(1, Math.min(pageSize, 200))

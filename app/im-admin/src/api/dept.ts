@@ -1,3 +1,4 @@
+// ?????dept wraps backend API calls so views and stores do not depend on raw HTTP details.
 import client from './index'
 
 export interface DeptData {

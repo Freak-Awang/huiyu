@@ -1,6 +1,9 @@
 package com.im.server.service.storage;
 
 import java.io.InputStream;
+/**
+ * ?????StoredObject hides storage-provider details behind a stable file storage contract.
+ */
 
 public class StoredObject {
     private final InputStream inputStream;

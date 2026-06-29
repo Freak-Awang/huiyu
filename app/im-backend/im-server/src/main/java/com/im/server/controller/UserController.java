@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ?????UserController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ */
 @RestController
 @RequestMapping("/api/users")
 public class UserController {

@@ -5,6 +5,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ * ?????ImServerApplication boots the Spring application and enables component discovery.
+ */
 @SpringBootApplication(scanBasePackages = "com.im")
 @MapperScan("com.im.server.mapper")
 @EnableScheduling

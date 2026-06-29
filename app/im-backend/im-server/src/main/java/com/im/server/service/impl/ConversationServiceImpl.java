@@ -35,6 +35,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * ?????ConversationServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ */
 @Service
 public class ConversationServiceImpl implements ConversationService {
 
@@ -104,6 +107,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public ConversationVO createConversation(Long userId, CreateConversationRequest request) {
+        // 单聊优先复用已有会话；群聊才创建新的 conversation 和 owner/member 关系。
         if (request == null) {
             throw new BusinessException("Conversation request is required");
         }
@@ -214,6 +218,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public void addMembers(Long conversationId, List<Long> userIds, Long operatorId) {
+        // 成员变更在事务内完成，通知在成员关系写入后发送，保证收到推送的用户能立即拉到会话。
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw new BusinessException("Conversation not found");
@@ -316,6 +321,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public ConversationVO updateSettings(Long conversationId, Long operatorId, UpdateConversationSettingsRequest request) {
+        // 群资料属于共享状态，只有 owner/admin 能修改，并通过 conversation update 推送刷新在线成员。
         ImConversation conversation = getGroupConversationOrThrow(conversationId);
         ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
         requireOwnerOrAdmin(operatorMember, "Only the owner or admin can update group settings");
@@ -386,6 +392,7 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private ImConversation findExistingSingleChat(Long userId1, Long userId2) {
+        // 单聊通过两个成员集合匹配，避免重复创建平行会话导致历史分裂。
         List<ImConversationMember> user1Members = conversationMemberMapper.selectList(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getUserId, userId1));
@@ -412,6 +419,7 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private void notifyConversationCreated(ImConversation conversation, Set<Long> memberIds) {
+        // 新群通知只面向被加入成员；创建者会在当前请求响应中拿到完整 VO。
         for (Long memberId : memberIds) {
             if (!sessionManager.isOnline(memberId)) {
                 continue;
@@ -429,6 +437,7 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private void notifyConversationUpdated(Long conversationId) {
+        // 更新事件按接收者重新构造 VO，因为单聊名称、未读数、置顶等字段带有用户视角。
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             return;

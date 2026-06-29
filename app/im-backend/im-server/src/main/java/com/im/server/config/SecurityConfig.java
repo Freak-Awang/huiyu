@@ -13,6 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * ?????SecurityConfig centralizes framework configuration so infrastructure behavior stays explicit.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {

@@ -51,6 +51,8 @@
 </template>
 
 <script setup lang="ts">
+// ?????Login composes route-level UI behavior and data loading for this screen.
+
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'

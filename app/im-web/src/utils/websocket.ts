@@ -1,3 +1,4 @@
+// ?????websocket isolates reusable client-side behavior from Vue components.
 import { getWsBaseUrl } from '../config/runtime'
 
 export interface WsMessage {
@@ -29,6 +30,7 @@ export class WebSocketManager {
   }
 
   connect() {
+    // A fresh manual connect resets retry state; automatic reconnects go through scheduleReconnect instead.
     this.intentionalClose = false
     this.reconnectCount = 0
     this.doConnect()
@@ -61,6 +63,7 @@ export class WebSocketManager {
       this.stopHeartbeat()
       this.connectionHandler?.(false)
       if (!this.intentionalClose) {
+        // Network drops should retry, while explicit logout/navigation disconnects must stay closed.
         this.scheduleReconnect()
       }
     }
@@ -91,6 +94,7 @@ export class WebSocketManager {
       return false
     }
     const seq = ++this.seqCounter
+    // seq lets the backend ACK map a response back to the optimistic client action.
     const payload = JSON.stringify({ cmd, seq, data })
     this.ws.send(payload)
     return true
@@ -102,6 +106,7 @@ export class WebSocketManager {
 
   private startHeartbeat() {
     this.stopHeartbeat()
+    // Heartbeat keeps proxies and the backend aware of an active desktop/browser session.
     this.heartbeatTimer = setInterval(() => {
       this.send('PING', {})
     }, 30000)
@@ -120,6 +125,7 @@ export class WebSocketManager {
       return
     }
     this.reconnectCount++
+    // Fixed-delay reconnect is intentionally simple; pending messages are recovered through backend delivery rows.
     this.reconnectTimer = setTimeout(() => {
       this.doConnect()
     }, this.reconnectDelay)
