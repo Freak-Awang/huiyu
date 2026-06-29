@@ -5,7 +5,7 @@ import com.im.common.result.PageResult;
 
 import java.util.List;
 /**
- * ?????UserService defines the service contract used by controllers and async workflows.
+ * Intent: UserService defines the service contract used by controllers and async workflows.
  */
 
 public interface UserService {

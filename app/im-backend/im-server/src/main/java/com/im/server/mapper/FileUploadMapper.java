@@ -5,7 +5,7 @@ import com.im.common.entity.ImFileUpload;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * ?????FileUploadMapper maps domain persistence operations to MyBatis-Plus data access.
+ * Intent: FileUploadMapper maps domain persistence operations to MyBatis-Plus data access.
  */
 @Mapper
 public interface FileUploadMapper extends BaseMapper<ImFileUpload> {

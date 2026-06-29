@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * ?????MessageServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * Intent: MessageServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
  */
 @Service
 public class MessageServiceImpl implements MessageService {

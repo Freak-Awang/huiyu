@@ -98,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-// ?????ProfileDialog contains reusable UI behavior with local interaction state.
+// Intent: ProfileDialog contains reusable UI behavior with local interaction state.
 
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { uploadAvatar } from '../api/file'

@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * ?????GlobalExceptionHandler normalizes business failures into predictable API responses.
+ * Intent: GlobalExceptionHandler normalizes business failures into predictable API responses.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {

@@ -3,7 +3,7 @@ package com.im.common.dto;
 import lombok.Data;
 
 /**
- * ?????FileTransferInitRequest carries API payload shape between client, controller, and service layers.
+ * Intent: FileTransferInitRequest carries API payload shape between client, controller, and service layers.
  */
 @Data
 public class FileTransferInitRequest {

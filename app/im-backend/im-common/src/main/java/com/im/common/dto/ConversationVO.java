@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * ?????ConversationVO carries API payload shape between client, controller, and service layers.
+ * Intent: ConversationVO carries API payload shape between client, controller, and service layers.
  */
 @Data
 public class ConversationVO {

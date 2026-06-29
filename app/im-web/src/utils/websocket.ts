@@ -1,4 +1,4 @@
-// ?????websocket isolates reusable client-side behavior from Vue components.
+// Intent: websocket isolates reusable client-side behavior from Vue components.
 import { getWsBaseUrl } from '../config/runtime'
 
 export interface WsMessage {

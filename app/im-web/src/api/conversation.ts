@@ -1,4 +1,4 @@
-// ?????conversation wraps backend API calls so views and stores do not depend on raw HTTP details.
+// Intent: conversation wraps backend API calls so views and stores do not depend on raw HTTP details.
 import http from './index'
 
 export interface Conversation {

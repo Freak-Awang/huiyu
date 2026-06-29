@@ -8,7 +8,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 /**
- * ?????WebSocketConfig centralizes framework configuration so infrastructure behavior stays explicit.
+ * Intent: WebSocketConfig centralizes framework configuration so infrastructure behavior stays explicit.
  */
 @Configuration
 @EnableWebSocket

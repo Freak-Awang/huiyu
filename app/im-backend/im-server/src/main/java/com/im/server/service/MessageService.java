@@ -7,7 +7,7 @@ import com.im.common.result.PageResult;
 
 import java.util.List;
 /**
- * ?????MessageService defines the service contract used by controllers and async workflows.
+ * Intent: MessageService defines the service contract used by controllers and async workflows.
  */
 
 public interface MessageService {

@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * ?????FileStorageProperties centralizes framework configuration so infrastructure behavior stays explicit.
+ * Intent: FileStorageProperties centralizes framework configuration so infrastructure behavior stays explicit.
  */
 @Component
 @ConfigurationProperties(prefix = "file")

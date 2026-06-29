@@ -1,4 +1,4 @@
-// ?????presence isolates reusable client-side behavior from Vue components.
+// Intent: presence isolates reusable client-side behavior from Vue components.
 export type PresenceStatus = 'online' | 'busy' | 'away' | 'dnd' | 'invisible' | 'offline'
 
 export interface PresenceOption {

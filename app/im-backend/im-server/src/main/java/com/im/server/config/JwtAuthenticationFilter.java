@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ?????JwtAuthenticationFilter centralizes framework configuration so infrastructure behavior stays explicit.
+ * Intent: JwtAuthenticationFilter centralizes framework configuration so infrastructure behavior stays explicit.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {

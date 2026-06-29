@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * ?????UserServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * Intent: UserServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
  */
 @Service
 public class UserServiceImpl implements UserService {

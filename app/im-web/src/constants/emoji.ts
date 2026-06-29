@@ -1,4 +1,4 @@
-// ?????emoji groups static UI data that is reused across chat interactions.
+// Intent: emoji groups static UI data that is reused across chat interactions.
 export interface EmojiGroup {
   name: string
   emojis: string[]

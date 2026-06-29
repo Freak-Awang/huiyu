@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * ?????UserSettingsController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ * Intent: UserSettingsController exposes HTTP endpoints and keeps request validation close to the API boundary.
  */
 @RestController
 @RequestMapping("/api/settings")

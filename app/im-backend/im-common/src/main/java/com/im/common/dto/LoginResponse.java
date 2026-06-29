@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * ?????LoginResponse carries API payload shape between client, controller, and service layers.
+ * Intent: LoginResponse carries API payload shape between client, controller, and service layers.
  */
 @Data
 @NoArgsConstructor

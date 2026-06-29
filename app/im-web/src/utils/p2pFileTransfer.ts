@@ -1,4 +1,4 @@
-// ?????p2pFileTransfer isolates reusable client-side behavior from Vue components.
+// Intent: p2pFileTransfer isolates reusable client-side behavior from Vue components.
 import type { FileTransfer } from '../api/file'
 import type { WsMessage } from './websocket'
 

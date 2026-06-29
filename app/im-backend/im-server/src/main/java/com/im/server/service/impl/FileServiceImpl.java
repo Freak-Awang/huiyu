@@ -43,7 +43,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * ?????FileServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * Intent: FileServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
  */
 @Service
 public class FileServiceImpl implements FileService {

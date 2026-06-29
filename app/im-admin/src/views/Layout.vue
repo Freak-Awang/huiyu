@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-// ?????Layout composes route-level UI behavior and data loading for this screen.
+// Intent: Layout composes route-level UI behavior and data loading for this screen.
 
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'

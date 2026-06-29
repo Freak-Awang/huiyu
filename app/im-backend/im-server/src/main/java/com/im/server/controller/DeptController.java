@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * ?????DeptController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ * Intent: DeptController exposes HTTP endpoints and keeps request validation close to the API boundary.
  */
 @RestController
 @RequestMapping("/api/depts")

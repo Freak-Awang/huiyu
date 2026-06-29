@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * ?????RetentionCleanupJob centralizes framework configuration so infrastructure behavior stays explicit.
+ * Intent: RetentionCleanupJob centralizes framework configuration so infrastructure behavior stays explicit.
  */
 @Component
 public class RetentionCleanupJob {

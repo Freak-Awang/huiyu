@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * ?????ImConversation mirrors a persisted domain table and keeps ORM mapping metadata with the model.
+ * Intent: ImConversation mirrors a persisted domain table and keeps ORM mapping metadata with the model.
  */
 @Data
 @TableName("im_conversation")

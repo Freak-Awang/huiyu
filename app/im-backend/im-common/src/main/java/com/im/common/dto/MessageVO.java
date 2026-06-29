@@ -5,7 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * ?????MessageVO carries API payload shape between client, controller, and service layers.
+ * Intent: MessageVO carries API payload shape between client, controller, and service layers.
  */
 @Data
 public class MessageVO {

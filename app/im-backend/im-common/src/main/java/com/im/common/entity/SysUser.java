@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * ?????SysUser mirrors a persisted domain table and keeps ORM mapping metadata with the model.
+ * Intent: SysUser mirrors a persisted domain table and keeps ORM mapping metadata with the model.
  */
 @Data
 @TableName("sys_user")

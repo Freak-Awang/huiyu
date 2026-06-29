@@ -1,4 +1,4 @@
-// ?????auth keeps shared UI state and side effects in one Pinia store.
+// Intent: auth keeps shared UI state and side effects in one Pinia store.
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login as loginApi, logout as logoutApi } from '../api/auth'

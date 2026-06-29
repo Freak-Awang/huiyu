@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
- * ?????LoginRequest carries API payload shape between client, controller, and service layers.
+ * Intent: LoginRequest carries API payload shape between client, controller, and service layers.
  */
 @Data
 public class LoginRequest {

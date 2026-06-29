@@ -12,7 +12,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import java.util.Map;
 
 /**
- * ?????WebSocketHandshakeInterceptor owns realtime session routing and WebSocket message delivery semantics.
+ * Intent: WebSocketHandshakeInterceptor owns realtime session routing and WebSocket message delivery semantics.
  */
 @Component
 public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {

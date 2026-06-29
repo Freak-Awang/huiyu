@@ -5,7 +5,7 @@ import com.im.common.entity.ImUserSettings;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * ?????UserSettingsMapper maps domain persistence operations to MyBatis-Plus data access.
+ * Intent: UserSettingsMapper maps domain persistence operations to MyBatis-Plus data access.
  */
 @Mapper
 public interface UserSettingsMapper extends BaseMapper<ImUserSettings> {

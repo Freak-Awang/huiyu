@@ -5,7 +5,7 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * ?????DeptVO carries API payload shape between client, controller, and service layers.
+ * Intent: DeptVO carries API payload shape between client, controller, and service layers.
  */
 @Data
 public class DeptVO {

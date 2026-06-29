@@ -1,4 +1,4 @@
-// ?????chat keeps shared UI state and side effects in one Pinia store.
+// Intent: chat keeps shared UI state and side effects in one Pinia store.
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {

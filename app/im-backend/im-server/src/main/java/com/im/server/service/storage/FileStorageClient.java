@@ -5,7 +5,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 /**
- * ?????FileStorageClient hides storage-provider details behind a stable file storage contract.
+ * Intent: FileStorageClient hides storage-provider details behind a stable file storage contract.
  */
 
 public interface FileStorageClient {

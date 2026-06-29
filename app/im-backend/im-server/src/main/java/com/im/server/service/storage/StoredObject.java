@@ -2,7 +2,7 @@ package com.im.server.service.storage;
 
 import java.io.InputStream;
 /**
- * ?????StoredObject hides storage-provider details behind a stable file storage contract.
+ * Intent: StoredObject hides storage-provider details behind a stable file storage contract.
  */
 
 public class StoredObject {

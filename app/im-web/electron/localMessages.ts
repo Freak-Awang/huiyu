@@ -1,4 +1,4 @@
-// ?????Local message persistence keeps desktop chat history available when the network is unavailable.
+// Intent: Local message persistence keeps desktop chat history available when the network is unavailable.
 import { app } from 'electron'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'

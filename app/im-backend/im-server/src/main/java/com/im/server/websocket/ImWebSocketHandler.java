@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * ?????ImWebSocketHandler owns realtime session routing and WebSocket message delivery semantics.
+ * Intent: ImWebSocketHandler owns realtime session routing and WebSocket message delivery semantics.
  */
 @Component
 public class ImWebSocketHandler extends TextWebSocketHandler {

@@ -1,4 +1,4 @@
-// ?????desktop.d declares desktop bridge types consumed by the renderer process.
+// Intent: desktop.d declares desktop bridge types consumed by the renderer process.
 export {}
 
 declare global {

@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 /**
- * ?????JwtUtil provides shared utility behavior used across backend modules.
+ * Intent: JwtUtil provides shared utility behavior used across backend modules.
  */
 @Component
 public class JwtUtil {

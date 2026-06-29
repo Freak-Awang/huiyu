@@ -36,7 +36,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * ?????ConversationServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * Intent: ConversationServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
  */
 @Service
 public class ConversationServiceImpl implements ConversationService {

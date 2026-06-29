@@ -6,7 +6,7 @@ import lombok.EqualsAndHashCode;
 import java.util.List;
 
 /**
- * ?????PageResult standardizes response envelopes returned by backend APIs.
+ * Intent: PageResult standardizes response envelopes returned by backend APIs.
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

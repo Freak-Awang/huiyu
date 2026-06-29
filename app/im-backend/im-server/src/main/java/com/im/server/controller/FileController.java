@@ -37,7 +37,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ?????FileController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ * Intent: FileController exposes HTTP endpoints and keeps request validation close to the API boundary.
  */
 @RestController
 @RequestMapping("/api/files")

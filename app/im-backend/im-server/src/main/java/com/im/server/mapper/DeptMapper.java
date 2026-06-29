@@ -5,7 +5,7 @@ import com.im.common.entity.SysDept;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * ?????DeptMapper maps domain persistence operations to MyBatis-Plus data access.
+ * Intent: DeptMapper maps domain persistence operations to MyBatis-Plus data access.
  */
 @Mapper
 public interface DeptMapper extends BaseMapper<SysDept> {

@@ -1,4 +1,4 @@
-// ?????settings keeps shared UI state and side effects in one Pinia store.
+// Intent: settings keeps shared UI state and side effects in one Pinia store.
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {

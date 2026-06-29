@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * ?????ImFileTransfer mirrors a persisted domain table and keeps ORM mapping metadata with the model.
+ * Intent: ImFileTransfer mirrors a persisted domain table and keeps ORM mapping metadata with the model.
  */
 @Data
 @TableName("im_file_transfer")

@@ -1,4 +1,4 @@
-// ?????main wires Vue, routing, and state plugins before mounting the app.
+// Intent: main wires Vue, routing, and state plugins before mounting the app.
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

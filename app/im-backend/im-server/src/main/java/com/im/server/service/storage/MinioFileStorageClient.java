@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.stream.Collectors;
 /**
- * ?????MinioFileStorageClient hides storage-provider details behind a stable file storage contract.
+ * Intent: MinioFileStorageClient hides storage-provider details behind a stable file storage contract.
  */
 
 public class MinioFileStorageClient implements FileStorageClient {

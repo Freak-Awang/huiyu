@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-// ?????DeptManage composes route-level UI behavior and data loading for this screen.
+// Intent: DeptManage composes route-level UI behavior and data loading for this screen.
 
 import { ref, reactive } from 'vue'
 import { Plus, Edit, Delete, Folder } from '@element-plus/icons-vue'

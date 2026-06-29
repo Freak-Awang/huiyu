@@ -928,7 +928,7 @@
 </template>
 
 <script setup lang="ts">
-// ?????Chat composes route-level UI behavior and data loading for this screen.
+// Intent: Chat composes route-level UI behavior and data loading for this screen.
 
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'

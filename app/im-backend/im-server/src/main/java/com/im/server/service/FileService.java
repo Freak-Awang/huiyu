@@ -12,7 +12,7 @@ import com.im.common.result.PageResult;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.web.multipart.MultipartFile;
 /**
- * ?????FileService defines the service contract used by controllers and async workflows.
+ * Intent: FileService defines the service contract used by controllers and async workflows.
  */
 
 public interface FileService {

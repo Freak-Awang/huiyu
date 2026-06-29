@@ -1,4 +1,4 @@
-// ?????customStickers isolates reusable client-side behavior from Vue components.
+// Intent: customStickers isolates reusable client-side behavior from Vue components.
 export interface CustomStickerRecord {
   id: string
   name: string

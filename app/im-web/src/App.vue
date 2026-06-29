@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-// ?????App hosts the root router outlet and global application frame.
+// Intent: App hosts the root router outlet and global application frame.
 
 </script>
 

@@ -1,4 +1,4 @@
-// ?????Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
+// Intent: Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
 import electronUpdater from 'electron-updater'
 import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, screen, shell } from 'electron'
 import { dirname, join } from 'node:path'
