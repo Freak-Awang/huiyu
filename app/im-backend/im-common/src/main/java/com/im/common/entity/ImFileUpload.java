@@ -16,7 +16,6 @@ public class ImFileUpload {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String uploadId;
-    private String transferId;
     private Long uploaderId;
     private Long conversationId;
     private String fileName;

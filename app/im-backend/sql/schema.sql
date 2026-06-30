@@ -124,32 +124,9 @@ CREATE TABLE IF NOT EXISTS im_file (
     INDEX idx_uploader (uploader_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='files';
 
-CREATE TABLE IF NOT EXISTS im_file_transfer (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'transfer row id',
-    transfer_id VARCHAR(64) NOT NULL COMMENT 'client-visible transfer id',
-    sender_id BIGINT NOT NULL COMMENT 'sender user id',
-    conversation_id BIGINT NOT NULL COMMENT 'conversation id',
-    file_name VARCHAR(256) NOT NULL COMMENT 'file name',
-    file_size BIGINT NOT NULL COMMENT 'file size bytes',
-    content_type VARCHAR(128) DEFAULT NULL COMMENT 'MIME type',
-    sha256 VARCHAR(64) DEFAULT NULL COMMENT 'file sha256',
-    mode VARCHAR(32) NOT NULL DEFAULT 'SERVER' COMMENT 'SERVER/P2P',
-    status VARCHAR(32) NOT NULL COMMENT 'transfer status',
-    file_id BIGINT DEFAULT NULL COMMENT 'completed file id',
-    fallback_reason VARCHAR(256) DEFAULT NULL COMMENT 'server fallback reason',
-    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
-    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
-    expires_at DATETIME DEFAULT NULL COMMENT 'offline file expiry',
-    UNIQUE KEY uk_transfer_id (transfer_id),
-    INDEX idx_sender (sender_id),
-    INDEX idx_conversation (conversation_id),
-    INDEX idx_status_expires (status, expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='file transfer tasks';
-
 CREATE TABLE IF NOT EXISTS im_file_upload (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'upload row id',
     upload_id VARCHAR(64) NOT NULL COMMENT 'client-visible upload id',
-    transfer_id VARCHAR(64) DEFAULT NULL COMMENT 'transfer id',
     uploader_id BIGINT NOT NULL COMMENT 'uploader user id',
     conversation_id BIGINT NOT NULL COMMENT 'conversation id',
     file_name VARCHAR(256) NOT NULL COMMENT 'file name',

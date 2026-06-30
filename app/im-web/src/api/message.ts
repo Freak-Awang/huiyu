@@ -8,7 +8,7 @@ export interface Message {
   senderName: string
   senderAvatar: string
   senderSignature: string
-  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
+  messageType: 'TEXT' | 'IMAGE' | 'STICKER'
   content: string
   displayContent: string
   mentions: MessageMention[]
@@ -66,7 +66,7 @@ export interface RawMessage {
   senderName?: string | null
   senderAvatar?: string | null
   senderSignature?: string | null
-  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
+  messageType?: 'TEXT' | 'IMAGE' | 'STICKER'
   content?: string | null
   clientMsgId?: string | null
   createTime?: string | null

@@ -64,14 +64,11 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
-      FILE_UPLOAD_PATH: /app/upload
       FILE_STORAGE: minio
       MINIO_ENDPOINT: http://minio:9000
       MINIO_BUCKET: im-files
       MINIO_ACCESS_KEY: imadmin
       MINIO_SECRET_KEY: impassword
-    volumes:
-      - upload-data:/app/upload
     depends_on:
       mysql:
         condition: service_healthy
@@ -90,11 +87,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ../im-web/dist:/usr/share/nginx/html/im
       - ../im-admin/dist:/usr/share/nginx/html/admin
-      - upload-data:/usr/share/nginx/html/upload
     depends_on:
       - backend
 
 volumes:
   mysql-data:
-  upload-data:
   minio-data:

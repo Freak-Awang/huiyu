@@ -1,17 +1,13 @@
 package com.im.server.controller;
 
-import com.im.common.dto.FileTransferInitRequest;
-import com.im.common.dto.FileTransferStatusRequest;
-import com.im.common.dto.FileTransferVO;
-import com.im.common.dto.FileUploadCompleteRequest;
-import com.im.common.dto.FileUploadInitRequest;
-import com.im.common.dto.FileUploadVO;
 import com.im.common.dto.FileVO;
 import com.im.common.entity.ImFile;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.Result;
-import com.im.server.service.FileService;
+import com.im.server.service.FileDownloadService;
+import com.im.server.service.FileMetadataService;
+import com.im.server.service.FileUploadService;
 import com.im.server.service.UserService;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.core.io.InputStreamResource;
@@ -24,7 +20,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,8 +28,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Intent: FileController exposes HTTP endpoints and keeps request validation close to the API boundary.
@@ -43,86 +36,43 @@ import java.util.Map;
 @RequestMapping("/api/files")
 public class FileController {
 
-    private final FileService fileService;
+    private final FileUploadService fileUploadService;
+    private final FileDownloadService fileDownloadService;
+    private final FileMetadataService fileMetadataService;
     private final UserService userService;
 
-    public FileController(FileService fileService, UserService userService) {
-        this.fileService = fileService;
+    public FileController(
+            FileUploadService fileUploadService,
+            FileDownloadService fileDownloadService,
+            FileMetadataService fileMetadataService,
+            UserService userService) {
+        this.fileUploadService = fileUploadService;
+        this.fileDownloadService = fileDownloadService;
+        this.fileMetadataService = fileMetadataService;
         this.userService = userService;
     }
 
     @PostMapping("/upload")
-    public Result<Map<String, Object>> upload(
+    public Result<FileVO> upload(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "conversationId", required = false) Long conversationId) {
         Long userId = getCurrentUserId();
-        ImFile result = fileService.upload(file, userId, conversationId, true);
-        return Result.success(toLegacyUploadResponse(result));
+        ImFile result = conversationId != null
+                ? fileUploadService.uploadConversationImage(file, userId, conversationId)
+                : fileUploadService.uploadStandaloneImage(file, userId);
+        return Result.success(toFileVO(result));
     }
 
     @PostMapping("/upload/avatar")
-    public Result<Map<String, Object>> uploadAvatar(@RequestParam("file") MultipartFile file) {
+    public Result<FileVO> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long userId = getCurrentUserId();
-        ImFile result = fileService.upload(file, userId, false);
+        ImFile result = fileUploadService.uploadAvatarFile(file, userId);
 
         SysUser user = userService.getById(userId);
         user.setAvatar("/api/files/download/" + result.getId());
         userService.update(user);
 
-        return Result.success(toLegacyUploadResponse(result));
-    }
-
-    @PostMapping("/transfer/init")
-    public Result<FileTransferVO> initTransfer(@RequestBody FileTransferInitRequest request) {
-        return Result.success(fileService.initTransfer(getCurrentUserId(), request));
-    }
-
-    @PostMapping("/transfer/{transferId}/status")
-    public Result<FileTransferVO> updateTransferStatus(
-            @PathVariable String transferId,
-            @RequestBody(required = false) FileTransferStatusRequest request) {
-        FileTransferStatusRequest body = request != null ? request : new FileTransferStatusRequest();
-        return Result.success(fileService.updateTransferStatus(getCurrentUserId(), transferId, body));
-    }
-
-    @PostMapping("/transfer/{transferId}/fallback")
-    public Result<FileTransferVO> fallbackTransfer(
-            @PathVariable String transferId,
-            @RequestBody(required = false) FileTransferStatusRequest request) {
-        FileTransferStatusRequest body = request != null ? request : new FileTransferStatusRequest();
-        return Result.success(fileService.fallbackTransfer(getCurrentUserId(), transferId, body));
-    }
-
-    @PostMapping("/uploads/init")
-    public Result<FileUploadVO> initUpload(@RequestBody FileUploadInitRequest request) {
-        return Result.success(fileService.initUpload(getCurrentUserId(), request));
-    }
-
-    @GetMapping("/uploads/{uploadId}")
-    public Result<FileUploadVO> getUploadStatus(@PathVariable String uploadId) {
-        return Result.success(fileService.getUploadStatus(getCurrentUserId(), uploadId));
-    }
-
-    @PostMapping("/uploads/{uploadId}/chunks/{partNumber}")
-    public Result<FileUploadVO> uploadChunk(
-            @PathVariable String uploadId,
-            @PathVariable Integer partNumber,
-            @RequestParam("file") MultipartFile file) {
-        return Result.success(fileService.uploadChunk(getCurrentUserId(), uploadId, partNumber, file));
-    }
-
-    @PostMapping("/uploads/{uploadId}/complete")
-    public Result<FileVO> completeUpload(
-            @PathVariable String uploadId,
-            @RequestBody(required = false) FileUploadCompleteRequest request) {
-        FileUploadCompleteRequest body = request != null ? request : new FileUploadCompleteRequest();
-        return Result.success(fileService.completeUpload(getCurrentUserId(), uploadId, body));
-    }
-
-    @PostMapping("/uploads/{uploadId}/abort")
-    public Result<Void> abortUpload(@PathVariable String uploadId) {
-        fileService.abortUpload(getCurrentUserId(), uploadId);
-        return Result.ok();
+        return Result.success(toFileVO(result));
     }
 
     @GetMapping("/download/{fileId}")
@@ -130,10 +80,10 @@ public class FileController {
             @PathVariable Long fileId,
             @RequestHeader(value = "Range", required = false) String rangeHeader) {
         try {
-            ImFile imFile = fileService.getDownloadableFile(getOptionalCurrentUserId(), fileId);
+            ImFile imFile = fileDownloadService.getDownloadableFile(getOptionalCurrentUserId(), fileId);
             Range range = parseRange(rangeHeader, imFile.getFileSize());
-            StoredObject object = fileService.openFile(imFile, range.start, range.length);
-            fileService.incrementDownloadCount(fileId);
+            StoredObject object = fileDownloadService.openFile(imFile, range.start, range.length);
+            fileDownloadService.incrementDownloadCount(fileId);
 
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(imFile));
@@ -161,24 +111,8 @@ public class FileController {
         }
     }
 
-    @PostMapping("/ack/{fileId}")
-    public Result<Void> acknowledgeDownload(@PathVariable Long fileId) {
-        fileService.getDownloadableFile(getCurrentUserId(), fileId);
-        return Result.ok();
-    }
-
-    private Map<String, Object> toLegacyUploadResponse(ImFile file) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", file.getId());
-        data.put("fileId", file.getId());
-        data.put("originalName", file.getOriginalName());
-        data.put("size", file.getFileSize());
-        data.put("contentType", file.getContentType());
-        data.put("sha256", file.getSha256());
-        data.put("status", file.getStatus());
-        data.put("expiresAt", file.getExpiresAt());
-        data.put("url", "/api/files/download/" + file.getId());
-        return data;
+    private FileVO toFileVO(ImFile file) {
+        return fileMetadataService.toFileVO(file);
     }
 
     private String contentDisposition(ImFile imFile) {

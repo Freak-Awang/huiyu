@@ -304,15 +304,6 @@
               <span>群成员</span>
             </button>
             <button
-              class="members-action-btn"
-              title="文件中心"
-              type="button"
-              @click="openFileDrawer"
-            >
-              <img :src="fileIcon" class="members-action-icon" alt="文件" />
-              <span>文件</span>
-            </button>
-            <button
               class="action-btn"
               :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
               @click="togglePin"
@@ -388,13 +379,6 @@
                       alt="图片"
                     />
                   </template>
-                  <template v-else-if="msg.messageType === 'FILE'">
-                    <div class="file-bubble" @click="downloadFile(msg.content)">
-                      <span class="file-icon">📎</span>
-                      <span class="file-info">{{ getFileInfo(msg.content).name }}</span>
-                      <span class="file-size">{{ getFileInfo(msg.content).size }}</span>
-                    </div>
-                  </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
                     <div class="sticker-bubble">
                       <template v-if="getStickerInfo(msg.content)">
@@ -449,19 +433,6 @@
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
             <button type="button" @click="replyTarget = null">✕</button>
           </div>
-          <div v-if="activeFileUpload" class="file-upload-progress">
-            <div class="file-upload-main">
-              <span class="file-upload-name">{{ activeFileUpload.name }}</span>
-              <span class="file-upload-meta">
-                {{ activeFileUpload.percent }}% · {{ formatFileSize(activeFileUpload.speed) }}/s ·
-                {{ formatRemainingSeconds(activeFileUpload.remainingSeconds) }}
-              </span>
-            </div>
-            <div class="file-upload-bar">
-              <span :style="{ width: `${activeFileUpload.percent}%` }"></span>
-            </div>
-            <button class="file-upload-cancel" type="button" @click="cancelActiveFileUpload">取消</button>
-          </div>
           <div class="input-toolbar">
             <button
               ref="emojiButtonRef"
@@ -475,10 +446,6 @@
             <label class="tool-btn" title="发送图片">
               📷
               <input type="file" accept="image/*" multiple hidden @change="onSendImage" />
-            </label>
-            <label class="tool-btn" title="发送文件">
-              <img :src="fileIcon" alt="发送文件" />
-              <input type="file" hidden @change="onSendFile" />
             </label>
             <button
               v-if="canUseDesktopScreenshot"
@@ -768,53 +735,7 @@
           <div v-if="filteredGroupMembers.length === 0" class="empty-hint">暂无成员</div>
         </div>
       </div>
-
-      <div v-if="showFileDrawer" class="member-drawer file-drawer">
-        <div class="member-drawer-header">
-          <div class="member-drawer-title">
-            <span>文件中心</span>
-            <span>{{ fileTotal }}个文件</span>
-          </div>
-          <button class="dialog-close" @click="showFileDrawer = false">✕</button>
-        </div>
-        <div class="file-filter-row">
-          <button
-            v-for="item in fileTypeOptions"
-            :key="item.value"
-            type="button"
-            :class="{ active: fileType === item.value }"
-            @click="setFileType(item.value)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-        <input
-          v-model="fileSearchKeyword"
-          class="member-search"
-          placeholder="搜索文件..."
-          @keyup.enter="loadConversationFiles"
-        />
-        <div class="file-list">
-          <button
-            v-for="file in conversationFiles"
-            :key="file.id"
-            type="button"
-            class="file-row"
-            @click="openConversationFile(file)"
-          >
-            <span class="file-row-icon">{{ isImageFile(file) ? '🖼' : '📄' }}</span>
-            <span class="file-row-main">
-              <span class="file-row-name">{{ file.originalName || '未命名文件' }}</span>
-              <span class="file-row-meta">
-                {{ file.displaySize || formatFileSize(file.size || 0) }} · {{ file.uploaderName || '未知用户' }}
-              </span>
-            </span>
-          </button>
-          <div v-if="fileLoading" class="empty-hint">加载中...</div>
-          <div v-else-if="conversationFiles.length === 0" class="empty-hint">暂无文件</div>
-        </div>
       </div>
-    </div>
 
     <!-- Create Conversation Dialog -->
     <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
@@ -968,19 +889,8 @@ import {
   searchLocalMessages,
 } from '../utils/localMessageStore'
 import {
-  LARGE_FILE_MAX_SIZE,
-  SMALL_FILE_MAX_SIZE,
-  acknowledgeFileDownload,
-  fallbackFileTransfer,
   getFileUrl,
-  initFileTransfer,
-  listConversationFiles,
-  updateFileTransferStatus,
   uploadFile,
-  uploadLargeFile,
-  type FileTransfer,
-  type LargeUploadProgress,
-  type UploadedFile,
 } from '../api/file'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
@@ -1005,15 +915,10 @@ import {
   normalizePresenceStatus,
   type PresenceStatus,
 } from '../utils/presence'
-import {
-  P2pFileTransferManager,
-  type P2pTransferProgress,
-} from '../utils/p2pFileTransfer'
 import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
 import settingsIcon from '../assets/icons/settings.svg'
 import powerIcon from '../assets/icons/power.svg'
-import fileIcon from '../assets/icons/file.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
 import screenshotIcon from '../assets/icons/screenshot.svg'
 
@@ -1034,7 +939,6 @@ const presenceMenuOpen = ref(false)
 const wsConnected = ref(false)
 
 let wsManager: WebSocketManager | null = null
-let p2pFileTransferManager: P2pFileTransferManager | null = null
 let removeNotificationOpenListener: (() => void) | null = null
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 let autoAway = false
@@ -1165,8 +1069,6 @@ const customStickerInputRef = ref<HTMLInputElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
-const activeFileUpload = ref<ActiveFileUpload | null>(null)
-let activeFileUploadAbort: AbortController | null = null
 const isSendingMessage = ref(false)
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
@@ -1189,12 +1091,6 @@ const groupSettingsName = ref('')
 const groupSettingsAnnouncement = ref('')
 const groupSettingsSaving = ref(false)
 const groupSettingsStatus = ref('')
-const showFileDrawer = ref(false)
-const fileType = ref<'all' | 'image' | 'file'>('all')
-const fileSearchKeyword = ref('')
-const conversationFiles = ref<UploadedFile[]>([])
-const fileTotal = ref(0)
-const fileLoading = ref(false)
 const chatSearchKeyword = ref('')
 const chatSearchResults = ref<Message[]>([])
 const showSearchResults = ref(false)
@@ -1206,24 +1102,12 @@ const totalUnreadCount = computed(() =>
 )
 const selfPresence = computed(() => presenceByUser.value[String(authStore.currentUser?.userId || '')] || manualPresence.value)
 const selfPresenceLabel = computed(() => getPresenceLabel(selfPresence.value))
-const fileTypeOptions: Array<{ value: 'all' | 'image' | 'file'; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'image', label: '图片' },
-  { value: 'file', label: '文件' },
-]
 interface PendingImage {
   id: string
   file: File
   previewUrl: string
   name: string
   size: number
-}
-interface ActiveFileUpload {
-  name: string
-  percent: number
-  speed: number
-  remainingSeconds: number
-  phase?: 'hashing' | 'starting' | 'uploading' | 'waiting' | 'p2p' | 'fallback' | 'completed'
 }
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
@@ -1422,7 +1306,6 @@ async function handleSelectConv(conv: any) {
     closeMentionPicker()
     closeEmojiPanel()
     showMembersDrawer.value = false
-    showFileDrawer.value = false
     lastMarkedReadMessageId = ''
     scrollToBottom(true)
     updateUnreadBadge()
@@ -1571,7 +1454,6 @@ async function openMembersDrawer() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
   showMembersDrawer.value = true
-  showFileDrawer.value = false
   memberSearch.value = ''
   memberAddKeyword.value = ''
   memberAddResults.value = []
@@ -1658,54 +1540,6 @@ async function toggleMemberRole(member: ConversationMember) {
   } catch (err: any) {
     alert(err?.response?.data?.message || '更新成员角色失败')
   }
-}
-
-async function openFileDrawer() {
-  if (!chatStore.currentConversation) return
-  showFileDrawer.value = true
-  showMembersDrawer.value = false
-  await loadConversationFiles()
-}
-
-async function setFileType(type: 'all' | 'image' | 'file') {
-  fileType.value = type
-  await loadConversationFiles()
-}
-
-async function loadConversationFiles() {
-  const conv = chatStore.currentConversation
-  if (!conv) return
-  fileLoading.value = true
-  try {
-    const res = await listConversationFiles({
-      conversationId: conv.conversationId,
-      type: fileType.value,
-      keyword: fileSearchKeyword.value.trim(),
-      page: 1,
-      pageSize: 50,
-    })
-    conversationFiles.value = res.data.records
-    fileTotal.value = res.data.total || res.data.records.length
-  } catch (err: any) {
-    alert(err?.response?.data?.message || '加载文件中心失败')
-  } finally {
-    fileLoading.value = false
-  }
-}
-
-function isImageFile(file: UploadedFile) {
-  return !!file.contentType?.startsWith('image/')
-}
-
-function openConversationFile(file: UploadedFile) {
-  if (isImageFile(file)) {
-    previewImage.value = file.url
-    return
-  }
-  acknowledgeFileDownload(file.id).catch(() => {
-    // Download still opens even if the acknowledgement cannot be recorded.
-  })
-  window.open(file.url, '_blank')
 }
 
 let addMemberSearchTimer: ReturnType<typeof setTimeout> | null = null
@@ -2236,7 +2070,6 @@ function messageReplyText(msg: Message): string {
   if (msg.status === 'RECALLED') return '消息已撤回'
   if (msg.displayContent) return msg.displayContent
   if (msg.messageType === 'IMAGE') return '[图片]'
-  if (msg.messageType === 'FILE') return '[文件]'
   if (msg.messageType === 'STICKER') return '[表情]'
   return msg.content || ''
 }
@@ -2339,7 +2172,7 @@ async function handleSendMessage() {
         const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId)
         const url = res.data.url || getFileUrl(res.data.id)
         removePendingImage(image.id)
-        sendFileMessage('IMAGE', url)
+        sendMediaMessage('IMAGE', url)
       } catch (err: any) {
         alert(err?.response?.data?.message || '上传图片失败')
         return
@@ -2372,141 +2205,7 @@ async function onSendImage(e: Event) {
   input.value = ''
 }
 
-async function onSendFile(e: Event) {
-  // 小文件直接 server upload；大文件先初始化 transfer，再按后端建议尝试 P2P 或 fallback upload。
-  const input = e.target as HTMLInputElement
-  if (!chatStore.currentConversation || !authStore.currentUser) {
-    alert('请先选择会话')
-    input.value = ''
-    return
-  }
-  const file = input.files?.[0]
-  if (!file) return
-  if (file.size > LARGE_FILE_MAX_SIZE) {
-    alert('文件超过 50GB 上限')
-    input.value = ''
-    return
-  }
-  try {
-    const convId = chatStore.currentConversation.conversationId
-    const uploaded = file.size > SMALL_FILE_MAX_SIZE
-      ? await transferLargeFileWithP2pFallback(file, chatStore.currentConversation)
-      : (await uploadFile(file, convId)).data
-    if (uploaded) {
-      const fileData = buildFileMessageContent(file, uploaded)
-      sendFileMessage('FILE', fileData)
-    }
-  } catch (err: any) {
-    alert(err?.response?.data?.message || '上传文件失败')
-  }
-  activeFileUpload.value = null
-  activeFileUploadAbort = null
-  input.value = ''
-}
-
-async function uploadLargeFileWithUi(file: File, conversationId: string, transfer?: FileTransfer): Promise<UploadedFile> {
-  activeFileUploadAbort = new AbortController()
-  activeFileUpload.value = {
-    name: file.name,
-    percent: 0,
-    speed: 0,
-    remainingSeconds: 0,
-    phase: 'starting',
-  }
-  return uploadLargeFile(file, {
-    conversationId,
-    transfer,
-    signal: activeFileUploadAbort.signal,
-    onProgress: (progress: LargeUploadProgress) => {
-      activeFileUpload.value = {
-        name: file.name,
-        percent: progress.percent,
-        speed: progress.speed,
-        remainingSeconds: progress.remainingSeconds,
-        phase: progress.status,
-      }
-    },
-  })
-}
-
-async function transferLargeFileWithP2pFallback(file: File, conversation: Conversation | null): Promise<UploadedFile | null> {
-  // P2P 成功时不创建文件中心消息；失败时沿用同一个 transferId 回退到 server chunk upload。
-  if (!conversation) {
-    throw new Error('conversation is required')
-  }
-  const receiverId = getSingleConversationPeerId(conversation)
-  const transfer = (await initFileTransfer({
-    conversationId: conversation.conversationId,
-    receiverId,
-    fileName: file.name,
-    fileSize: file.size,
-    contentType: file.type,
-    preferredMode: 'AUTO',
-    archiveRequired: false,
-  })).data
-
-  if (transfer.mode === 'P2P' && receiverId && wsManager?.isConnected() && p2pFileTransferManager) {
-    try {
-      await updateFileTransferStatus(transfer.transferId, { status: 'P2P_TRANSFERRING' })
-      await p2pFileTransferManager.startSender(file, transfer, conversation.conversationId, receiverId)
-      await updateFileTransferStatus(transfer.transferId, { status: 'P2P_COMPLETED' })
-      activeFileUpload.value = null
-      alert('P2P file transfer completed')
-      return null
-    } catch (error: any) {
-      await fallbackFileTransfer(transfer.transferId, error?.message || 'p2p failed').catch(() => undefined)
-      activeFileUpload.value = {
-        name: file.name,
-        percent: 0,
-        speed: 0,
-        remainingSeconds: 0,
-        phase: 'fallback',
-      }
-      return uploadLargeFileWithUi(file, conversation.conversationId, transfer)
-    }
-  }
-
-  return uploadLargeFileWithUi(file, conversation.conversationId, transfer)
-}
-
-function getSingleConversationPeerId(conversation: Conversation | null): string | undefined {
-  if (!conversation || conversation.type !== 'SINGLE') return undefined
-  const currentUserId = String(authStore.currentUser?.userId || '')
-  return conversation.members?.find((member) => String(member.userId) !== currentUserId)?.userId
-}
-
-function applyP2pProgress(progress: P2pTransferProgress) {
-  activeFileUpload.value = {
-    name: progress.name,
-    percent: progress.percent,
-    speed: progress.speed,
-    remainingSeconds: progress.remainingSeconds,
-    phase: progress.phase,
-  }
-}
-
-function cancelActiveFileUpload() {
-  activeFileUploadAbort?.abort()
-  p2pFileTransferManager?.abortAll()
-  activeFileUpload.value = null
-}
-
-function buildFileMessageContent(file: File, uploaded: UploadedFile): string {
-  const fileId = uploaded.id
-  return JSON.stringify({
-    fileId,
-    name: uploaded.originalName || file.name,
-    url: uploaded.url || getFileUrl(fileId),
-    size: uploaded.size || file.size,
-    displaySize: uploaded.displaySize || formatFileSize(uploaded.size || file.size),
-    contentType: uploaded.contentType || file.type,
-    sha256: uploaded.sha256,
-    status: uploaded.status || 'AVAILABLE',
-    expiresAt: uploaded.expiresAt,
-  })
-}
-
-function sendFileMessage(type: string, content: string) {
+function sendMediaMessage(type: string, content: string) {
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
 
@@ -2529,18 +2228,11 @@ function sendFileMessage(type: string, content: string) {
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
-  if (showFileDrawer.value) {
-    void loadConversationFiles()
-  }
   scrollToBottom(true)
 }
 
 // WebSocket message handler
 async function handleWsMessage(msg: WsMessage) {
-  // P2P signaling is consumed before chat command dispatch so file negotiation does not leak into message handling.
-  if (p2pFileTransferManager?.handleMessage(msg)) {
-    return
-  }
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
       // Incoming messages update conversation state, ACK delivery, optionally notify, then only auto-scroll if user was at bottom.
@@ -2670,8 +2362,6 @@ function initWebSocket() {
   if (wsManager) {
     wsManager.disconnect()
   }
-  p2pFileTransferManager?.abortAll()
-  p2pFileTransferManager = null
   const token = authStore.token
   if (!token) return
   wsManager = new WebSocketManager(token, handleWsMessage, (connected) => {
@@ -2691,12 +2381,6 @@ function initWebSocket() {
         })
       }
     }
-  })
-  p2pFileTransferManager = new P2pFileTransferManager({
-    currentUserId: () => authStore.currentUser?.userId,
-    sendWs: (cmd, data) => wsManager?.send(cmd, data) || false,
-    onProgress: applyP2pProgress,
-    onNotice: (message) => alert(message),
   })
   wsManager.connect()
 }
@@ -2860,28 +2544,6 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)}GB`
 }
 
-function formatRemainingSeconds(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '即将完成'
-  if (seconds < 60) return `剩余 ${Math.ceil(seconds)} 秒`
-  if (seconds < 3600) return `剩余 ${Math.ceil(seconds / 60)} 分钟`
-  return `剩余 ${(seconds / 3600).toFixed(1)} 小时`
-}
-
-function getFileInfo(content: string): { name: string; size: string; url: string; status?: string; expiresAt?: string } {
-  try {
-    const parsed = JSON.parse(content)
-    return {
-      name: parsed.name || parsed.originalName || content,
-      size: parsed.displaySize || (typeof parsed.size === 'number' ? formatFileSize(parsed.size) : parsed.size || ''),
-      url: parsed.url || (parsed.fileId ? getFileUrl(String(parsed.fileId)) : ''),
-      status: parsed.status,
-      expiresAt: parsed.expiresAt,
-    }
-  } catch {
-    return { name: content, size: '', url: '' }
-  }
-}
-
 function updateUnreadBadge() {
   if (!window.imDesktop?.setUnreadBadge) return
   window.imDesktop.setUnreadBadge(totalUnreadCount.value).catch(() => {
@@ -2901,21 +2563,7 @@ async function openConversationFromNotification(conversationId: string) {
   }
 }
 
-function downloadFile(content: string) {
-  const info = getFileInfo(content)
-  if (info.url) {
-    const match = info.url.match(/\/api\/files\/download\/([^/?#]+)/)
-    if (match?.[1]) {
-      acknowledgeFileDownload(match[1]).catch(() => {
-        // Download still opens even if the acknowledgement cannot be recorded.
-      })
-    }
-    window.open(info.url, '_blank')
-  }
-}
-
 async function handleLogout() {
-  p2pFileTransferManager?.abortAll()
   wsManager?.disconnect()
   if (window.imDesktop?.setUnreadBadge) {
     await window.imDesktop.setUnreadBadge(0).catch(() => false)
@@ -2963,7 +2611,6 @@ onUnmounted(() => {
   removeNotificationOpenListener = null
   clearPendingImages()
   revokeCustomStickerUrls()
-  p2pFileTransferManager?.abortAll()
   wsManager?.disconnect()
 })
 
@@ -2975,7 +2622,6 @@ watch(
     memberSearch.value = ''
     memberAddKeyword.value = ''
     memberAddResults.value = []
-    showFileDrawer.value = false
     clearPendingImages()
     closeMentionPicker()
     closeEmojiPanel()
@@ -3772,30 +3418,9 @@ watch(
   color: #999;
 }
 
-.file-bubble {
-  background: #fff;
-  padding: 10px 14px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  font-size: 13px;
-}
 
-.file-icon {
-  font-size: 24px;
-}
 
-.file-info {
-  color: #667eea;
-}
 
-.file-size {
-  color: #999;
-  font-size: 11px;
-}
 
 .message-time {
   font-size: 11px;
@@ -3858,67 +3483,12 @@ watch(
   padding-bottom: 6px;
 }
 
-.file-upload-progress {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 12px;
-  align-items: center;
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #f8fafc;
-}
 
-.file-upload-main {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
 
-.file-upload-name {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.file-upload-meta {
-  flex-shrink: 0;
-  color: #64748b;
-  font-size: 12px;
-}
 
-.file-upload-bar {
-  grid-column: 1 / 2;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e2e8f0;
-}
 
-.file-upload-bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #2563eb;
-  transition: width 0.2s ease;
-}
 
-.file-upload-cancel {
-  grid-column: 2 / 3;
-  grid-row: 1 / 3;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 5px 10px;
-}
 
 .tool-btn {
   cursor: pointer;
@@ -4463,80 +4033,16 @@ watch(
   padding: 5px 8px;
 }
 
-.file-drawer {
-  width: 360px;
-}
 
-.file-filter-row {
-  display: flex;
-  gap: 6px;
-  padding: 12px 12px 0;
-}
 
-.file-filter-row button {
-  border: none;
-  border-radius: 6px;
-  background: #f0f0f0;
-  color: #666;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 6px 12px;
-}
 
-.file-filter-row button.active {
-  background: #667eea;
-  color: #fff;
-}
 
-.file-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 10px 12px;
-}
 
-.file-row {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  gap: 10px;
-  min-height: 58px;
-  padding: 8px;
-  text-align: left;
-  width: 100%;
-}
 
-.file-row:hover {
-  background: #f5f6fb;
-}
 
-.file-row-icon {
-  font-size: 24px;
-  width: 30px;
-}
 
-.file-row-main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
 
-.file-row-name {
-  color: #333;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.file-row-meta {
-  color: #999;
-  font-size: 11px;
-}
 
 /* Dialog */
 .dialog-overlay {
@@ -4777,7 +4283,6 @@ watch(
 }
 
 .dark-theme .text-bubble,
-.dark-theme .file-bubble,
 .dark-theme .reply-target {
   background: #303642;
   color: #edf0f5;

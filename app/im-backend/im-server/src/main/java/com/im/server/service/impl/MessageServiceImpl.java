@@ -20,7 +20,6 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
-import com.im.server.service.FileService;
 import com.im.server.service.MessageService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +39,8 @@ public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
     private static final String MESSAGE_TYPE_TEXT = "TEXT";
+    private static final String MESSAGE_TYPE_IMAGE = "IMAGE";
+    private static final String MESSAGE_TYPE_STICKER = "STICKER";
     private static final String MENTION_TYPE_ALL = "all";
     private static final String MENTION_ALL_USER_ID = "__ALL__";
 
@@ -60,9 +61,6 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired
     private WebSocketSessionManager sessionManager;
-
-    @Autowired
-    private FileService fileService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -133,8 +131,8 @@ public class MessageServiceImpl implements MessageService {
         if (member == null) {
             throw new BusinessException("Not a member of this conversation");
         }
+        validateSupportedMessageType(request);
         validateAllMentionPermission(request, member);
-        validateFileMessage(senderId, request);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
             // clientMsgId provides idempotency for retries from unstable network or desktop resume.
@@ -496,20 +494,15 @@ public class MessageServiceImpl implements MessageService {
         try {
             JsonNode node = objectMapper.readTree(content);
             switch (messageType) {
-                case "TEXT":
+                case MESSAGE_TYPE_TEXT:
                     if (node.has("text")) {
                         String text = node.get("text").asText();
                         return text.length() > 50 ? text.substring(0, 50) : text;
                     }
                     break;
-                case "IMAGE":
+                case MESSAGE_TYPE_IMAGE:
                     return "[图片]";
-                case "FILE":
-                    if (node.has("name")) {
-                        return "[文件] " + node.get("name").asText();
-                    }
-                    return "[文件]";
-                case "STICKER":
+                case MESSAGE_TYPE_STICKER:
                     if (node.has("name")) {
                         return "[表情] " + node.get("name").asText();
                     }
@@ -538,6 +531,16 @@ public class MessageServiceImpl implements MessageService {
         if (!"owner".equals(role) && !"admin".equals(role)) {
             throw new BusinessException(403, "只有群主和群管理员可以@所有人");
         }
+    }
+
+    private void validateSupportedMessageType(SendMessageRequest request) {
+        String messageType = request.getMessageType();
+        if (MESSAGE_TYPE_TEXT.equalsIgnoreCase(messageType)
+                || MESSAGE_TYPE_IMAGE.equalsIgnoreCase(messageType)
+                || MESSAGE_TYPE_STICKER.equalsIgnoreCase(messageType)) {
+            return;
+        }
+        throw new BusinessException(400, "Unsupported message type");
     }
 
     private boolean containsAllMention(String content) {
@@ -570,9 +573,4 @@ public class MessageServiceImpl implements MessageService {
         return userId != null && MENTION_ALL_USER_ID.equals(userId.asText());
     }
 
-    private void validateFileMessage(Long senderId, SendMessageRequest request) {
-        if ("FILE".equalsIgnoreCase(request.getMessageType())) {
-            fileService.validateFileMessage(senderId, request.getConversationId(), request.getContent());
-        }
-    }
 }

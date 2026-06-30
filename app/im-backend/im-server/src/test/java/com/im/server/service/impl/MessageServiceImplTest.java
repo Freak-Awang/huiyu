@@ -109,6 +109,18 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void fileMessageIsRejected() {
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
+
+        assertThatThrownBy(() -> messageService.sendMessage(10L, fileMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Unsupported message type")
+                .extracting("code")
+                .isEqualTo(400);
+        verifyNoInteractions(messageMapper);
+    }
+
+    @Test
     void getMessagesIncludesSenderSignature() {
         ImMessage message = new ImMessage();
         message.setId(100L);
@@ -167,6 +179,14 @@ class MessageServiceImplTest {
         conversation.setId(1L);
         conversation.setType(type);
         return conversation;
+    }
+
+    private SendMessageRequest fileMessageRequest() {
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("FILE");
+        request.setContent("{\"fileId\":1}");
+        return request;
     }
 
     private ImConversationMember member(Long userId, String role) {
