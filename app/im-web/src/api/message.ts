@@ -8,7 +8,7 @@ export interface Message {
   senderName: string
   senderAvatar: string
   senderSignature: string
-  messageType: 'TEXT' | 'IMAGE' | 'STICKER'
+  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content: string
   displayContent: string
   mentions: MessageMention[]
@@ -66,7 +66,7 @@ export interface RawMessage {
   senderName?: string | null
   senderAvatar?: string | null
   senderSignature?: string | null
-  messageType?: 'TEXT' | 'IMAGE' | 'STICKER'
+  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
   content?: string | null
   clientMsgId?: string | null
   createTime?: string | null
@@ -102,7 +102,11 @@ export function normalizeMessage(raw: RawMessage): Message {
     senderSignature: raw.senderSignature || '',
     messageType,
     content,
-    displayContent: messageType === 'STICKER' ? parseStickerDisplayName(content) : parsedText.text,
+    displayContent: messageType === 'STICKER'
+      ? parseStickerDisplayName(content)
+      : messageType === 'FILE'
+        ? parseFileDisplayName(content)
+        : parsedText.text,
     mentions: parsedText.mentions,
     clientMsgId: raw.clientMsgId || undefined,
     createdAt: timestamp,
@@ -140,6 +144,18 @@ function parseStickerDisplayName(content: string): string {
     return '表情加载失败'
   }
   return '表情加载失败'
+}
+
+function parseFileDisplayName(content: string): string {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object' && typeof parsed.fileName === 'string') {
+      return `[文件] ${parsed.fileName}`
+    }
+  } catch {
+    // Old or malformed file messages fall back to the raw payload.
+  }
+  return '[文件]'
 }
 
 export function buildTextMessageContent(

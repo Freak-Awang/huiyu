@@ -379,6 +379,22 @@
                       alt="图片"
                     />
                   </template>
+                  <template v-else-if="msg.messageType === 'FILE'">
+                    <a
+                      class="file-bubble"
+                      :href="getFileInfo(msg.content).url"
+                      target="_blank"
+                      rel="noopener"
+                      :download="getFileInfo(msg.content).fileName"
+                    >
+                      <span class="file-bubble-icon">📎</span>
+                      <span class="file-bubble-main">
+                        <span class="file-bubble-name">{{ getFileInfo(msg.content).fileName }}</span>
+                        <span class="file-bubble-meta">{{ formatFileSize(getFileInfo(msg.content).fileSize) }}</span>
+                      </span>
+                      <span class="file-bubble-action">下载</span>
+                    </a>
+                  </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
                     <div class="sticker-bubble">
                       <template v-if="getStickerInfo(msg.content)">
@@ -447,6 +463,10 @@
               📷
               <input type="file" accept="image/*" multiple hidden @change="onSendImage" />
             </label>
+            <label class="tool-btn" title="发送文件">
+              📎
+              <input type="file" multiple hidden @change="onSendFile" />
+            </label>
             <button
               v-if="canUseDesktopScreenshot"
               class="tool-btn"
@@ -471,6 +491,24 @@
                 class="pending-image-remove"
                 :disabled="isSendingMessage"
                 @click="removePendingImage(image.id)"
+              >×</button>
+            </div>
+          </div>
+          <div v-if="pendingFiles.length" class="pending-file-list">
+            <div
+              v-for="item in pendingFiles"
+              :key="item.id"
+              class="pending-file-item"
+              :title="`${item.name} (${formatFileSize(item.size)})`"
+            >
+              <span class="pending-file-icon">📎</span>
+              <span class="pending-file-name">{{ item.name }}</span>
+              <span class="pending-file-size">{{ formatFileSize(item.size) }}</span>
+              <button
+                type="button"
+                class="pending-file-remove"
+                :disabled="isSendingMessage"
+                @click="removePendingFile(item.id)"
               >×</button>
             </div>
           </div>
@@ -1069,6 +1107,7 @@ const customStickerInputRef = ref<HTMLInputElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
+const pendingFiles = ref<PendingFile[]>([])
 const isSendingMessage = ref(false)
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
@@ -1106,6 +1145,13 @@ interface PendingImage {
   id: string
   file: File
   previewUrl: string
+  name: string
+  size: number
+}
+
+interface PendingFile {
+  id: string
+  file: File
   name: string
   size: number
 }
@@ -1360,6 +1406,27 @@ function clearPendingImages() {
     URL.revokeObjectURL(image.previewUrl)
   }
   pendingImages.value = []
+}
+
+function addPendingFiles(files: File[]) {
+  if (!files.length) return
+
+  pendingFiles.value.push(
+    ...files.map((file) => ({
+      id: generateId(),
+      file,
+      name: file.name || 'file',
+      size: file.size,
+    }))
+  )
+}
+
+function removePendingFile(id: string) {
+  pendingFiles.value = pendingFiles.value.filter((item) => item.id !== id)
+}
+
+function clearPendingFiles() {
+  pendingFiles.value = []
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string): File {
@@ -1830,6 +1897,24 @@ function getImageUrl(content: string): string {
   return content
 }
 
+function getFileInfo(content: string): { fileId: string; fileName: string; fileSize: number; url: string } {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object') {
+      const fileId = String(parsed.fileId || '')
+      return {
+        fileId,
+        fileName: String(parsed.fileName || '文件'),
+        fileSize: Number(parsed.fileSize || 0),
+        url: String(parsed.downloadUrl || parsed.url || (fileId ? getFileUrl(fileId) : '#')),
+      }
+    }
+  } catch {
+    // Fall through to a disabled fallback card.
+  }
+  return { fileId: '', fileName: '文件', fileSize: 0, url: '#' }
+}
+
 function rememberEmoji(emoji: string) {
   recentEmojis.value = [emoji, ...recentEmojis.value.filter((item) => item !== emoji)].slice(0, 24)
   localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(recentEmojis.value))
@@ -2070,6 +2155,7 @@ function messageReplyText(msg: Message): string {
   if (msg.status === 'RECALLED') return '消息已撤回'
   if (msg.displayContent) return msg.displayContent
   if (msg.messageType === 'IMAGE') return '[图片]'
+  if (msg.messageType === 'FILE') return `[文件] ${getFileInfo(msg.content).fileName}`
   if (msg.messageType === 'STICKER') return '[表情]'
   return msg.content || ''
 }
@@ -2154,11 +2240,12 @@ function sendTextMessage() {
 }
 
 async function handleSendMessage() {
-  // 发送入口统一处理图片草稿和文本，保证一次点击可以先上传图片再发送文本消息。
   if (isSendingMessage.value) return
+  // Upload media first so chat messages only reference persisted file metadata.
   const hasText = !!messageText.value.trim()
   const hasImages = pendingImages.value.length > 0
-  if (!hasText && !hasImages) return
+  const hasFiles = pendingFiles.value.length > 0
+  if (!hasText && !hasImages && !hasFiles) return
 
   if (!chatStore.currentConversation || !authStore.currentUser) {
     alert('请先选择会话')
@@ -2169,12 +2256,32 @@ async function handleSendMessage() {
   try {
     for (const image of [...pendingImages.value]) {
       try {
-        const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId)
+        const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId, 'image')
         const url = res.data.url || getFileUrl(res.data.id)
         removePendingImage(image.id)
         sendMediaMessage('IMAGE', url)
       } catch (err: any) {
         alert(err?.response?.data?.message || '上传图片失败')
+        return
+      }
+    }
+
+    for (const item of [...pendingFiles.value]) {
+      try {
+        const res = await uploadFile(item.file, chatStore.currentConversation?.conversationId, 'file')
+        const fileContent = {
+          fileId: res.data.id,
+          fileName: res.data.originalName || item.name,
+          fileSize: res.data.size || item.size,
+          contentType: res.data.contentType || item.file.type || 'application/octet-stream',
+          sha256: res.data.sha256,
+          transferMode: res.data.transferMode || 'object_storage',
+          downloadUrl: res.data.downloadUrl || res.data.url || getFileUrl(res.data.id),
+        }
+        removePendingFile(item.id)
+        sendMediaMessage('FILE', JSON.stringify(fileContent), `[文件] ${fileContent.fileName}`)
+      } catch (err: any) {
+        alert(err?.response?.data?.message || '上传文件失败')
         return
       }
     }
@@ -2205,7 +2312,21 @@ async function onSendImage(e: Event) {
   input.value = ''
 }
 
-function sendMediaMessage(type: string, content: string) {
+async function onSendFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!chatStore.currentConversation || !authStore.currentUser) {
+    alert('请选择会话')
+    input.value = ''
+    return
+  }
+  const files = Array.from(input.files || [])
+  if (files.length) {
+    addPendingFiles(files)
+  }
+  input.value = ''
+}
+
+function sendMediaMessage(type: string, content: string, displayContent = content) {
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) return
 
@@ -2219,7 +2340,7 @@ function sendMediaMessage(type: string, content: string) {
     senderSignature: authStore.currentUser.signature || '',
     messageType: type as any,
     content,
-    displayContent: content,
+    displayContent,
     mentions: [],
     clientMsgId,
     createdAt: new Date().toISOString(),
@@ -2610,6 +2731,7 @@ onUnmounted(() => {
   removeNotificationOpenListener?.()
   removeNotificationOpenListener = null
   clearPendingImages()
+  clearPendingFiles()
   revokeCustomStickerUrls()
   wsManager?.disconnect()
 })
@@ -2623,6 +2745,7 @@ watch(
     memberAddKeyword.value = ''
     memberAddResults.value = []
     clearPendingImages()
+    clearPendingFiles()
     closeMentionPicker()
     closeEmojiPanel()
   }
@@ -3399,6 +3522,63 @@ watch(
   object-fit: cover;
 }
 
+.file-bubble {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e4e7f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  color: #333;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+.file-bubble:hover {
+  border-color: #c8cef8;
+  background: #fbfcff;
+}
+
+.file-bubble-icon {
+  align-items: center;
+  background: #eef0ff;
+  border-radius: 7px;
+  color: #4f63d8;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.file-bubble-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-bubble-name {
+  color: #333;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-bubble-meta,
+.file-bubble-action {
+  color: #8a8f99;
+  font-size: 12px;
+}
+
+.file-bubble-action {
+  color: #4f63d8;
+  white-space: nowrap;
+}
+
 .sticker-bubble {
   display: flex;
   flex-direction: column;
@@ -3559,6 +3739,64 @@ watch(
 }
 
 .pending-image-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pending-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 110px;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+
+.pending-file-item {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d8dce8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 24px minmax(0, 1fr) auto 24px;
+  min-height: 38px;
+  padding: 6px 8px;
+}
+
+.pending-file-icon {
+  color: #4f63d8;
+  text-align: center;
+}
+
+.pending-file-name {
+  color: #333;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-file-size {
+  color: #8a8f99;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pending-file-remove {
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0;
+  width: 20px;
+}
+
+.pending-file-remove:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

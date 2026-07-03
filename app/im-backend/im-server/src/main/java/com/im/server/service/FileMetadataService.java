@@ -108,6 +108,8 @@ public class FileMetadataService {
         vo.setSha256(file.getSha256());
         vo.setStatus(file.getStatus());
         vo.setUrl("/api/files/download/" + file.getId());
+        vo.setDownloadUrl(vo.getUrl());
+        vo.setTransferMode("object_storage");
         vo.setConversationId(file.getConversationId());
         vo.setUploaderId(file.getUploaderId());
         SysUser uploader = userMapper.selectById(file.getUploaderId());

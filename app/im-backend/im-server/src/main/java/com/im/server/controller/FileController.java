@@ -1,6 +1,9 @@
 package com.im.server.controller;
 
 import com.im.common.dto.FileVO;
+import com.im.common.dto.FileUploadCompleteRequest;
+import com.im.common.dto.FileUploadTaskCreateRequest;
+import com.im.common.dto.FileUploadTaskVO;
 import com.im.common.entity.ImFile;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
@@ -8,6 +11,7 @@ import com.im.common.result.Result;
 import com.im.server.service.FileDownloadService;
 import com.im.server.service.FileMetadataService;
 import com.im.server.service.FileUploadService;
+import com.im.server.service.FileUploadTaskService;
 import com.im.server.service.UserService;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.core.io.InputStreamResource;
@@ -20,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -37,16 +42,19 @@ import java.nio.charset.StandardCharsets;
 public class FileController {
 
     private final FileUploadService fileUploadService;
+    private final FileUploadTaskService fileUploadTaskService;
     private final FileDownloadService fileDownloadService;
     private final FileMetadataService fileMetadataService;
     private final UserService userService;
 
     public FileController(
             FileUploadService fileUploadService,
+            FileUploadTaskService fileUploadTaskService,
             FileDownloadService fileDownloadService,
             FileMetadataService fileMetadataService,
             UserService userService) {
         this.fileUploadService = fileUploadService;
+        this.fileUploadTaskService = fileUploadTaskService;
         this.fileDownloadService = fileDownloadService;
         this.fileMetadataService = fileMetadataService;
         this.userService = userService;
@@ -55,11 +63,17 @@ public class FileController {
     @PostMapping("/upload")
     public Result<FileVO> upload(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "conversationId", required = false) Long conversationId) {
+            @RequestParam(value = "conversationId", required = false) Long conversationId,
+            @RequestParam(value = "category", required = false, defaultValue = "file") String category) {
         Long userId = getCurrentUserId();
-        ImFile result = conversationId != null
-                ? fileUploadService.uploadConversationImage(file, userId, conversationId)
-                : fileUploadService.uploadStandaloneImage(file, userId);
+        ImFile result;
+        if ("image".equalsIgnoreCase(category)) {
+            result = conversationId != null
+                    ? fileUploadService.uploadConversationImage(file, userId, conversationId)
+                    : fileUploadService.uploadStandaloneImage(file, userId);
+        } else {
+            result = fileUploadService.uploadConversationFile(file, userId, conversationId);
+        }
         return Result.success(toFileVO(result));
     }
 
@@ -72,6 +86,32 @@ public class FileController {
         user.setAvatar("/api/files/download/" + result.getId());
         userService.update(user);
 
+        return Result.success(toFileVO(result));
+    }
+
+    @PostMapping("/upload/tasks")
+    public Result<FileUploadTaskVO> createUploadTask(@RequestBody FileUploadTaskCreateRequest request) {
+        return Result.success(fileUploadTaskService.createTask(request, getCurrentUserId()));
+    }
+
+    @PostMapping("/upload/tasks/{uploadId}/parts/{partNumber}")
+    public Result<FileUploadTaskVO> uploadPart(
+            @PathVariable String uploadId,
+            @PathVariable Integer partNumber,
+            @RequestParam("file") MultipartFile file) {
+        return Result.success(fileUploadTaskService.uploadPart(uploadId, partNumber, file, getCurrentUserId()));
+    }
+
+    @GetMapping("/upload/tasks/{uploadId}/parts")
+    public Result<FileUploadTaskVO> getUploadParts(@PathVariable String uploadId) {
+        return Result.success(fileUploadTaskService.getTaskParts(uploadId, getCurrentUserId()));
+    }
+
+    @PostMapping("/upload/tasks/{uploadId}/complete")
+    public Result<FileVO> completeUploadTask(
+            @PathVariable String uploadId,
+            @RequestBody(required = false) FileUploadCompleteRequest request) {
+        ImFile result = fileUploadTaskService.completeTask(uploadId, request, getCurrentUserId());
         return Result.success(toFileVO(result));
     }
 

@@ -11,6 +11,8 @@ export interface FileVO {
   sha256?: string
   status?: string
   expiresAt?: string
+  downloadUrl?: string
+  transferMode?: string
   conversationId?: string
   uploaderId?: string
   uploaderName?: string
@@ -28,6 +30,8 @@ interface RawFileVO {
   sha256?: string
   status?: string
   expiresAt?: string
+  downloadUrl?: string
+  transferMode?: string
   conversationId?: number | string
   uploaderId?: number | string
   uploaderName?: string
@@ -51,6 +55,8 @@ function normalizeFileVO(raw: RawFileVO): FileVO {
     sha256: raw.sha256,
     status: raw.status,
     expiresAt: raw.expiresAt,
+    downloadUrl: apiAssetUrl(raw.downloadUrl || raw.url || `/api/files/download/${id}`),
+    transferMode: raw.transferMode,
     conversationId: raw.conversationId != null ? String(raw.conversationId) : undefined,
     uploaderId: raw.uploaderId != null ? String(raw.uploaderId) : undefined,
     uploaderName: raw.uploaderName,
@@ -60,10 +66,11 @@ function normalizeFileVO(raw: RawFileVO): FileVO {
   }
 }
 
-export function uploadFile(file: File, conversationId?: string) {
+export function uploadFile(file: File, conversationId?: string, category: 'file' | 'image' = 'file') {
   const formData = new FormData()
   formData.append('file', file)
   if (conversationId) formData.append('conversationId', conversationId)
+  formData.append('category', category)
   return http.post('/api/files/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,

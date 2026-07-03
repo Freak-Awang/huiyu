@@ -17,6 +17,8 @@ public class FileVO {
     private String sha256;
     private String status;
     private String url;
+    private String downloadUrl;
+    private String transferMode;
     private Long conversationId;
     private Long uploaderId;
     private String uploaderName;

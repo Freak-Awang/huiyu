@@ -48,7 +48,7 @@ class FileUploadServiceTest {
                 eq("image/png"),
                 eq(10L),
                 eq(20L),
-                isNull(),
+                anyString(),
                 eq("minio"),
                 eq("im-files"),
                 eq(false),
@@ -69,7 +69,31 @@ class FileUploadServiceTest {
                 eq("image/png"),
                 eq(10L),
                 isNull(),
-                isNull(),
+                anyString(),
+                eq("minio"),
+                eq("im-files"),
+                eq(false),
+                isNull());
+    }
+
+    @Test
+    void conversationFileUploadAcceptsNonImageFile() throws Exception {
+        when(properties.getMaxSize()).thenReturn(104857600L);
+        when(storageClient.storageType()).thenReturn("minio");
+        when(storageClient.bucket()).thenReturn("im-files");
+
+        fileUploadService.uploadConversationFile(file("report.pdf"), 10L, 20L);
+
+        verify(metadataService).assertConversationMember(10L, 20L);
+        verify(storageClient).save(anyString(), any());
+        verify(metadataService).createAvailableFile(
+                eq("report.pdf"),
+                anyString(),
+                eq(5L),
+                eq("application/pdf"),
+                eq(10L),
+                eq(20L),
+                anyString(),
                 eq("minio"),
                 eq("im-files"),
                 eq(false),

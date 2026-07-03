@@ -9,11 +9,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.UUID;
 
 /**
- * Intent: FileUploadService owns media uploads that remain after chat file attachments were removed.
+ * Intent: FileUploadService owns direct uploads for chat attachments, images, and avatars.
  */
 @Service
 public class FileUploadService {
@@ -37,6 +40,15 @@ public class FileUploadService {
     }
 
     @Transactional
+    public ImFile uploadConversationFile(MultipartFile file, Long uploaderId, Long conversationId) {
+        if (conversationId == null) {
+            throw new BusinessException(400, "conversationId is required");
+        }
+        metadataService.assertConversationMember(uploaderId, conversationId);
+        return uploadFile(file, uploaderId, conversationId, false);
+    }
+
+    @Transactional
     public ImFile uploadConversationImage(MultipartFile file, Long uploaderId, Long conversationId) {
         if (conversationId == null) {
             throw new BusinessException(400, "conversationId is required");
@@ -52,9 +64,19 @@ public class FileUploadService {
 
     private ImFile uploadImage(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
         validateImageUpload(file);
+        return storeFile(file, uploaderId, conversationId, temporary, true);
+    }
+
+    private ImFile uploadFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
+        validateFileUpload(file);
+        return storeFile(file, uploaderId, conversationId, temporary, false);
+    }
+
+    private ImFile storeFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary, boolean imageOnly) {
         try {
             String originalName = safeName(file.getOriginalFilename());
             String objectKey = finalObjectKey(originalName);
+            String sha256 = sha256(file);
             storageClient.save(objectKey, file);
             return metadataService.createAvailableFile(
                     originalName,
@@ -63,13 +85,13 @@ public class FileUploadService {
                     file.getContentType(),
                     uploaderId,
                     conversationId,
-                    null,
+                    sha256,
                     storageClient.storageType(),
                     storageClient.bucket(),
                     temporary,
                     temporary ? LocalDateTime.now().plusDays(properties.getRetentionDays()) : null);
         } catch (Exception e) {
-            throw new BusinessException("Failed to upload file: " + e.getMessage());
+            throw new BusinessException("Failed to upload " + (imageOnly ? "image" : "file") + ": " + e.getMessage());
         }
     }
 
@@ -79,6 +101,10 @@ public class FileUploadService {
         if (!StringUtils.hasText(contentType) || !contentType.startsWith("image/")) {
             throw new BusinessException(415, "Only image uploads are supported");
         }
+    }
+
+    private void validateFileUpload(MultipartFile file) {
+        validateUploadSize(file.getSize(), properties.getMaxSize(), "File exceeds upload size limit");
     }
 
     private void validateUploadSize(long size, long maxSize, String message) {
@@ -102,6 +128,18 @@ public class FileUploadService {
     private String safeName(String name) {
         String value = StringUtils.hasText(name) ? name : "file";
         return value.replace("\\", "_").replace("/", "_");
+    }
+
+    private String sha256(MultipartFile file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[8192];
+        try (InputStream input = file.getInputStream()) {
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
 }

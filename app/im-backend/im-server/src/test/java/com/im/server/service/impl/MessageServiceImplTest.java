@@ -4,6 +4,7 @@ import com.im.common.dto.SendMessageRequest;
 import com.im.common.result.PageResult;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
+import com.im.common.entity.ImFile;
 import com.im.common.entity.ImMessage;
 import com.im.common.dto.MessageVO;
 import com.im.common.exception.BusinessException;
@@ -13,6 +14,7 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
+import com.im.server.service.FileMetadataService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +51,9 @@ class MessageServiceImplTest {
 
     @Mock
     private WebSocketSessionManager sessionManager;
+
+    @Mock
+    private FileMetadataService fileMetadataService;
 
     @InjectMocks
     private MessageServiceImpl messageService;
@@ -109,15 +114,27 @@ class MessageServiceImplTest {
     }
 
     @Test
-    void fileMessageIsRejected() {
+    void malformedFileMessageIsRejected() {
         when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
 
         assertThatThrownBy(() -> messageService.sendMessage(10L, fileMessageRequest()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("Unsupported message type")
+                .hasMessage("Invalid file message content")
                 .extracting("code")
                 .isEqualTo(400);
         verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void validFileMessageIsSent() {
+        arrangeSend("member", 2);
+        when(fileMetadataService.getById(1L)).thenReturn(file(1L, 1L));
+
+        ImMessage message = messageService.sendMessage(10L, validFileMessageRequest());
+
+        assertThat(message.getMessageType()).isEqualTo("FILE");
+        assertThat(message.getContent()).contains("\"fileName\":\"report.pdf\"");
+        verify(messageMapper).insert(any(ImMessage.class));
     }
 
     @Test
@@ -187,6 +204,22 @@ class MessageServiceImplTest {
         request.setMessageType("FILE");
         request.setContent("{\"fileId\":1}");
         return request;
+    }
+
+    private SendMessageRequest validFileMessageRequest() {
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("FILE");
+        request.setContent("{\"fileId\":1,\"fileName\":\"report.pdf\",\"fileSize\":5,\"transferMode\":\"object_storage\"}");
+        return request;
+    }
+
+    private ImFile file(Long fileId, Long conversationId) {
+        ImFile file = new ImFile();
+        file.setId(fileId);
+        file.setConversationId(conversationId);
+        file.setStatus(FileMetadataService.STATUS_AVAILABLE);
+        return file;
     }
 
     private ImConversationMember member(Long userId, String role) {

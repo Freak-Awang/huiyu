@@ -10,6 +10,7 @@ import com.im.common.dto.MessageVO;
 import com.im.common.dto.SendMessageRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
+import com.im.common.entity.ImFile;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.ImMessageDelivery;
 import com.im.common.entity.SysUser;
@@ -20,6 +21,7 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
+import com.im.server.service.FileMetadataService;
 import com.im.server.service.MessageService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,7 @@ public class MessageServiceImpl implements MessageService {
     private static final int RECALL_LIMIT_MINUTES = 2;
     private static final String MESSAGE_TYPE_TEXT = "TEXT";
     private static final String MESSAGE_TYPE_IMAGE = "IMAGE";
+    private static final String MESSAGE_TYPE_FILE = "FILE";
     private static final String MESSAGE_TYPE_STICKER = "STICKER";
     private static final String MENTION_TYPE_ALL = "all";
     private static final String MENTION_ALL_USER_ID = "__ALL__";
@@ -61,6 +64,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired
     private WebSocketSessionManager sessionManager;
+
+    @Autowired
+    private FileMetadataService fileMetadataService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -132,6 +138,7 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException("Not a member of this conversation");
         }
         validateSupportedMessageType(request);
+        validateFileMessage(request);
         validateAllMentionPermission(request, member);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
@@ -502,6 +509,11 @@ public class MessageServiceImpl implements MessageService {
                     break;
                 case MESSAGE_TYPE_IMAGE:
                     return "[图片]";
+                case MESSAGE_TYPE_FILE:
+                    if (node.has("fileName")) {
+                        return "[文件] " + node.get("fileName").asText();
+                    }
+                    return "[文件]";
                 case MESSAGE_TYPE_STICKER:
                     if (node.has("name")) {
                         return "[表情] " + node.get("name").asText();
@@ -537,10 +549,38 @@ public class MessageServiceImpl implements MessageService {
         String messageType = request.getMessageType();
         if (MESSAGE_TYPE_TEXT.equalsIgnoreCase(messageType)
                 || MESSAGE_TYPE_IMAGE.equalsIgnoreCase(messageType)
+                || MESSAGE_TYPE_FILE.equalsIgnoreCase(messageType)
                 || MESSAGE_TYPE_STICKER.equalsIgnoreCase(messageType)) {
             return;
         }
         throw new BusinessException(400, "Unsupported message type");
+    }
+
+    private void validateFileMessage(SendMessageRequest request) {
+        if (!MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType())) {
+            return;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(request.getContent());
+            JsonNode fileIdNode = root.get("fileId");
+            if (fileIdNode == null || fileIdNode.asText().isBlank()) {
+                throw new BusinessException(400, "fileId is required");
+            }
+            if (!root.hasNonNull("fileName") || !root.hasNonNull("fileSize") || !root.hasNonNull("transferMode")) {
+                throw new BusinessException(400, "Invalid file message content");
+            }
+            ImFile file = fileMetadataService.getById(Long.parseLong(fileIdNode.asText()));
+            if (file == null || !FileMetadataService.STATUS_AVAILABLE.equals(file.getStatus())) {
+                throw new BusinessException(404, "File not found");
+            }
+            if (file.getConversationId() == null || !file.getConversationId().equals(request.getConversationId())) {
+                throw new BusinessException(403, "File does not belong to this conversation");
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException(400, "Invalid file message content");
+        }
     }
 
     private boolean containsAllMention(String content) {
