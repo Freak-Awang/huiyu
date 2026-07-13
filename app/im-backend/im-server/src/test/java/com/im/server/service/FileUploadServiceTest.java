@@ -78,7 +78,7 @@ class FileUploadServiceTest {
 
     @Test
     void conversationFileUploadAcceptsNonImageFile() throws Exception {
-        when(properties.getMaxSize()).thenReturn(104857600L);
+        when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
         when(storageClient.storageType()).thenReturn("minio");
         when(storageClient.bucket()).thenReturn("im-files");
 

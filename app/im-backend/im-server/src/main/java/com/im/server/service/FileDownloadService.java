@@ -52,6 +52,11 @@ public class FileDownloadService {
         return imFile;
     }
 
+    public long getFileSize(Long fileId) {
+        ImFile file = metadataService.getById(fileId);
+        return file != null && file.getFileSize() != null ? file.getFileSize() : 0L;
+    }
+
     public StoredObject openFile(ImFile file, long offset, Long length) {
         try {
             return storageClient.open(file.getObjectKey(), offset, length);

@@ -36,14 +36,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // Login, CORS preflight, public downloads, and WebSocket handshakes bypass this HTTP bearer-token filter by design.
+        // Downloads pass through this filter so a valid optional bearer token can authorize conversation files.
         String path = request.getRequestURI();
-        String method = request.getMethod();
-        boolean isPublicFileDownload = path.startsWith("/api/files/download/")
-                && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.startsWith("/api/auth/login")
-                || isPublicFileDownload
                 || path.startsWith("/ws/");
     }
 
@@ -54,6 +50,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            if (isFileDownload(request) && authHeader == null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"message\":\"Missing or invalid Authorization header\"}");
@@ -96,5 +96,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isFileDownload(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        return path.startsWith("/api/files/download/")
+                && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
     }
 }

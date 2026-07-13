@@ -104,7 +104,7 @@ public class FileUploadService {
     }
 
     private void validateFileUpload(MultipartFile file) {
-        validateUploadSize(file.getSize(), properties.getMaxSize(), "File exceeds upload size limit");
+        validateUploadSize(file.getSize(), properties.getSmallFileMaxSize(), "File must use multipart upload");
     }
 
     private void validateUploadSize(long size, long maxSize, String message) {

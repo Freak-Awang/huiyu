@@ -22,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -115,6 +116,12 @@ public class FileController {
         return Result.success(toFileVO(result));
     }
 
+    @DeleteMapping("/upload/tasks/{uploadId}")
+    public Result<Void> cancelUploadTask(@PathVariable String uploadId) {
+        fileUploadTaskService.cancelTask(uploadId, getCurrentUserId());
+        return Result.success(null);
+    }
+
     @GetMapping("/download/{fileId}")
     public ResponseEntity<?> download(
             @PathVariable Long fileId,
@@ -148,6 +155,11 @@ public class FileController {
             return ResponseEntity.status(toHttpStatus(e.getCode()))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Result.error(e.getCode(), e.getMessage()));
+        } catch (InvalidRangeException e) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileDownloadService.getFileSize(fileId))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Result.error(416, "Invalid byte range"));
         }
     }
 
@@ -171,14 +183,46 @@ public class FileController {
     }
 
     private Range parseRange(String rangeHeader, long totalSize) {
-        if (rangeHeader == null || !rangeHeader.startsWith("bytes=")) {
+        try {
+            return parseRangeValue(rangeHeader, totalSize);
+        } catch (NumberFormatException e) {
+            throw new InvalidRangeException();
+        }
+    }
+
+    private Range parseRangeValue(String rangeHeader, long totalSize) {
+        if (totalSize <= 0) {
+            throw new InvalidRangeException();
+        }
+        if (rangeHeader == null) {
             return new Range(0, totalSize - 1, totalSize, false);
         }
-        String[] parts = rangeHeader.substring("bytes=".length()).split("-", 2);
-        long start = parts[0].isBlank() ? 0 : Long.parseLong(parts[0]);
-        long end = parts.length > 1 && !parts[1].isBlank() ? Long.parseLong(parts[1]) : totalSize - 1;
-        start = Math.max(0, Math.min(start, totalSize - 1));
-        end = Math.max(start, Math.min(end, totalSize - 1));
+        if (!rangeHeader.startsWith("bytes=")) {
+            throw new InvalidRangeException();
+        }
+        String value = rangeHeader.substring("bytes=".length()).trim();
+        if (value.contains(",")) {
+            throw new InvalidRangeException();
+        }
+        String[] parts = value.split("-", 2);
+        if (parts.length != 2 || (parts[0].isBlank() && parts[1].isBlank())) {
+            throw new InvalidRangeException();
+        }
+        long start;
+        long end;
+        if (parts[0].isBlank()) {
+            long suffixLength = Long.parseLong(parts[1]);
+            if (suffixLength <= 0) throw new InvalidRangeException();
+            suffixLength = Math.min(suffixLength, totalSize);
+            start = totalSize - suffixLength;
+            end = totalSize - 1;
+        } else {
+            start = Long.parseLong(parts[0]);
+            if (start < 0 || start >= totalSize) throw new InvalidRangeException();
+            end = parts[1].isBlank() ? totalSize - 1 : Long.parseLong(parts[1]);
+            if (end < start) throw new InvalidRangeException();
+            end = Math.min(end, totalSize - 1);
+        }
         return new Range(start, end, end - start + 1, true);
     }
 
@@ -204,5 +248,8 @@ public class FileController {
     }
 
     private record Range(long start, long end, long length, boolean partial) {
+    }
+
+    private static final class InvalidRangeException extends RuntimeException {
     }
 }

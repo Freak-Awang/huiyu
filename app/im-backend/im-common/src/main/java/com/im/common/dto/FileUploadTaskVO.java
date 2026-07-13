@@ -3,6 +3,7 @@ package com.im.common.dto;
 import lombok.Data;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * Intent: FileUploadTaskVO returns resumable upload state and storage parameters to clients.
@@ -16,6 +17,8 @@ public class FileUploadTaskVO {
     private Integer chunkCount;
     private String uploadMode;
     private String storageType;
+    private String status;
+    private LocalDateTime expiresAt;
     private List<Integer> uploadedParts;
     private FileVO file;
 }

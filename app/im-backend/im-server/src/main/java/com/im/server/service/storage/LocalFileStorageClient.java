@@ -6,6 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.FilterInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -70,7 +71,8 @@ public class LocalFileStorageClient implements FileStorageClient {
         if (contentType == null) {
             contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
-        return new StoredObject(in, size, contentType);
+        InputStream bounded = length == null ? in : new LimitedInputStream(in, length);
+        return new StoredObject(bounded, size, contentType);
     }
 
     @Override
@@ -84,5 +86,30 @@ public class LocalFileStorageClient implements FileStorageClient {
             throw new IllegalArgumentException("Invalid object key");
         }
         return resolved;
+    }
+
+    private static final class LimitedInputStream extends FilterInputStream {
+        private long remaining;
+
+        private LimitedInputStream(InputStream input, long limit) {
+            super(input);
+            this.remaining = Math.max(0, limit);
+        }
+
+        @Override
+        public int read() throws java.io.IOException {
+            if (remaining <= 0) return -1;
+            int value = super.read();
+            if (value >= 0) remaining--;
+            return value;
+        }
+
+        @Override
+        public int read(byte[] bytes, int offset, int length) throws java.io.IOException {
+            if (remaining <= 0) return -1;
+            int read = super.read(bytes, offset, (int) Math.min(length, remaining));
+            if (read > 0) remaining -= read;
+            return read;
+        }
     }
 }

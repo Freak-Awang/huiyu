@@ -138,7 +138,7 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException("Not a member of this conversation");
         }
         validateSupportedMessageType(request);
-        validateFileMessage(request);
+        validateMediaMessage(request);
         validateAllMentionPermission(request, member);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
@@ -556,18 +556,23 @@ public class MessageServiceImpl implements MessageService {
         throw new BusinessException(400, "Unsupported message type");
     }
 
-    private void validateFileMessage(SendMessageRequest request) {
-        if (!MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType())) {
+    private void validateMediaMessage(SendMessageRequest request) {
+        boolean isFile = MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType());
+        boolean isImage = MESSAGE_TYPE_IMAGE.equalsIgnoreCase(request.getMessageType());
+        if (!isFile && !isImage) {
             return;
         }
+        String invalidContentMessage = isFile ? "Invalid file message content" : "Invalid image message content";
         try {
             JsonNode root = objectMapper.readTree(request.getContent());
             JsonNode fileIdNode = root.get("fileId");
             if (fileIdNode == null || fileIdNode.asText().isBlank()) {
                 throw new BusinessException(400, "fileId is required");
             }
-            if (!root.hasNonNull("fileName") || !root.hasNonNull("fileSize") || !root.hasNonNull("transferMode")) {
-                throw new BusinessException(400, "Invalid file message content");
+            boolean hasCommonMetadata = root.hasNonNull("fileName") && root.hasNonNull("fileSize");
+            if (!hasCommonMetadata || (isFile && !root.hasNonNull("transferMode"))
+                    || (isImage && (!root.hasNonNull("url") || !root.hasNonNull("contentType")))) {
+                throw new BusinessException(400, invalidContentMessage);
             }
             ImFile file = fileMetadataService.getById(Long.parseLong(fileIdNode.asText()));
             if (file == null || !FileMetadataService.STATUS_AVAILABLE.equals(file.getStatus())) {
@@ -576,10 +581,13 @@ public class MessageServiceImpl implements MessageService {
             if (file.getConversationId() == null || !file.getConversationId().equals(request.getConversationId())) {
                 throw new BusinessException(403, "File does not belong to this conversation");
             }
+            if (isImage && (file.getContentType() == null || !file.getContentType().startsWith("image/"))) {
+                throw new BusinessException(415, "Image message must reference an image file");
+            }
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException(400, "Invalid file message content");
+            throw new BusinessException(400, invalidContentMessage);
         }
     }
 

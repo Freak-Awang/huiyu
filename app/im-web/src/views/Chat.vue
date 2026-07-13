@@ -382,17 +382,15 @@
                   <template v-else-if="msg.messageType === 'FILE'">
                     <a
                       class="file-bubble"
-                      :href="getFileInfo(msg.content).url"
-                      target="_blank"
-                      rel="noopener"
-                      :download="getFileInfo(msg.content).fileName"
+                      href="#"
+                      @click.prevent="downloadMessageFile(msg.content)"
                     >
                       <span class="file-bubble-icon">📎</span>
                       <span class="file-bubble-main">
                         <span class="file-bubble-name">{{ getFileInfo(msg.content).fileName }}</span>
                         <span class="file-bubble-meta">{{ formatFileSize(getFileInfo(msg.content).fileSize) }}</span>
                       </span>
-                      <span class="file-bubble-action">下载</span>
+                      <span class="file-bubble-action">{{ getFileDownloadLabel(msg.content) }}</span>
                     </a>
                   </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
@@ -504,10 +502,24 @@
               <span class="pending-file-icon">📎</span>
               <span class="pending-file-name">{{ item.name }}</span>
               <span class="pending-file-size">{{ formatFileSize(item.size) }}</span>
+              <span v-if="item.status !== 'idle'" class="pending-file-status">
+                {{ getPendingFileStatus(item) }}
+              </span>
+              <button
+                v-if="item.status === 'hashing' || item.status === 'uploading'"
+                type="button"
+                class="pending-file-action"
+                @click="pausePendingFile(item)"
+              >暂停</button>
+              <button
+                v-else-if="item.status === 'paused' || item.status === 'failed'"
+                type="button"
+                class="pending-file-action"
+                @click="retryPendingFile(item)"
+              >重试</button>
               <button
                 type="button"
                 class="pending-file-remove"
-                :disabled="isSendingMessage"
                 @click="removePendingFile(item.id)"
               >×</button>
             </div>
@@ -927,9 +939,12 @@ import {
   searchLocalMessages,
 } from '../utils/localMessageStore'
 import {
+  downloadFileBlob,
   getFileUrl,
   uploadFile,
 } from '../api/file'
+import { cancelConversationFileUpload, uploadConversationFile, type FileTransferStage } from '../utils/fileTransfer'
+import { downloadAuthenticatedFile } from '../utils/fileDownload'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
   STICKERS,
@@ -1108,6 +1123,11 @@ const messageText = ref('')
 const previewImage = ref('')
 const pendingImages = ref<PendingImage[]>([])
 const pendingFiles = ref<PendingFile[]>([])
+const authenticatedImageUrls = ref<Record<string, string>>({})
+const imageLoadsInProgress = new Set<string>()
+let imageLoadGeneration = 0
+const fileDownloadProgress = ref<Record<string, number>>({})
+const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
@@ -1154,6 +1174,10 @@ interface PendingFile {
   file: File
   name: string
   size: number
+  status: 'idle' | FileTransferStage | 'paused' | 'failed'
+  progress: number
+  error?: string
+  controller?: AbortController
 }
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
@@ -1417,16 +1441,42 @@ function addPendingFiles(files: File[]) {
       file,
       name: file.name || 'file',
       size: file.size,
+      status: 'idle' as const,
+      progress: 0,
     }))
   )
 }
 
 function removePendingFile(id: string) {
+  const item = pendingFiles.value.find((candidate) => candidate.id === id)
+  item?.controller?.abort()
+  if (item && chatStore.currentConversation && authStore.currentUser) {
+    void cancelConversationFileUpload(
+      item.file,
+      chatStore.currentConversation.conversationId,
+      authStore.currentUser.userId,
+    ).catch(() => undefined)
+  }
   pendingFiles.value = pendingFiles.value.filter((item) => item.id !== id)
 }
 
 function clearPendingFiles() {
+  pendingFiles.value.forEach((item) => item.controller?.abort())
   pendingFiles.value = []
+}
+
+function pausePendingFile(item: PendingFile) {
+  item.status = 'paused'
+  item.controller?.abort()
+}
+
+function getPendingFileStatus(item: PendingFile) {
+  if (item.status === 'hashing') return `校验 ${Math.round(item.progress * 100)}%`
+  if (item.status === 'uploading') return `上传 ${Math.round(item.progress * 100)}%`
+  if (item.status === 'paused') return '已暂停'
+  if (item.status === 'failed') return item.error || '上传失败'
+  if (item.status === 'completed') return '已完成'
+  return ''
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string): File {
@@ -1886,15 +1936,34 @@ function getStickerInfo(content: string): Sticker | null {
 
 function getImageUrl(content: string): string {
   if (!content) return ''
+  let fallback = content
+  let fileId = ''
   try {
     const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object' && typeof parsed.url === 'string') {
-      return parsed.url
+    if (parsed && typeof parsed === 'object') {
+      fallback = typeof parsed.url === 'string' ? parsed.url : ''
+      fileId = String(parsed.fileId || '')
     }
   } catch {
     // Existing IMAGE messages are stored as raw URLs.
   }
-  return content
+  if (!fileId) {
+    fileId = fallback.match(/\/api\/files\/download\/(\d+)/)?.[1] || ''
+  }
+  if (!fileId) return fallback
+  if (!authenticatedImageUrls.value[fileId] && !imageLoadsInProgress.has(fileId)) {
+    imageLoadsInProgress.add(fileId)
+    const generation = imageLoadGeneration
+    void downloadFileBlob(fileId)
+      .then((response) => {
+        if (generation === imageLoadGeneration) {
+          authenticatedImageUrls.value[fileId] = URL.createObjectURL(response.data)
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => imageLoadsInProgress.delete(fileId))
+  }
+  return authenticatedImageUrls.value[fileId] || ''
 }
 
 function getFileInfo(content: string): { fileId: string; fileName: string; fileSize: number; url: string } {
@@ -1913,6 +1982,47 @@ function getFileInfo(content: string): { fileId: string; fileName: string; fileS
     // Fall through to a disabled fallback card.
   }
   return { fileId: '', fileName: '文件', fileSize: 0, url: '#' }
+}
+
+async function downloadMessageFile(content: string) {
+  const file = getFileInfo(content)
+  if (!file.fileId) return
+  const active = fileDownloadControllers.get(file.fileId)
+  if (active) {
+    active.abort()
+    return
+  }
+  const controller = new AbortController()
+  fileDownloadControllers.set(file.fileId, controller)
+  fileDownloadProgress.value[file.fileId] = 0
+  try {
+    await downloadAuthenticatedFile({
+      fileId: file.fileId,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      signal: controller.signal,
+      onProgress: (progress) => { fileDownloadProgress.value[file.fileId] = progress },
+    })
+  } catch (error) {
+    if (!controller.signal.aborted) alert(error instanceof Error ? error.message : '下载失败')
+  } finally {
+    fileDownloadControllers.delete(file.fileId)
+    delete fileDownloadProgress.value[file.fileId]
+  }
+}
+
+function getFileDownloadLabel(content: string) {
+  const fileId = getFileInfo(content).fileId
+  if (!fileId || !(fileId in fileDownloadProgress.value)) return '下载'
+  const progress = fileDownloadProgress.value[fileId]
+  return progress > 0 ? `${Math.round(progress * 100)}%` : '取消'
+}
+
+function clearAuthenticatedImages() {
+  imageLoadGeneration += 1
+  Object.values(authenticatedImageUrls.value).forEach((url) => URL.revokeObjectURL(url))
+  authenticatedImageUrls.value = {}
+  imageLoadsInProgress.clear()
 }
 
 function rememberEmoji(emoji: string) {
@@ -2258,8 +2368,15 @@ async function handleSendMessage() {
       try {
         const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId, 'image')
         const url = res.data.url || getFileUrl(res.data.id)
+        const imageContent = JSON.stringify({
+          fileId: res.data.id,
+          url,
+          fileName: res.data.originalName || image.name,
+          fileSize: res.data.size || image.size,
+          contentType: res.data.contentType || image.file.type || 'image/png',
+        })
         removePendingImage(image.id)
-        sendMediaMessage('IMAGE', url)
+        sendMediaMessage('IMAGE', imageContent, '[图片]')
       } catch (err: any) {
         alert(err?.response?.data?.message || '上传图片失败')
         return
@@ -2267,28 +2384,67 @@ async function handleSendMessage() {
     }
 
     for (const item of [...pendingFiles.value]) {
-      try {
-        const res = await uploadFile(item.file, chatStore.currentConversation?.conversationId, 'file')
-        const fileContent = {
-          fileId: res.data.id,
-          fileName: res.data.originalName || item.name,
-          fileSize: res.data.size || item.size,
-          contentType: res.data.contentType || item.file.type || 'application/octet-stream',
-          sha256: res.data.sha256,
-          transferMode: res.data.transferMode || 'object_storage',
-          downloadUrl: res.data.downloadUrl || res.data.url || getFileUrl(res.data.id),
-        }
-        removePendingFile(item.id)
-        sendMediaMessage('FILE', JSON.stringify(fileContent), `[文件] ${fileContent.fileName}`)
-      } catch (err: any) {
-        alert(err?.response?.data?.message || '上传文件失败')
-        return
-      }
+      if (!await processPendingFile(item)) return
     }
 
     if (hasText) {
       sendTextMessage()
     }
+  } finally {
+    isSendingMessage.value = false
+  }
+}
+
+async function processPendingFile(item: PendingFile) {
+  const conversation = chatStore.currentConversation
+  const user = authStore.currentUser
+  if (!conversation || !user) return false
+  const controller = new AbortController()
+  item.controller = controller
+  item.status = 'hashing'
+  item.progress = 0
+  item.error = undefined
+  try {
+    const file = await uploadConversationFile(item.file, conversation.conversationId, user.userId, {
+      signal: controller.signal,
+      onProgress: (progress) => {
+        item.status = progress.stage
+        item.progress = progress.progress
+      },
+    })
+    item.status = 'completed'
+    item.progress = 1
+    item.controller = undefined
+    const fileContent = {
+      fileId: file.id,
+      fileName: file.originalName || item.name,
+      fileSize: file.size || item.size,
+      contentType: file.contentType || item.file.type || 'application/octet-stream',
+      sha256: file.sha256,
+      transferMode: file.transferMode || 'object_storage',
+      downloadUrl: file.downloadUrl || file.url || getFileUrl(file.id),
+    }
+    pendingFiles.value = pendingFiles.value.filter((candidate) => candidate.id !== item.id)
+    sendMediaMessage('FILE', JSON.stringify(fileContent), `[文件] ${fileContent.fileName}`)
+    return true
+  } catch (error: any) {
+    item.controller = undefined
+    if (controller.signal.aborted) {
+      item.status = 'paused'
+      item.error = undefined
+    } else {
+      item.status = 'failed'
+      item.error = error?.response?.data?.message || error?.message || '上传失败'
+    }
+    return false
+  }
+}
+
+async function retryPendingFile(item: PendingFile) {
+  if (isSendingMessage.value) return
+  isSendingMessage.value = true
+  try {
+    await processPendingFile(item)
   } finally {
     isSendingMessage.value = false
   }
@@ -2732,6 +2888,9 @@ onUnmounted(() => {
   removeNotificationOpenListener = null
   clearPendingImages()
   clearPendingFiles()
+  clearAuthenticatedImages()
+  fileDownloadControllers.forEach((controller) => controller.abort())
+  fileDownloadControllers.clear()
   revokeCustomStickerUrls()
   wsManager?.disconnect()
 })
@@ -2746,6 +2905,7 @@ watch(
     memberAddResults.value = []
     clearPendingImages()
     clearPendingFiles()
+    clearAuthenticatedImages()
     closeMentionPicker()
     closeEmojiPanel()
   }
@@ -3759,7 +3919,7 @@ watch(
   border-radius: 8px;
   display: grid;
   gap: 8px;
-  grid-template-columns: 24px minmax(0, 1fr) auto 24px;
+  grid-template-columns: 24px minmax(0, 1fr) auto minmax(58px, auto) auto 24px;
   min-height: 38px;
   padding: 6px 8px;
 }
@@ -3783,6 +3943,24 @@ watch(
   white-space: nowrap;
 }
 
+.pending-file-status {
+  color: #4f63d8;
+  font-size: 11px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-file-action {
+  background: transparent;
+  border: none;
+  color: #4f63d8;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
 .pending-file-remove {
   border: none;
   border-radius: 50%;
@@ -3794,6 +3972,7 @@ watch(
   line-height: 20px;
   padding: 0;
   width: 20px;
+  grid-column: -1;
 }
 
 .pending-file-remove:disabled {

@@ -36,6 +36,7 @@ public class FileUploadTaskService {
 
     private static final String STATUS_UPLOADING = "UPLOADING";
     private static final String STATUS_COMPLETED = "COMPLETED";
+    private static final String STATUS_ABORTED = "ABORTED";
     private static final String STATUS_UPLOADED = "UPLOADED";
 
     private final FileUploadMapper uploadMapper;
@@ -75,6 +76,7 @@ public class FileUploadTaskService {
             vo.setChunkCount(0);
             vo.setUploadMode("second_transfer");
             vo.setStorageType(storageClient.storageType());
+            vo.setStatus(STATUS_COMPLETED);
             vo.setUploadedParts(List.of());
             vo.setFile(metadataService.toFileVO(reusable));
             return vo;
@@ -112,13 +114,15 @@ public class FileUploadTaskService {
         vo.setChunkCount(chunkCount);
         vo.setUploadMode("multipart");
         vo.setStorageType(storageClient.storageType());
+        vo.setStatus(STATUS_UPLOADING);
+        vo.setExpiresAt(upload.getExpiresAt());
         vo.setUploadedParts(List.of());
         return vo;
     }
 
     @Transactional
     public FileUploadTaskVO uploadPart(String uploadId, Integer partNumber, MultipartFile file, Long uploaderId) {
-        ImFileUpload upload = getOwnedUpload(uploadId, uploaderId);
+        ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);
         assertUploading(upload);
         validatePart(upload, partNumber, file);
 
@@ -152,7 +156,13 @@ public class FileUploadTaskService {
 
     @Transactional
     public ImFile completeTask(String uploadId, FileUploadCompleteRequest request, Long uploaderId) {
-        ImFileUpload upload = getOwnedUpload(uploadId, uploaderId);
+        ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);
+        if (STATUS_COMPLETED.equals(upload.getStatus()) && upload.getFileId() != null) {
+            ImFile completed = metadataService.getById(upload.getFileId());
+            if (completed != null) {
+                return completed;
+            }
+        }
         assertUploading(upload);
         List<ImFileUploadPart> parts = getParts(uploadId);
         if (parts.size() != upload.getTotalParts()) {
@@ -204,6 +214,24 @@ public class FileUploadTaskService {
         return file;
     }
 
+    @Transactional
+    public void cancelTask(String uploadId, Long uploaderId) {
+        ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);
+        if (STATUS_ABORTED.equals(upload.getStatus())) {
+            return;
+        }
+        if (STATUS_COMPLETED.equals(upload.getStatus())) {
+            throw new BusinessException(400, "Completed upload cannot be cancelled");
+        }
+        List<ImFileUploadPart> parts = getParts(uploadId);
+        parts.forEach(part -> storageClient.deleteQuietly(part.getObjectKey()));
+        uploadPartMapper.delete(new LambdaQueryWrapper<ImFileUploadPart>()
+                .eq(ImFileUploadPart::getUploadId, uploadId));
+        upload.setStatus(STATUS_ABORTED);
+        upload.setUpdateTime(LocalDateTime.now());
+        uploadMapper.updateById(upload);
+    }
+
     private void validateCreateRequest(FileUploadTaskCreateRequest request) {
         if (request == null) {
             throw new BusinessException(400, "Upload task request is required");
@@ -234,8 +262,8 @@ public class FileUploadTaskService {
             long previousBytes = upload.getChunkSize() * (upload.getTotalParts() - 1L);
             maxPartSize = upload.getFileSize() - previousBytes;
         }
-        if (file.getSize() > maxPartSize) {
-            throw new BusinessException(413, "Chunk exceeds expected size");
+        if (file.getSize() != maxPartSize) {
+            throw new BusinessException(400, "Chunk size does not match expected size");
         }
     }
 
@@ -252,6 +280,14 @@ public class FileUploadTaskService {
         ImFileUpload upload = uploadMapper.selectOne(new LambdaQueryWrapper<ImFileUpload>()
                 .eq(ImFileUpload::getUploadId, uploadId)
                 .eq(ImFileUpload::getUploaderId, uploaderId));
+        if (upload == null) {
+            throw new BusinessException(404, "Upload task not found");
+        }
+        return upload;
+    }
+
+    private ImFileUpload getOwnedUploadForUpdate(String uploadId, Long uploaderId) {
+        ImFileUpload upload = uploadMapper.selectOwnedForUpdate(uploadId, uploaderId);
         if (upload == null) {
             throw new BusinessException(404, "Upload task not found");
         }
@@ -279,6 +315,8 @@ public class FileUploadTaskService {
         vo.setChunkCount(upload.getTotalParts());
         vo.setUploadMode("multipart");
         vo.setStorageType(upload.getStorageType());
+        vo.setStatus(upload.getStatus());
+        vo.setExpiresAt(upload.getExpiresAt());
         vo.setUploadedParts(getParts(upload.getUploadId()).stream()
                 .map(ImFileUploadPart::getPartNumber)
                 .collect(Collectors.toList()));

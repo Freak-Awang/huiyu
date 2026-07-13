@@ -1,6 +1,8 @@
 package com.im.server.service;
 
 import com.im.common.entity.ImFile;
+import com.im.common.entity.ImConversationMember;
+import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.UserMapper;
@@ -14,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class FileDownloadServiceTest {
@@ -57,6 +60,21 @@ class FileDownloadServiceTest {
                 .hasMessage("No permission to download this file")
                 .extracting("code")
                 .isEqualTo(403);
+    }
+
+    @Test
+    void conversationMemberCanDownloadConversationFile() {
+        ImFile conversationFile = availableFile(3L);
+        conversationFile.setConversationId(10L);
+        conversationFile.setTemporary(0);
+        SysUser user = new SysUser();
+        user.setId(20L);
+        user.setRole("user");
+        when(metadataService.getById(3L)).thenReturn(conversationFile);
+        when(userMapper.selectById(20L)).thenReturn(user);
+        when(conversationMemberMapper.selectOne(any())).thenReturn(new ImConversationMember());
+
+        assertThat(fileDownloadService.getDownloadableFile(20L, 3L)).isSameAs(conversationFile);
     }
 
     private ImFile availableFile(Long id) {

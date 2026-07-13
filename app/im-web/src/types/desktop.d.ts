@@ -35,6 +35,21 @@ declare global {
         cacheSize: number
       }>
       clearMessages?: (userId: string) => Promise<boolean>
+      downloadFile?: (payload: {
+        downloadId: string
+        fileId: string
+        serverOrigin: string
+        token: string
+        suggestedName: string
+      }) => Promise<{ canceled: boolean; success: boolean; path?: string; error?: string }>
+      cancelFileDownload?: (downloadId: string) => Promise<boolean>
+      onFileDownloadProgress?: (handler: (progress: {
+        downloadId: string
+        received: number
+        total: number
+        state: string
+        error?: string
+      }) => void) => () => void
     }
     imScreenshot?: {
       getInitialData: () => Promise<{ dataUrl: string; scaleFactor: number } | null>

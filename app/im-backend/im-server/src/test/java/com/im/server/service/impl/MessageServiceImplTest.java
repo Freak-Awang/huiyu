@@ -138,6 +138,23 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void validImageMessageReferencesConversationImage() {
+        arrangeSend("member", 2);
+        ImFile image = file(2L, 1L);
+        image.setContentType("image/png");
+        when(fileMetadataService.getById(2L)).thenReturn(image);
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("IMAGE");
+        request.setContent("{\"fileId\":2,\"url\":\"/api/files/download/2\",\"fileName\":\"photo.png\",\"fileSize\":5,\"contentType\":\"image/png\"}");
+
+        ImMessage message = messageService.sendMessage(10L, request);
+
+        assertThat(message.getMessageType()).isEqualTo("IMAGE");
+        verify(messageMapper).insert(any(ImMessage.class));
+    }
+
+    @Test
     void getMessagesIncludesSenderSignature() {
         ImMessage message = new ImMessage();
         message.setId(100L);

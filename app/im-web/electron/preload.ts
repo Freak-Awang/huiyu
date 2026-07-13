@@ -30,6 +30,31 @@ contextBridge.exposeInMainWorld('imDesktop', {
       cacheSize: number
     }>,
   clearMessages: (userId: string) => ipcRenderer.invoke('messages:clear', userId) as Promise<boolean>,
+  downloadFile: (payload: {
+    downloadId: string
+    fileId: string
+    serverOrigin: string
+    token: string
+    suggestedName: string
+  }) => ipcRenderer.invoke('files:download', payload) as Promise<{
+    canceled: boolean
+    success: boolean
+    path?: string
+    error?: string
+  }>,
+  cancelFileDownload: (downloadId: string) =>
+    ipcRenderer.invoke('files:cancel-download', downloadId) as Promise<boolean>,
+  onFileDownloadProgress: (handler: (progress: {
+    downloadId: string
+    received: number
+    total: number
+    state: string
+    error?: string
+  }) => void) => {
+    const listener = (_event: unknown, progress: Parameters<typeof handler>[0]) => handler(progress)
+    ipcRenderer.on('files:download-progress', listener)
+    return () => ipcRenderer.removeListener('files:download-progress', listener)
+  },
 })
 
 contextBridge.exposeInMainWorld('imScreenshot', {

@@ -1,7 +1,11 @@
 // Intent: Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
 import electronUpdater from 'electron-updater'
-import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, screen, shell } from 'electron'
-import { dirname, join } from 'node:path'
+import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, shell } from 'electron'
+import { createWriteStream } from 'node:fs'
+import { rename, rm } from 'node:fs/promises'
+import { Readable, Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   listLocalMessages,
@@ -20,6 +24,7 @@ let tray: Tray | null = null
 let isQuitting = false
 let closeBehavior: 'tray' | 'exit' = 'tray'
 let unreadCount = 0
+const activeFileDownloads = new Map<string, AbortController>()
 
 interface ScreenshotResult {
   canceled: boolean
@@ -37,6 +42,14 @@ interface ActiveScreenshot {
   resolve: (result: ScreenshotResult) => void
   shouldRestoreMainWindow: boolean
   settled: boolean
+}
+
+interface FileDownloadPayload {
+  downloadId: string
+  fileId: string
+  serverOrigin: string
+  token: string
+  suggestedName: string
 }
 
 let activeScreenshot: ActiveScreenshot | null = null
@@ -375,6 +388,75 @@ ipcMain.handle(
 )
 ipcMain.handle('messages:stats', (_event, userId: string) => getLocalMessageStats(userId))
 ipcMain.handle('messages:clear', (_event, userId: string) => clearLocalMessages(userId))
+ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    return { canceled: false, success: false, error: 'Invalid download source' }
+  }
+  const downloadId = String(payload?.downloadId || '')
+  const fileId = String(payload?.fileId || '')
+  if (!downloadId || !/^\d+$/.test(fileId) || !payload?.token) {
+    return { canceled: false, success: false, error: 'Invalid download request' }
+  }
+  let downloadUrl: URL
+  try {
+    const origin = new URL(payload.serverOrigin)
+    if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Unsupported protocol')
+    downloadUrl = new URL(`/api/files/download/${fileId}`, origin.origin)
+  } catch {
+    return { canceled: false, success: false, error: 'Invalid server address' }
+  }
+  const safeName = basename(payload.suggestedName || `file-${fileId}`).replace(/[<>:"/\\|?*]/g, '_')
+  const selection = await dialog.showSaveDialog(mainWindow, { defaultPath: safeName })
+  if (selection.canceled || !selection.filePath) return { canceled: true, success: false }
+
+  const controller = new AbortController()
+  activeFileDownloads.set(downloadId, controller)
+  const partialPath = `${selection.filePath}.arttalk.part`
+  const sendProgress = (progress: Record<string, unknown>) => {
+    if (!event.sender.isDestroyed()) event.sender.send('files:download-progress', progress)
+  }
+  try {
+    await rm(partialPath, { force: true })
+    const response = await net.fetch(downloadUrl.toString(), {
+      headers: { Authorization: `Bearer ${payload.token}` },
+      signal: controller.signal,
+    })
+    if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`)
+    const total = Number(response.headers.get('content-length') || 0)
+    let received = 0
+    const progress = new Transform({
+      transform(chunk, _encoding, callback) {
+        received += chunk.length
+        sendProgress({ downloadId, received, total, state: 'downloading' })
+        callback(null, chunk)
+      },
+    })
+    await pipeline(Readable.fromWeb(response.body as any), progress, createWriteStream(partialPath))
+    await rm(selection.filePath, { force: true })
+    await rename(partialPath, selection.filePath)
+    sendProgress({ downloadId, received, total, state: 'completed' })
+    return { canceled: false, success: true, path: selection.filePath }
+  } catch (error) {
+    await rm(partialPath, { force: true }).catch(() => undefined)
+    const canceled = controller.signal.aborted
+    const message = error instanceof Error ? error.message : String(error)
+    sendProgress({
+      downloadId,
+      received: 0,
+      total: 0,
+      state: canceled ? 'cancelled' : 'failed',
+      error: canceled ? undefined : message,
+    })
+    return { canceled, success: false, error: canceled ? undefined : message }
+  } finally {
+    activeFileDownloads.delete(downloadId)
+  }
+})
+ipcMain.handle('files:cancel-download', (_event, downloadId: string) => {
+  const controller = activeFileDownloads.get(String(downloadId || ''))
+  controller?.abort()
+  return !!controller
+})
 ipcMain.handle('screenshot:start', () => startScreenshot())
 ipcMain.handle('screenshot:getInitialData', (event) => {
   if (!isScreenshotSender(event)) return null
@@ -411,6 +493,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  activeFileDownloads.forEach((controller) => controller.abort())
 })
 
 app.on('window-all-closed', () => {
