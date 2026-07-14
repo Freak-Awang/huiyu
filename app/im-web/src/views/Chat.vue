@@ -1335,13 +1335,20 @@ function openMessageProfile(message: Message) {
 
 function handleProfileSaved(user: UserInfo) {
   selectedProfileUser.value = user
+  const matchesSavedUser = (candidate: any) => getUserId(candidate) === user.userId
+  const mergeSavedUser = (candidate: any) =>
+    matchesSavedUser(candidate) ? { ...candidate, ...user } : candidate
+
+  searchedUsers.value = searchedUsers.value.map(mergeSavedUser)
+  deptUsersMap.value = Object.fromEntries(
+    Object.entries(deptUsersMap.value).map(([deptId, users]) => [
+      deptId,
+      users.map(mergeSavedUser),
+    ]),
+  )
   for (const conv of chatStore.conversations) {
     if (!conv.members) continue
-    conv.members = conv.members.map((member) =>
-      member.userId === user.userId
-        ? { ...member, nickname: user.nickname, avatar: user.avatar, signature: user.signature }
-        : member,
-    )
+    conv.members = conv.members.map(mergeSavedUser)
   }
 }
 

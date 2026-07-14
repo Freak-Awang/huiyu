@@ -257,7 +257,8 @@ async function saveProfile() {
       deptName: data.deptName || currentUser?.deptName || '',
     }
     authStore.updateCurrentUser(updated)
-    emit('saved', updated)
+    const synchronizedUser = authStore.currentUser ? { ...authStore.currentUser } : updated
+    emit('saved', synchronizedUser)
     editing.value = false
     statusText.value = '资料已保存'
     selectedAvatar.value = null

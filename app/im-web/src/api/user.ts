@@ -1,5 +1,6 @@
 // Intent: user wraps backend API calls so views and stores do not depend on raw HTTP details.
 import http from './index'
+import { toServerUrl } from '../config/runtime'
 
 export interface UserProfile {
   userId: string
@@ -22,21 +23,37 @@ export function getProfile() {
 }
 
 export function getUsersByDept(deptId?: string) {
-  return http.get('/api/users/list', { params: { deptId } })
+  return http.get('/api/users/list', { params: { deptId } }).then((res) => ({
+    ...res,
+    data: normalizeUsers(res.data),
+  }))
 }
 
-function normalizeUserPage(data: any) {
-  if (Array.isArray(data)) return data
-  if (Array.isArray(data?.records)) return data.records
-  if (Array.isArray(data?.data)) return data.data
-  return []
+export function normalizeUser<T extends Record<string, any>>(user: T): T {
+  return {
+    ...user,
+    userId: String(user.userId ?? user.id ?? ''),
+    deptId: user.deptId == null ? '' : String(user.deptId),
+    avatar: user.avatar ? toServerUrl(user.avatar) : '',
+  }
+}
+
+function normalizeUsers(data: any) {
+  const users = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.data)
+        ? data.data
+        : []
+  return users.map(normalizeUser)
 }
 
 export function searchUsers(keyword: string, page: number, pageSize: number) {
-  return http.get('/api/users/search', { params: { keyword, page, pageSize } }).then((res) => {
-    res.data = normalizeUserPage(res.data)
-    return res
-  })
+  return http.get('/api/users/search', { params: { keyword, page, pageSize } }).then((res) => ({
+    ...res,
+    data: normalizeUsers(res.data),
+  }))
 }
 
 export function updatePassword(oldPassword: string, newPassword: string) {
