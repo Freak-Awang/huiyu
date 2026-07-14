@@ -33,8 +33,10 @@ public class WebSocketSessionManager {
         }
     }
 
-    public void removeSession(Long userId) {
-        sessions.remove(userId);
+    public boolean removeSession(Long userId, WebSocketSession session) {
+        // A replaced session may close after its successor is already registered. Only the
+        // session that is still current is allowed to remove the user's routing entry.
+        return sessions.remove(userId, session);
     }
 
     public WebSocketSession getSession(Long userId) {
@@ -54,6 +56,10 @@ public class WebSocketSessionManager {
         if (session == null) {
             return;
         }
+        sendToSession(session, message);
+    }
+
+    public void sendToSession(WebSocketSession session, String message) {
         synchronized (session) {
             // Spring WebSocket session is synchronized here because concurrent sends on the same session can interleave.
             try {
@@ -61,7 +67,7 @@ public class WebSocketSessionManager {
                     session.sendMessage(new TextMessage(message));
                 }
             } catch (IOException e) {
-                log.error("Failed to send message to userId={}", userId, e);
+                log.error("Failed to send message to session={}", session.getId(), e);
             }
         }
     }

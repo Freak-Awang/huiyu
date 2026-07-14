@@ -152,7 +152,11 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        sessionManager.removeSession(userId);
+        if (!sessionManager.removeSession(userId, session)) {
+            log.debug("Ignoring close callback for replaced session: userId={}, session={}",
+                    userId, session.getId());
+            return;
+        }
         redisTemplate.delete(REDIS_ONLINE_PREFIX + userId);
         redisTemplate.delete(REDIS_PRESENCE_PREFIX + userId);
         log.info("User {} disconnected, session={}", userId, session.getId());
@@ -167,8 +171,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             if (seq != null) {
                 response.put("seq", seq);
             }
-            sessionManager.sendToUser((Long) session.getAttributes().get("userId"),
-                    objectMapper.writeValueAsString(response));
+            sessionManager.sendToSession(session, objectMapper.writeValueAsString(response));
         } catch (Exception e) {
             log.error("Error sending PONG", e);
         }
@@ -224,8 +227,9 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             ackData.put("status", "SENT");
             ackData.put("timestamp", System.currentTimeMillis());
 
-            sessionManager.sendToUser((Long) session.getAttributes().get("userId"),
-                    objectMapper.writeValueAsString(ack));
+            // This is a request-scoped reply. Send it back to the originating socket so a
+            // reconnect or concurrent replacement cannot strand the optimistic message.
+            sessionManager.sendToSession(session, objectMapper.writeValueAsString(ack));
         } catch (Exception e) {
             log.error("Error sending ACK for messageId={}", msg.getId(), e);
         }
