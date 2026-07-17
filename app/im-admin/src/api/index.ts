@@ -23,7 +23,18 @@ client.interceptors.response.use(
         if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
             if (body.code === 200) {
                 response.data = body.data
+                return response
             }
+            const message = body.message || '请求失败'
+            ElMessage.error(message)
+            if (body.code === 401) {
+                localStorage.removeItem('token')
+                localStorage.removeItem('user')
+                router.push('/login')
+            }
+            const error = new Error(message) as Error & { response?: typeof response }
+            error.response = { ...response, status: body.code, data: body }
+            return Promise.reject(error)
         }
         return response
     },

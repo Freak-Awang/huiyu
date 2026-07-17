@@ -111,6 +111,37 @@
           </div>
         </section>
 
+        <section v-else-if="activeSection === 'about'" class="settings-section">
+          <div class="about-card">
+            <div>
+              <strong>ArtTalk</strong>
+              <small>当前版本 {{ updateStore.state.currentVersion || '浏览器版' }}</small>
+            </div>
+            <span class="update-status">{{ updateStatusText }}</span>
+          </div>
+          <div v-if="updateStore.state.targetVersion" class="settings-group update-details">
+            <div class="setting-row">
+              <span><strong>{{ updateStore.state.releaseName || `ArtTalk ${updateStore.state.targetVersion}` }}</strong><small>{{ updateStore.state.releaseDate || '新版本' }}</small></span>
+            </div>
+            <div v-if="updateStore.state.releaseNotes?.length" class="release-notes">
+              <p v-for="note in updateStore.state.releaseNotes" :key="note">{{ note }}</p>
+            </div>
+            <div v-if="updateStore.state.status === 'downloading'" class="download-progress">
+              <span :style="{ width: `${updateStore.state.percent || 0}%` }" />
+            </div>
+          </div>
+          <div class="about-actions">
+            <button type="button" class="plain-btn" :disabled="updateStore.isBusy" @click="updateStore.check()">检查更新</button>
+            <button v-if="updateStore.state.status === 'available'" type="button" class="plain-btn" @click="updateStore.download()">开始下载</button>
+            <button v-if="updateStore.state.status === 'downloaded' || updateStore.state.status === 'waiting-for-transfers'" type="button" class="plain-btn" @click="updateStore.install()">{{ updateStore.state.transferBlockers ? '传输完成后安装' : '立即重启安装' }}</button>
+            <select :value="updateStore.channel" @change="updateStore.setChannel(($event.target as HTMLSelectElement).value as 'stable' | 'beta')">
+              <option value="stable">正式版</option>
+              <option value="beta">测试版</option>
+            </select>
+          </div>
+          <p v-if="updateStore.state.error" class="storage-note update-error">{{ updateStore.state.error }}</p>
+        </section>
+
         <section v-else class="settings-section">
           <div class="storage-summary">
             <div>
@@ -163,6 +194,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
+import { useUpdateStore } from '../stores/update'
 import {
   clearLocalMessages,
   getLocalMessageStats,
@@ -178,10 +210,11 @@ const emit = defineEmits<{
   localCacheCleared: []
 }>()
 
-type SectionKey = 'general' | 'notification' | 'storage'
+type SectionKey = 'general' | 'notification' | 'storage' | 'about'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const updateStore = useUpdateStore()
 const activeSection = ref<SectionKey>('general')
 const storageStats = ref<LocalMessageStats | null>(null)
 const statusText = ref('')
@@ -190,6 +223,7 @@ const sections: Array<{ key: SectionKey; label: string; icon: string; iconSrc?: 
   { key: 'general', label: '通用设置', icon: '', iconSrc: settingsIcon, hint: '界面、快捷键和窗口偏好' },
   { key: 'notification', label: '消息通知', icon: '🔔', hint: '桌面通知和消息提醒策略' },
   { key: 'storage', label: '存储管理', icon: '🗄', hint: '查看和清理本机缓存' },
+  { key: 'about', label: '关于 ArtTalk', icon: 'i', hint: '版本信息、更新日志和更新通道' },
 ]
 
 const notificationRows: Array<{
@@ -208,9 +242,18 @@ const activeMeta = computed(() => sections.find((item) => item.key === activeSec
 const activeTitle = computed(() => activeMeta.value.label)
 const activeHint = computed(() => activeMeta.value.hint)
 const canManageLocalMessages = computed(() => !!window.imDesktop?.getMessageStats && !!authStore.currentUser?.userId)
+const updateStatusText = computed(() => {
+  const labels: Record<string, string> = {
+    idle: '尚未检查', checking: '正在检查', available: '发现新版本', 'not-available': '已是最新版本',
+    downloading: `下载中 ${(updateStore.state.percent || 0).toFixed(1)}%`, downloaded: '等待安装',
+    'waiting-for-transfers': '等待传输完成', installing: '正在安装', error: '更新失败',
+  }
+  return labels[updateStore.state.status] || updateStore.state.status
+})
 
 onMounted(() => {
   void loadStorageStats()
+  void updateStore.initialize()
 })
 
 async function saveGeneral(patch: Partial<GeneralSettings>) {
@@ -503,6 +546,36 @@ function flashStatus(text: string) {
   color: #8a8f99;
   font-size: 12px;
 }
+
+.about-card,
+.about-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.about-card {
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid #edf0f4;
+  border-radius: 8px;
+  background: #f8f9fc;
+}
+
+.about-card strong,
+.about-card small { display: block; }
+.about-card strong { color: #273142; font-size: 20px; }
+.about-card small { margin-top: 4px; color: #8a8f99; }
+.update-status { color: #4f63d8; font-size: 13px; }
+.update-details { margin-bottom: 16px; }
+.release-notes { padding: 0 16px 12px; color: #5f6673; font-size: 13px; }
+.release-notes p { margin: 6px 0; }
+.download-progress { height: 6px; overflow: hidden; background: #e7e9ef; }
+.download-progress span { display: block; height: 100%; background: #4f63d8; }
+.about-actions { justify-content: flex-start; }
+.about-actions select { height: 34px; border: 1px solid #d8dce6; border-radius: 6px; padding: 0 9px; }
+.update-error { color: #c62828; }
 
 .danger-btn,
 .plain-btn {

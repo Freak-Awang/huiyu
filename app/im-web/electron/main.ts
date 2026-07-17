@@ -1,5 +1,4 @@
 // Intent: Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
-import electronUpdater from 'electron-updater'
 import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, shell } from 'electron'
 import { createWriteStream } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
@@ -15,10 +14,9 @@ import {
   upsertLocalMessage,
   type LocalMessageRecord,
 } from './localMessages.js'
+import { refreshUpdaterTransferState, setupUpdater } from './updater.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { autoUpdater } = electronUpdater
-
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
@@ -166,43 +164,6 @@ function createMenu() {
       },
     ])
   )
-}
-
-function setupAutoUpdater() {
-  // Auto updater downloads silently, then prompts after the payload is ready so update UX does not interrupt daily chat.
-  autoUpdater.autoDownload = true
-
-  autoUpdater.on('update-downloaded', async () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
-
-    const updateDialogOptions: Electron.MessageBoxOptions = {
-      type: 'info',
-      title: '发现新版本',
-      message: '新版本已下载完成',
-      detail: '重启应用后将自动安装更新。',
-      buttons: ['立即重启安装', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-    }
-    const { response } =
-      mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showMessageBox(mainWindow, updateDialogOptions)
-        : await dialog.showMessageBox(updateDialogOptions)
-
-    if (response === 0) {
-      isQuitting = true
-      autoUpdater.quitAndInstall(false, true)
-    }
-  })
-
-  autoUpdater.on('error', (error) => {
-    console.error('Auto update failed:', error)
-  })
-
-  autoUpdater.checkForUpdates()
 }
 
 async function captureDisplay(display: Electron.Display): Promise<string> {
@@ -411,6 +372,7 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
 
   const controller = new AbortController()
   activeFileDownloads.set(downloadId, controller)
+  refreshUpdaterTransferState()
   const partialPath = `${selection.filePath}.arttalk.part`
   const sendProgress = (progress: Record<string, unknown>) => {
     if (!event.sender.isDestroyed()) event.sender.send('files:download-progress', progress)
@@ -450,6 +412,7 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
     return { canceled, success: false, error: canceled ? undefined : message }
   } finally {
     activeFileDownloads.delete(downloadId)
+    refreshUpdaterTransferState()
   }
 })
 ipcMain.handle('files:cancel-download', (_event, downloadId: string) => {
@@ -474,13 +437,16 @@ ipcMain.handle('screenshot:cancel', (event) => {
 })
 
 app.whenReady().then(() => {
+  setupUpdater({
+    getMainWindow: () => mainWindow,
+    getNativeTransferCount: () => activeFileDownloads.size,
+    beforeInstall: () => {
+      isQuitting = true
+    },
+  })
   createMenu()
   createMainWindow()
   createTray()
-
-  if (app.isPackaged) {
-    setupAutoUpdater()
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -490,6 +456,13 @@ app.whenReady().then(() => {
     }
   })
 })
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => focusMainWindow())
+}
 
 app.on('before-quit', () => {
   isQuitting = true

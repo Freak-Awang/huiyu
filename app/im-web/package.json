@@ -65,7 +65,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "http://172.16.59.253:88/downloads/im-web/"
+        "url": "http://172.16.59.253:88/downloads/arttalk/stable/win-x64/"
       }
     ]
   }

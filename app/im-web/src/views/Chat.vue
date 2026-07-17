@@ -906,6 +906,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
+import { useUpdateStore } from '../stores/update'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
@@ -979,6 +980,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
+const updateStore = useUpdateStore()
 
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const showSettingsDialog = ref(false)
@@ -1129,6 +1131,7 @@ let imageLoadGeneration = 0
 const fileDownloadProgress = ref<Record<string, number>>({})
 const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
+watch(isSendingMessage, (sending) => void updateStore.setTransferCount(sending ? 1 : 0), { immediate: true })
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
@@ -2884,6 +2887,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  void updateStore.setTransferCount(0)
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)
   window.removeEventListener('keydown', handleUserActivity)

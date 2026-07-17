@@ -79,6 +79,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ../im-web/dist:/usr/share/nginx/html/im
       - ../im-admin/dist:/usr/share/nginx/html/admin
+      - ./updates:/usr/share/nginx/html/downloads/arttalk:ro
     depends_on:
       - backend
 

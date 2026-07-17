@@ -55,6 +55,19 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.on('files:download-progress', listener)
     return () => ipcRenderer.removeListener('files:download-progress', listener)
   },
+  configureUpdater: (configuration: { serverOrigin: string; token?: string; channel?: 'stable' | 'beta' }) =>
+    ipcRenderer.invoke('updater:configure', configuration),
+  getUpdateState: () => ipcRenderer.invoke('updater:get-state'),
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+  installUpdate: () => ipcRenderer.invoke('updater:install') as Promise<boolean>,
+  setUpdateTransferCount: (count: number) =>
+    ipcRenderer.invoke('updater:set-transfer-count', count) as Promise<boolean>,
+  onUpdateStateChanged: (handler: (state: unknown) => void) => {
+    const listener = (_event: unknown, state: unknown) => handler(state)
+    ipcRenderer.on('updater:state-changed', listener)
+    return () => ipcRenderer.removeListener('updater:state-changed', listener)
+  },
 })
 
 contextBridge.exposeInMainWorld('imScreenshot', {

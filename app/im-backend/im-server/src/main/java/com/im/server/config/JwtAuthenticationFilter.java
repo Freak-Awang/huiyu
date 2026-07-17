@@ -50,6 +50,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            if (isPublicClientUpdateEndpoint(request) && authHeader == null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             if (isFileDownload(request) && authHeader == null) {
                 filterChain.doFilter(request, response);
                 return;
@@ -103,5 +107,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String method = request.getMethod();
         return path.startsWith("/api/files/download/")
                 && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
+    }
+
+    private boolean isPublicClientUpdateEndpoint(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.equals("/api/client/releases/policy") || path.equals("/api/client/update-events");
     }
 }

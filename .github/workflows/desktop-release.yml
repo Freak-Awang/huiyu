@@ -1,0 +1,71 @@
+name: Desktop release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version to build
+        required: true
+        type: string
+      channel:
+        description: Update channel
+        required: true
+        default: stable
+        type: choice
+        options: [stable, beta]
+      publish:
+        description: Publish to the internal update share
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-sign-publish:
+    runs-on: [self-hosted, Windows, X64]
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: powershell
+        working-directory: app/im-web
+    env:
+      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/im-web/package-lock.json
+      - name: Validate version input
+        run: |
+          if ('${{ inputs.version }}' -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$') { throw 'Invalid semantic version' }
+          if ('${{ inputs.channel }}' -eq 'stable' -and '${{ inputs.version }}' -match '-') { throw 'Stable releases cannot use a prerelease version' }
+          if ('${{ inputs.channel }}' -eq 'beta' -and '${{ inputs.version }}' -notmatch '-') { throw 'Beta releases must use a prerelease version such as 0.1.0-beta.1' }
+      - run: npm ci
+      - run: npm test
+      - name: Set package version
+        run: npm version '${{ inputs.version }}' --no-git-tag-version
+      - name: Build and sign NSIS package
+        run: npm run build:desktop
+      - name: Verify Authenticode signature
+        run: |
+          $installer = Get-Item -LiteralPath "release\ArtTalk Setup ${{ inputs.version }}.exe"
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arttalk-${{ inputs.version }}-${{ inputs.channel }}
+          path: |
+            app/im-web/release/*.exe
+            app/im-web/release/*.blockmap
+            app/im-web/release/*.yml
+          if-no-files-found: error
+      - name: Atomically publish to internal share
+        if: ${{ inputs.publish }}
+        env:
+          UPDATE_PUBLISH_ROOT: ${{ secrets.UPDATE_PUBLISH_ROOT }}
+        run: |
+          if (-not $env:UPDATE_PUBLISH_ROOT) { throw 'UPDATE_PUBLISH_ROOT is not configured' }
+          & '..\docker\scripts\publish-update.ps1' -SourceDirectory 'release' -PublishRoot $env:UPDATE_PUBLISH_ROOT -Channel '${{ inputs.channel }}' -Version '${{ inputs.version }}'

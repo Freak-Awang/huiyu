@@ -61,6 +61,21 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void anonymousClientUpdatePolicyContinuesWithoutAuthentication() throws Exception {
+        JwtUtil jwtUtil = mock(JwtUtil.class);
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        FilterChain chain = mock(FilterChain.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtUtil, redisTemplate);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/client/releases/policy");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
     void protectedEndpointWithoutTokenIsRejected() throws Exception {
         JwtUtil jwtUtil = mock(JwtUtil.class);
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
