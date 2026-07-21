@@ -102,8 +102,8 @@
               @click="handleSelectConv(conv)"
             >
               <div class="conv-avatar">
-                <img v-if="conv.avatar" :src="conv.avatar" alt="" />
-                <span v-else>{{ (conv.name || '群')[0] }}</span>
+                <img v-if="getConversationAvatar(conv)" :src="getConversationAvatar(conv)" alt="" />
+                <span v-else>{{ (getConversationName(conv) || '群')[0] }}</span>
                 <span
                   v-if="showConversationPresence(conv)"
                   class="online-dot"
@@ -112,7 +112,7 @@
               </div>
               <div class="conv-info">
                 <div class="conv-top">
-                  <span class="conv-name">{{ conv.name }}</span>
+                  <span class="conv-name">{{ getConversationName(conv) }}</span>
                   <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
                 </div>
                 <div class="conv-bottom">
@@ -139,8 +139,8 @@
             @click="handleSelectConv(conv)"
           >
             <div class="conv-avatar">
-              <img v-if="conv.avatar" :src="conv.avatar" alt="" />
-              <span v-else>{{ (conv.name || '群')[0] }}</span>
+              <img v-if="getConversationAvatar(conv)" :src="getConversationAvatar(conv)" alt="" />
+              <span v-else>{{ (getConversationName(conv) || '群')[0] }}</span>
               <span
                 v-if="showConversationPresence(conv)"
                 class="online-dot"
@@ -149,7 +149,7 @@
             </div>
             <div class="conv-info">
               <div class="conv-top">
-                <span class="conv-name">{{ conv.name }}</span>
+                <span class="conv-name">{{ getConversationName(conv) }}</span>
                 <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
               </div>
               <div class="conv-bottom">
@@ -194,14 +194,14 @@
               @dblclick="createSingleChat(user)"
             >
               <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                <img v-if="user.avatar" :src="user.avatar" alt="" />
-                <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                <img v-if="getResolvedUser(user).avatar" :src="getResolvedUser(user).avatar" alt="" />
+                <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
               </div>
               <div class="contact-info">
-                <span class="contact-name">{{ user.nickname || user.username }}</span>
-                <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
-                <span class="contact-dept">{{ user.deptName || '' }}</span>
+                <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
+                <span v-if="getResolvedUser(user).signature" class="contact-signature">{{ getResolvedUser(user).signature }}</span>
+                <span class="contact-dept">{{ getResolvedUser(user).deptName || '' }}</span>
               </div>
             </div>
             <div v-if="searchedUsers.length === 0" class="empty-hint">无结果</div>
@@ -224,13 +224,13 @@
                   @dblclick="createSingleChat(user)"
                 >
                   <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                    <img v-if="user.avatar" :src="user.avatar" alt="" />
-                    <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                    <img v-if="getResolvedUser(user).avatar" :src="getResolvedUser(user).avatar" alt="" />
+                    <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                     <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                   </div>
                   <div class="contact-info">
-                    <span class="contact-name">{{ user.nickname || user.username }}</span>
-                    <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
+                    <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
+                    <span v-if="getResolvedUser(user).signature" class="contact-signature">{{ getResolvedUser(user).signature }}</span>
                   </div>
                 </div>
               </template>
@@ -253,13 +253,13 @@
                       @dblclick="createSingleChat(user)"
                     >
                       <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                        <img v-if="user.avatar" :src="user.avatar" alt="" />
-                        <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                        <img v-if="getResolvedUser(user).avatar" :src="getResolvedUser(user).avatar" alt="" />
+                        <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                         <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                       </div>
                       <div class="contact-info">
-                        <span class="contact-name">{{ user.nickname || user.username }}</span>
-                        <span v-if="user.signature" class="contact-signature">{{ user.signature }}</span>
+                        <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
+                        <span v-if="getResolvedUser(user).signature" class="contact-signature">{{ getResolvedUser(user).signature }}</span>
                       </div>
                     </div>
                   </template>
@@ -276,7 +276,7 @@
       <template v-if="chatStore.currentConversation">
         <div class="chat-header">
           <div class="chat-header-info">
-            <span class="chat-header-name">{{ chatStore.currentConversation.name }}</span>
+            <span class="chat-header-name">{{ getConversationName(chatStore.currentConversation) }}</span>
             <span
               v-if="chatStore.currentConversation.type === 'GROUP'"
               class="chat-header-meta"
@@ -328,7 +328,7 @@
             class="search-result-row"
             @click="showSearchResults = false"
           >
-            <span>{{ result.senderName }}</span>
+            <span>{{ getMessageSenderName(result) }}</span>
             <span>{{ result.displayContent || result.content }}</span>
             <span>{{ formatTime(result.createdAt) }}</span>
           </button>
@@ -345,15 +345,15 @@
             >
               <div
                 class="message-avatar"
-                :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)"
+                :title="getUserSignatureTitle(getMessageSenderName(msg), getMessageSenderSignature(msg))"
                 @click="openMessageProfile(msg)"
               >
-                <img v-if="msg.senderAvatar" :src="msg.senderAvatar" alt="" />
-                <span v-else>{{ (msg.senderName || 'U')[0] }}</span>
+                <img v-if="getMessageSenderAvatar(msg)" :src="getMessageSenderAvatar(msg)" alt="" />
+                <span v-else>{{ (getMessageSenderName(msg) || 'U')[0] }}</span>
               </div>
               <div class="message-body">
-                <div class="message-sender" :title="getUserSignatureTitle(msg.senderName, msg.senderSignature)">
-                  {{ msg.senderName }}
+                <div class="message-sender" :title="getUserSignatureTitle(getMessageSenderName(msg), getMessageSenderSignature(msg))">
+                  {{ getMessageSenderName(msg) }}
                 </div>
                 <div class="message-content">
                   <template v-if="msg.status === 'RECALLED'">
@@ -544,7 +544,7 @@
                 @mousedown.prevent="selectMention(member)"
               >
                 <div class="mention-avatar">
-                  <img v-if="member.avatar" :src="member.avatar" alt="" />
+                  <img v-if="getResolvedUser(member).avatar" :src="getResolvedUser(member).avatar" alt="" />
                   <span v-else>{{ getMemberName(member)[0] }}</span>
                 </div>
                 <span>{{ getMemberName(member) }}</span>
@@ -743,7 +743,7 @@
               class="member-add-result"
               @click="addGroupMember(user)"
             >
-              {{ user.nickname || user.username }}
+              {{ getResolvedUser(user).nickname || getResolvedUser(user).username }}
             </button>
           </div>
         </div>
@@ -754,13 +754,13 @@
             class="member-row"
           >
             <div class="member-avatar" @click="openUserProfile(member)">
-              <img v-if="member.avatar" :src="member.avatar" alt="" />
+              <img v-if="getResolvedUser(member).avatar" :src="getResolvedUser(member).avatar" alt="" />
               <span v-else>{{ getMemberName(member)[0] }}</span>
               <span class="online-dot" :class="`presence-${getUserPresence(member)}`"></span>
             </div>
             <div class="member-info">
               <span class="member-name">{{ getMemberName(member) }}</span>
-              <span v-if="member.signature" class="member-signature">{{ member.signature }}</span>
+              <span v-if="getResolvedUser(member).signature" class="member-signature">{{ getResolvedUser(member).signature }}</span>
               <span class="member-role" :class="`member-role-${member.role || 'member'}`">
                 {{ formatMemberRole(member.role) }}
               </span>
@@ -821,10 +821,10 @@
                 @click="doCreateSingleChat(user)"
               >
                 <div class="contact-avatar">
-                  <img v-if="user.avatar" :src="user.avatar" alt="" />
-                  <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                  <img v-if="getResolvedUser(user).avatar" :src="getResolvedUser(user).avatar" alt="" />
+                  <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 </div>
-                <span class="contact-name">{{ user.nickname || user.username }}</span>
+                <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
               </div>
             </div>
           </template>
@@ -848,7 +848,7 @@
                 :key="member.userId || member.id"
                 class="member-tag"
               >
-                {{ member.nickname || member.username }}
+                {{ getResolvedUser(member).nickname || getResolvedUser(member).username }}
                 <button @click="removeMemberSelection(member)">✕</button>
               </span>
             </div>
@@ -860,10 +860,10 @@
                 @click="addMemberSelection(user)"
               >
                 <div class="contact-avatar">
-                  <img v-if="user.avatar" :src="user.avatar" alt="" />
-                  <span v-else>{{ (user.nickname || user.username || '?')[0] }}</span>
+                  <img v-if="getResolvedUser(user).avatar" :src="getResolvedUser(user).avatar" alt="" />
+                  <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 </div>
-                <span class="contact-name">{{ user.nickname || user.username }}</span>
+                <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
               </div>
             </div>
             <button
@@ -907,11 +907,12 @@ import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import { useUpdateStore } from '../stores/update'
+import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
-import { getUsersByDept, searchUsers } from '../api/user'
+import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
 import {
   addMembers,
   createConversation,
@@ -981,14 +982,19 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 const updateStore = useUpdateStore()
+const userProfileStore = useUserProfileStore()
 
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const showSettingsDialog = ref(false)
 const showProfileDialog = ref(false)
-const selectedProfileUser = ref<any | null>(null)
+const selectedProfileUserId = ref('')
+const selectedProfileFallback = ref<UserProfileSnapshot | null>(null)
+const selectedProfileUser = computed<any | null>(() => {
+  if (!selectedProfileUserId.value) return null
+  return userProfileStore.resolveProfile(selectedProfileFallback.value || selectedProfileUserId.value)
+})
 const searchKeyword = ref('')
 const contactSearchKeyword = ref('')
-const presenceByUser = ref<Record<string, PresenceStatus>>({})
 const manualPresence = ref<PresenceStatus>('online')
 const presenceMenuOpen = ref(false)
 const wsConnected = ref(false)
@@ -1003,7 +1009,7 @@ const filteredConversations = computed(() => {
   if (!searchKeyword.value) return chatStore.unpinnedConversations
   const kw = searchKeyword.value.toLowerCase()
   return chatStore.unpinnedConversations.filter(
-    (c) => c.name?.toLowerCase().includes(kw)
+    (c) => getConversationName(c).toLowerCase().includes(kw)
   )
 })
 
@@ -1019,6 +1025,7 @@ async function loadDeptTree() {
     getUsersByDept(),
   ])
   const unassignedUsers = unassignedRes.data ?? []
+  userProfileStore.upsertProfiles(unassignedUsers)
   deptTree.value = unassignedUsers.length
     ? [
         ...deptRes.data,
@@ -1058,6 +1065,7 @@ async function toggleDept(deptId: string) {
     if (!deptUsersMap.value[deptId]) {
       try {
         const res = await getUsersByDept(deptId === UNASSIGNED_DEPT_ID ? undefined : deptId)
+        userProfileStore.upsertProfiles(res.data || [])
         deptUsersMap.value[deptId] = res.data
       } catch {
         deptUsersMap.value[deptId] = []
@@ -1080,6 +1088,7 @@ function onContactSearch() {
     }
     try {
       const res = await searchUsers(kw, 1, 50)
+      userProfileStore.upsertProfiles(res.data || [])
       searchedUsers.value = res.data
     } catch {
       searchedUsers.value = []
@@ -1162,7 +1171,10 @@ const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreensh
 const totalUnreadCount = computed(() =>
   Array.from(chatStore.unreadCounts.values()).reduce((sum, count) => sum + count, 0)
 )
-const selfPresence = computed(() => presenceByUser.value[String(authStore.currentUser?.userId || '')] || manualPresence.value)
+const selfPresence = computed(() => {
+  const userId = String(authStore.currentUser?.userId || '')
+  return (userId && userProfileStore.presence[userId]) || manualPresence.value
+})
 const selfPresenceLabel = computed(() => getPresenceLabel(selfPresence.value))
 interface PendingImage {
   id: string
@@ -1231,9 +1243,66 @@ function getUserId(user: any): string {
   return String(user?.userId || user?.id || '')
 }
 
+function getResolvedUser(user: UserProfileSnapshot | null | undefined): UserProfileSnapshot {
+  return userProfileStore.resolveProfile(user)
+}
+
+function reconcileDirectoryMembership(profile: UserProfileSnapshot) {
+  const userId = getUserId(profile)
+  if (!userId) return
+  for (const [deptId, users] of Object.entries(deptUsersMap.value)) {
+    deptUsersMap.value[deptId] = users.filter((user) => getUserId(user) !== userId)
+  }
+  if (profile.status === 0 || profile.status === '0') return
+  const targetDeptId = profile.deptId ? String(profile.deptId) : UNASSIGNED_DEPT_ID
+  if (deptUsersMap.value[targetDeptId]) {
+    deptUsersMap.value[targetDeptId] = [...deptUsersMap.value[targetDeptId], profile]
+  }
+}
+
+function getConversationPeerId(conv: Conversation): string {
+  if (conv.type === 'GROUP') return ''
+  return conv.members?.find((member) => member.userId !== authStore.currentUser?.userId)?.userId
+    || conv.members?.[0]?.userId
+    || ''
+}
+
+function getConversationName(conv: Conversation): string {
+  if (conv.type === 'GROUP') return conv.name
+  const profile = userProfileStore.getProfile(getConversationPeerId(conv))
+  return profile?.nickname || profile?.username || conv.name
+}
+
+function getConversationAvatar(conv: Conversation): string {
+  if (conv.type === 'GROUP') return conv.avatar
+  return userProfileStore.getProfile(getConversationPeerId(conv))?.avatar || conv.avatar
+}
+
+function getMessageSenderProfile(message: Message): UserProfileSnapshot {
+  return userProfileStore.resolveProfile({
+    userId: message.senderId,
+    nickname: message.senderName,
+    avatar: message.senderAvatar,
+    signature: message.senderSignature,
+  })
+}
+
+function getMessageSenderName(message: Message): string {
+  const profile = getMessageSenderProfile(message)
+  return profile.nickname || profile.username || message.senderName
+}
+
+function getMessageSenderAvatar(message: Message): string {
+  return getMessageSenderProfile(message).avatar || message.senderAvatar
+}
+
+function getMessageSenderSignature(message: Message): string {
+  return getMessageSenderProfile(message).signature || message.senderSignature
+}
+
 function getUserPresence(user: any): PresenceStatus {
   const userId = getUserId(user)
-  return userId ? presenceByUser.value[userId] || 'offline' : 'offline'
+  return userProfileStore.getPresence(userId)
 }
 
 function getProfilePresence(user: any): PresenceStatus {
@@ -1243,9 +1312,7 @@ function getProfilePresence(user: any): PresenceStatus {
 
 function getConversationPresence(conv: Conversation): PresenceStatus {
   if (conv.type === 'GROUP') return 'offline'
-  const userId = conv.members?.find((member) => member.userId !== authStore.currentUser?.userId)?.userId
-    || conv.members?.[0]?.userId
-  return userId ? presenceByUser.value[String(userId)] || 'offline' : 'offline'
+  return userProfileStore.getPresence(getConversationPeerId(conv))
 }
 
 function showConversationPresence(conv: Conversation): boolean {
@@ -1265,7 +1332,7 @@ function requestUserPresence(userId?: string) {
 function applySelfPresence(status: PresenceStatus) {
   const userId = String(authStore.currentUser?.userId || '')
   if (userId) {
-    presenceByUser.value[userId] = status
+    userProfileStore.setPresence(userId, status)
   }
 }
 
@@ -1308,19 +1375,31 @@ function handleUserActivity() {
 }
 
 function openOwnProfile() {
-  selectedProfileUser.value = authStore.currentUser
+  if (!authStore.currentUser) return
+  userProfileStore.upsertProfile(authStore.currentUser)
+  selectedProfileUserId.value = authStore.currentUser.userId
+  selectedProfileFallback.value = authStore.currentUser
   showProfileDialog.value = true
   presenceMenuOpen.value = false
 }
 
-function openUserProfile(user: any) {
+async function openUserProfile(user: any) {
   if (getUserId(user) === authStore.currentUser?.userId) {
     openOwnProfile()
     return
   }
-  selectedProfileUser.value = user
+  const userId = getUserId(user)
+  userProfileStore.seedSnapshot(user)
+  selectedProfileUserId.value = userId
+  selectedProfileFallback.value = user
   showProfileDialog.value = true
-  requestUserPresence(getUserId(user))
+  requestUserPresence(userId)
+  try {
+    const res = await getUserProfile(userId)
+    userProfileStore.upsertProfile(res.data)
+  } catch {
+    // Conversation/message snapshots remain available when profile lookup fails.
+  }
 }
 
 function openMessageProfile(message: Message) {
@@ -1337,22 +1416,9 @@ function openMessageProfile(message: Message) {
 }
 
 function handleProfileSaved(user: UserInfo) {
-  selectedProfileUser.value = user
-  const matchesSavedUser = (candidate: any) => getUserId(candidate) === user.userId
-  const mergeSavedUser = (candidate: any) =>
-    matchesSavedUser(candidate) ? { ...candidate, ...user } : candidate
-
-  searchedUsers.value = searchedUsers.value.map(mergeSavedUser)
-  deptUsersMap.value = Object.fromEntries(
-    Object.entries(deptUsersMap.value).map(([deptId, users]) => [
-      deptId,
-      users.map(mergeSavedUser),
-    ]),
-  )
-  for (const conv of chatStore.conversations) {
-    if (!conv.members) continue
-    conv.members = conv.members.map(mergeSavedUser)
-  }
+  userProfileStore.upsertProfile(user)
+  selectedProfileUserId.value = user.userId
+  selectedProfileFallback.value = user
 }
 
 async function startProfileChat(user: any) {
@@ -1630,7 +1696,8 @@ async function saveGroupSettings() {
 }
 
 function getMemberName(member: ConversationMember): string {
-  return member.nickname || `用户${member.userId}`
+  const profile = getResolvedUser(member)
+  return profile.nickname || profile.username || `用户${member.userId}`
 }
 
 function getUserSignatureTitle(name: string, signature?: string): string {
@@ -1681,6 +1748,7 @@ function onSearchAddMember() {
     }
     try {
       const res = await searchUsers(kw, 1, 20)
+      userProfileStore.upsertProfiles(res.data || [])
       const existingIds = new Set(sortedGroupMembers.value.map((member) => member.userId))
       memberAddResults.value = (res.data || []).filter(
         (user: any) => !existingIds.has(String(user.userId || user.id))
@@ -2549,7 +2617,7 @@ async function handleWsMessage(msg: WsMessage) {
         const body = settingsStore.notification.showPreview
           ? receivedMessage.displayContent || receivedMessage.content
           : '收到一条新消息'
-        showDesktopNotification(conv.name || receivedMessage.senderName, body, receivedMessage.conversationId)
+        showDesktopNotification(getConversationName(conv) || getMessageSenderName(receivedMessage), body, receivedMessage.conversationId)
       }
       if (isCurrentConversation && wasAtBottom) {
         scrollToBottom(true)
@@ -2619,18 +2687,28 @@ async function handleWsMessage(msg: WsMessage) {
           const status = data.status !== undefined
             ? normalizePresenceStatus(data.status)
             : (data.online ? 'online' : 'offline')
-          presenceByUser.value[String(data.userId)] = status
+          userProfileStore.setPresence(String(data.userId), status)
         } else {
           for (const [uid, payload] of Object.entries(data)) {
             if (payload && typeof payload === 'object') {
               const statusPayload = payload as { status?: unknown; online?: unknown }
-              presenceByUser.value[uid] = statusPayload.status !== undefined
-                ? normalizePresenceStatus(statusPayload.status)
-                : (statusPayload.online ? 'online' : 'offline')
+              userProfileStore.setPresence(uid, statusPayload.status !== undefined
+                ? statusPayload.status
+                : (statusPayload.online ? 'online' : 'offline'))
             } else {
-              presenceByUser.value[uid] = payload ? 'online' : 'offline'
+              userProfileStore.setPresence(uid, payload ? 'online' : 'offline')
             }
           }
+        }
+      }
+      break
+    }
+    case 'USER_UPDATED': {
+      if (msg.data) {
+        const updated = userProfileStore.upsertProfile(msg.data)
+        if (updated) reconcileDirectoryMembership(updated)
+        if (updated && updated.userId === authStore.currentUser?.userId) {
+          authStore.updateCurrentUser(updated)
         }
       }
       break
@@ -2742,6 +2820,7 @@ function onSearchCreateUser() {
     }
     try {
       const res = await searchUsers(kw, 1, 20)
+      userProfileStore.upsertProfiles(res.data || [])
       createSearchResults.value = res.data
     } catch {
       createSearchResults.value = []
@@ -2759,6 +2838,7 @@ function onSearchCreateMember() {
     }
     try {
       const res = await searchUsers(kw, 1, 20)
+      userProfileStore.upsertProfiles(res.data || [])
       const myId = authStore.currentUser?.userId
       createMemberResults.value = (res.data || []).filter(
         (u: any) => (u.userId || u.id) !== myId

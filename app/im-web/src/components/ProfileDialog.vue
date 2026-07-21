@@ -255,6 +255,8 @@ async function saveProfile() {
       phone: data.phone || form.phone.trim(),
       deptId: data.deptId ? String(data.deptId) : currentUser?.deptId || '',
       deptName: data.deptName || currentUser?.deptName || '',
+      status: data.status ?? currentUser?.status ?? '',
+      updatedAt: data.updatedAt || currentUser?.updatedAt || '',
     }
     authStore.updateCurrentUser(updated)
     const synchronizedUser = authStore.currentUser ? { ...authStore.currentUser } : updated

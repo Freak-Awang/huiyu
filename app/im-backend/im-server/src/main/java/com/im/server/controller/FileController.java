@@ -5,7 +5,6 @@ import com.im.common.dto.FileUploadCompleteRequest;
 import com.im.common.dto.FileUploadTaskCreateRequest;
 import com.im.common.dto.FileUploadTaskVO;
 import com.im.common.entity.ImFile;
-import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.Result;
 import com.im.server.service.FileDownloadService;
@@ -83,9 +82,7 @@ public class FileController {
         Long userId = getCurrentUserId();
         ImFile result = fileUploadService.uploadAvatarFile(file, userId);
 
-        SysUser user = userService.getById(userId);
-        user.setAvatar("/api/files/download/" + result.getId());
-        userService.update(user);
+        userService.updateAvatar(userId, "/api/files/download/" + result.getId());
 
         return Result.success(toFileVO(result));
     }

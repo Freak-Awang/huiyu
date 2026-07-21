@@ -1,6 +1,7 @@
 package com.im.server.service;
 
 import com.im.common.entity.SysUser;
+import com.im.common.dto.UserProfileVO;
 import com.im.common.result.PageResult;
 
 import java.util.List;
@@ -12,9 +13,15 @@ public interface UserService {
 
     SysUser getById(Long id);
 
+    UserProfileVO getProfileById(Long id);
+
     List<SysUser> listByDeptId(Long deptId);
 
+    List<UserProfileVO> listProfilesByDeptId(Long deptId);
+
     PageResult<SysUser> pageUsers(String keyword, Integer status, int page, int pageSize);
+
+    PageResult<UserProfileVO> pageProfiles(String keyword, Integer status, int page, int pageSize);
 
     SysUser create(SysUser user);
 
@@ -26,5 +33,7 @@ public interface UserService {
 
     void resetPassword(Long userId, String newPassword);
 
-    SysUser updateProfile(Long userId, String nickname, String email, String phone, String signature);
+    UserProfileVO updateProfile(Long userId, String nickname, String email, String phone, String signature);
+
+    UserProfileVO updateAvatar(Long userId, String avatar);
 }

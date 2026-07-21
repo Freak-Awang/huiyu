@@ -1,5 +1,6 @@
 // Intent: message wraps backend API calls so views and stores do not depend on raw HTTP details.
 import http from './index'
+import { toServerUrl } from '../config/runtime'
 
 export interface Message {
   messageId: string
@@ -98,7 +99,7 @@ export function normalizeMessage(raw: RawMessage): Message {
     conversationId: String(raw.conversationId ?? ''),
     senderId: String(raw.senderId ?? ''),
     senderName: raw.senderName || '',
-    senderAvatar: raw.senderAvatar || '',
+    senderAvatar: raw.senderAvatar ? toServerUrl(raw.senderAvatar) : '',
     senderSignature: raw.senderSignature || '',
     messageType,
     content,

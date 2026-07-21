@@ -1,6 +1,6 @@
 package com.im.server.controller;
 
-import com.im.common.entity.SysUser;
+import com.im.common.dto.UserProfileVO;
 import com.im.common.result.PageResult;
 import com.im.common.result.Result;
 import com.im.server.service.UserService;
@@ -27,28 +27,33 @@ public class UserController {
     private UserService userService;
 
     @GetMapping("/me")
-    public Result<SysUser> getCurrentUser() {
+    public Result<UserProfileVO> getCurrentUser() {
         Long userId = getCurrentUserId();
-        return Result.success(userService.getById(userId));
+        return Result.success(userService.getProfileById(userId));
+    }
+
+    @GetMapping("/{id}")
+    public Result<UserProfileVO> getProfile(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        return Result.success(userService.getProfileById(id));
     }
 
     @GetMapping("/list")
-    public Result<List<SysUser>> listByDept(@RequestParam(required = false) Long deptId) {
-        return Result.success(userService.listByDeptId(deptId));
+    public Result<List<UserProfileVO>> listByDept(@RequestParam(required = false) Long deptId) {
+        return Result.success(userService.listProfilesByDeptId(deptId));
     }
 
     @GetMapping("/search")
-    public Result<PageResult<SysUser>> search(
+    public Result<PageResult<UserProfileVO>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return Result.success(userService.pageUsers(keyword, null, page, pageSize));
+        return Result.success(userService.pageProfiles(keyword, null, page, pageSize));
     }
 
     @PutMapping("/profile")
-    public Result<SysUser> updateProfile(@RequestBody Map<String, String> body) {
+    public Result<UserProfileVO> updateProfile(@RequestBody Map<String, String> body) {
         Long userId = getCurrentUserId();
-        SysUser user = userService.updateProfile(
+        UserProfileVO user = userService.updateProfile(
                 userId,
                 body.get("nickname"),
                 body.get("email"),

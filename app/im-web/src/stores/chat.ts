@@ -21,8 +21,10 @@ import {
   listLocalMessages,
   upsertLocalMessage,
 } from '../utils/localMessageStore'
+import { useUserProfileStore } from './userProfiles'
 
 export const useChatStore = defineStore('chat', () => {
+  const userProfiles = useUserProfileStore()
   const conversations = ref<Conversation[]>([])
   const currentConversation = ref<Conversation | null>(null)
   const messages = ref<Map<string, Message[]>>(new Map())
@@ -45,6 +47,7 @@ export const useChatStore = defineStore('chat', () => {
   async function fetchConversations() {
     const res = await listConversations()
     conversations.value = res.data
+    res.data.forEach(seedConversationProfiles)
     for (const conv of res.data) {
       unreadCounts.value.set(conv.conversationId, conv.unreadCount || 0)
       mentionUnreadCounts.value.set(conv.conversationId, conv.mentionUnreadCount || 0)
@@ -67,6 +70,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function upsertConversation(conv: Conversation) {
+    seedConversationProfiles(conv)
     const index = conversations.value.findIndex(
       (item) => item.conversationId === conv.conversationId
     )
@@ -141,6 +145,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function mergeServerMessages(convId: string, serverMessages: Message[]) {
     if (!serverMessages.length) return
+    serverMessages.forEach(seedMessageProfile)
     const currentRaw = messages.value.get(convId)
     const current = Array.isArray(currentRaw) ? currentRaw : []
     const nextMessages = [...current]
@@ -222,6 +227,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function upsertMessage(msg: Message) {
+    seedMessageProfile(msg)
     // Realtime messages, ACKs, retries, and local cache replay all converge through this path to keep ordering stable.
     const convMessagesRaw = messages.value.get(msg.conversationId)
     const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
@@ -386,6 +392,19 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
     }
+  }
+
+  function seedConversationProfiles(conv: Conversation) {
+    userProfiles.seedSnapshots(conv.members || [])
+  }
+
+  function seedMessageProfile(message: Message) {
+    userProfiles.seedSnapshot({
+      userId: message.senderId,
+      nickname: message.senderName,
+      avatar: message.senderAvatar,
+      signature: message.senderSignature,
+    })
   }
 
   return {

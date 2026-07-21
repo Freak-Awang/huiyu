@@ -1,5 +1,6 @@
 // Intent: conversation wraps backend API calls so views and stores do not depend on raw HTTP details.
 import http from './index'
+import { toServerUrl } from '../config/runtime'
 
 export interface Conversation {
   conversationId: string
@@ -55,7 +56,7 @@ export interface RawConversation {
   muted?: boolean | null
   pinned?: boolean | null
   memberCount?: number | null
-  members?: Array<ConversationMember & { userId: number | string }>
+  members?: Array<Omit<ConversationMember, 'userId'> & { userId: number | string }>
   createTime?: string | null
   updateTime?: string | null
   createdAt?: string | null
@@ -87,13 +88,14 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     raw.members?.map((member) => ({
       ...member,
       userId: String(member.userId),
+      avatar: member.avatar ? toServerUrl(member.avatar) : '',
     })) || []
 
   return {
     conversationId,
     type,
     name: raw.name || '',
-    avatar: raw.avatar || '',
+    avatar: raw.avatar ? toServerUrl(raw.avatar) : '',
     announcement: raw.announcement || '',
     announcementUpdatedBy: raw.announcementUpdatedBy != null ? String(raw.announcementUpdatedBy) : undefined,
     announcementUpdatedAt: raw.announcementUpdatedAt || '',

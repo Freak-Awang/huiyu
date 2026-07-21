@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { login as loginApi, logout as logoutApi } from '../api/auth'
 import { getProfile } from '../api/user'
 import { toServerUrl } from '../config/runtime'
+import { useUserProfileStore } from './userProfiles'
 
 export interface UserInfo {
   userId: string
@@ -16,6 +17,8 @@ export interface UserInfo {
   phone?: string
   deptId?: string
   deptName?: string
+  status?: string | number
+  updatedAt?: string
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -43,8 +46,11 @@ export const useAuthStore = defineStore('auth', () => {
         phone: u.phone || '',
         deptId: u.deptId ? String(u.deptId) : '',
         deptName: u.deptName || '',
+        status: u.status ?? '',
+        updatedAt: u.updatedAt || u.updateTime || '',
       }
       localStorage.setItem('imCurrentUserId', user.value.userId)
+      useUserProfileStore().upsertProfile(user.value)
     }
   }
 
@@ -56,6 +62,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     token.value = ''
     user.value = null
+    useUserProfileStore().clear()
     localStorage.removeItem('token')
     localStorage.removeItem('imCurrentUserId')
   }
@@ -79,13 +86,17 @@ export const useAuthStore = defineStore('auth', () => {
         phone: data.phone || '',
         deptId: data.deptId ? String(data.deptId) : '',
         deptName: data.deptName || '',
+        status: data.status ?? '',
+        updatedAt: data.updatedAt || data.updateTime || '',
       }
       localStorage.setItem('imCurrentUserId', user.value.userId)
+      useUserProfileStore().upsertProfile({ ...user.value, updatedAt: data.updatedAt || data.updateTime || '' })
     } catch {
       token.value = ''
       user.value = null
       localStorage.removeItem('token')
       localStorage.removeItem('imCurrentUserId')
+      useUserProfileStore().clear()
     }
   }
 
@@ -100,6 +111,7 @@ export const useAuthStore = defineStore('auth', () => {
       ...patch,
       avatar: patch.avatar !== undefined ? normalizeAvatar(patch.avatar) : user.value.avatar,
     }
+    useUserProfileStore().upsertProfile(user.value)
   }
 
   function normalizeAvatar(avatar?: string | null) {
