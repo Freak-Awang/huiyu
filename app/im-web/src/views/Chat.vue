@@ -442,7 +442,23 @@
           </div>
         </div>
 
-        <div class="input-area">
+        <div
+          class="input-area"
+          :class="{ 'is-file-drag-active': isAttachmentDragActive }"
+          @dragenter="handleAttachmentDragEnter"
+          @dragover="handleAttachmentDragOver"
+          @dragleave="handleAttachmentDragLeave"
+          @drop="handleAttachmentDrop"
+        >
+          <div
+            v-if="isAttachmentDragActive"
+            class="attachment-drop-overlay"
+            aria-hidden="true"
+          >
+            <img :src="fileIcon" alt="" />
+            <strong>松开以添加到当前会话</strong>
+            <span>图片、视频和文件将在点击发送后上传</span>
+          </div>
           <div v-if="replyTarget" class="reply-target">
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
             <button type="button" @click="replyTarget = null">✕</button>
@@ -457,13 +473,31 @@
             >
               <img :src="emojiIcon" alt="表情" />
             </button>
-            <label class="tool-btn" title="发送图片">
-              📷
-              <input type="file" accept="image/*" multiple hidden @change="onSendImage" />
+            <label
+              class="tool-btn"
+              :class="{ disabled: isSendingMessage }"
+              title="发送图片"
+              :aria-disabled="isSendingMessage"
+              role="button"
+              :tabindex="isSendingMessage ? -1 : 0"
+              @keydown.enter.prevent="activateFileLabel"
+              @keydown.space.prevent="activateFileLabel"
+            >
+              <img :src="imageIcon" alt="" />
+              <input type="file" accept="image/*" multiple hidden :disabled="isSendingMessage" @change="onSendImage" />
             </label>
-            <label class="tool-btn" title="发送文件">
-              📎
-              <input type="file" multiple hidden @change="onSendFile" />
+            <label
+              class="tool-btn"
+              :class="{ disabled: isSendingMessage }"
+              title="发送文件"
+              :aria-disabled="isSendingMessage"
+              role="button"
+              :tabindex="isSendingMessage ? -1 : 0"
+              @keydown.enter.prevent="activateFileLabel"
+              @keydown.space.prevent="activateFileLabel"
+            >
+              <img :src="fileIcon" alt="" />
+              <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
             </label>
             <button
               v-if="canUseDesktopScreenshot"
@@ -476,54 +510,21 @@
               <img :src="screenshotIcon" alt="屏幕截图" />
             </button>
           </div>
-          <div v-if="pendingImages.length" class="pending-image-list">
-            <div
-              v-for="image in pendingImages"
-              :key="image.id"
-              class="pending-image-item"
-              :title="`${image.name} (${formatFileSize(image.size)})`"
-            >
-              <img :src="image.previewUrl" :alt="image.name" />
-              <button
-                type="button"
-                class="pending-image-remove"
-                :disabled="isSendingMessage"
-                @click="removePendingImage(image.id)"
-              >×</button>
-            </div>
-          </div>
-          <div v-if="pendingFiles.length" class="pending-file-list">
-            <div
-              v-for="item in pendingFiles"
-              :key="item.id"
-              class="pending-file-item"
-              :title="`${item.name} (${formatFileSize(item.size)})`"
-            >
-              <span class="pending-file-icon">📎</span>
-              <span class="pending-file-name">{{ item.name }}</span>
-              <span class="pending-file-size">{{ formatFileSize(item.size) }}</span>
-              <span v-if="item.status !== 'idle'" class="pending-file-status">
-                {{ getPendingFileStatus(item) }}
-              </span>
-              <button
-                v-if="item.status === 'hashing' || item.status === 'uploading'"
-                type="button"
-                class="pending-file-action"
-                @click="pausePendingFile(item)"
-              >暂停</button>
-              <button
-                v-else-if="item.status === 'paused' || item.status === 'failed'"
-                type="button"
-                class="pending-file-action"
-                @click="retryPendingFile(item)"
-              >重试</button>
-              <button
-                type="button"
-                class="pending-file-remove"
-                @click="removePendingFile(item.id)"
-              >×</button>
-            </div>
-          </div>
+          <AttachmentDraftTray
+            :drafts="currentAttachmentDrafts"
+            :disabled="isSendingMessage"
+            :file-icon="fileIcon"
+            @remove="removeAttachmentDraft"
+            @pause="pauseAttachmentDraft"
+            @retry="retryAttachmentDraft"
+          />
+          <p
+            v-if="attachmentFeedback"
+            class="attachment-feedback"
+            :class="{ error: attachmentFeedbackIsError }"
+            :role="attachmentFeedbackIsError ? 'alert' : 'status'"
+            aria-live="polite"
+          >{{ attachmentFeedback }}</p>
           <div class="input-box">
             <textarea
               ref="messageInputRef"
@@ -531,6 +532,7 @@
               class="message-input"
               placeholder="输入消息..."
               rows="3"
+              :disabled="isSendingMessage"
               @input="onMessageInput"
               @keydown="handleMessageKeydown"
               @paste="handleMessagePaste"
@@ -908,8 +910,10 @@ import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import { useUpdateStore } from '../stores/update'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
+import { useAttachmentDraftStore, type AttachmentDraft } from '../stores/attachmentDrafts'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
+import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
@@ -945,8 +949,10 @@ import {
   getFileUrl,
   uploadFile,
 } from '../api/file'
-import { cancelConversationFileUpload, uploadConversationFile, type FileTransferStage } from '../utils/fileTransfer'
+import { cancelConversationFileUpload, uploadConversationFile } from '../utils/fileTransfer'
 import { downloadAuthenticatedFile } from '../utils/fileDownload'
+import { runAttachmentQueue } from '../utils/attachmentQueue'
+import { DragDepthTracker, hasDirectoryDragItem, hasFileDragPayload } from '../utils/fileDrop'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
   STICKERS,
@@ -976,6 +982,8 @@ import settingsIcon from '../assets/icons/settings.svg'
 import powerIcon from '../assets/icons/power.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
 import screenshotIcon from '../assets/icons/screenshot.svg'
+import fileIcon from '../assets/icons/file.svg'
+import imageIcon from '../assets/icons/image.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -983,6 +991,7 @@ const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 const updateStore = useUpdateStore()
 const userProfileStore = useUserProfileStore()
+const attachmentDraftStore = useAttachmentDraftStore()
 
 const activeTab = ref<'chat' | 'contacts'>('chat')
 const showSettingsDialog = ref(false)
@@ -1132,8 +1141,6 @@ const emojiPanelRef = ref<HTMLElement | null>(null)
 const customStickerInputRef = ref<HTMLInputElement | null>(null)
 const messageText = ref('')
 const previewImage = ref('')
-const pendingImages = ref<PendingImage[]>([])
-const pendingFiles = ref<PendingFile[]>([])
 const authenticatedImageUrls = ref<Record<string, string>>({})
 const imageLoadsInProgress = new Set<string>()
 let imageLoadGeneration = 0
@@ -1141,6 +1148,10 @@ const fileDownloadProgress = ref<Record<string, number>>({})
 const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
 watch(isSendingMessage, (sending) => void updateStore.setTransferCount(sending ? 1 : 0), { immediate: true })
+const isAttachmentDragActive = ref(false)
+const attachmentFeedback = ref('')
+const attachmentFeedbackIsError = ref(false)
+const attachmentDragDepth = new DragDepthTracker()
 const isTakingScreenshot = ref(false)
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
@@ -1168,6 +1179,9 @@ const showSearchResults = ref(false)
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
+const currentAttachmentDrafts = computed(() =>
+  attachmentDraftStore.draftsFor(chatStore.currentConversation?.conversationId)
+)
 const totalUnreadCount = computed(() =>
   Array.from(chatStore.unreadCounts.values()).reduce((sum, count) => sum + count, 0)
 )
@@ -1176,24 +1190,6 @@ const selfPresence = computed(() => {
   return (userId && userProfileStore.presence[userId]) || manualPresence.value
 })
 const selfPresenceLabel = computed(() => getPresenceLabel(selfPresence.value))
-interface PendingImage {
-  id: string
-  file: File
-  previewUrl: string
-  name: string
-  size: number
-}
-
-interface PendingFile {
-  id: string
-  file: File
-  name: string
-  size: number
-  status: 'idle' | FileTransferStage | 'paused' | 'failed'
-  progress: number
-  error?: string
-  controller?: AbortController
-}
 const ALL_MENTION_MEMBER: ConversationMember = {
   userId: MESSAGE_MENTION_ALL_ID,
   nickname: '所有人',
@@ -1446,6 +1442,10 @@ function matchesAllMentionKeyword(keyword: string): boolean {
 }
 
 async function handleSelectConv(conv: any) {
+  if (isSendingMessage.value) {
+    setAttachmentFeedback('附件发送完成后才能切换会话', true)
+    return
+  }
   try {
     await chatStore.selectConversation(conv.conversationId)
     requestConversationPresence(conv.conversationId)
@@ -1474,85 +1474,111 @@ function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
   return Array.from(clipboardData.files).filter((file) => file.type.startsWith('image/'))
 }
 
-function addPendingImages(files: File[]) {
-  const imageFiles = files.filter((file) => file.type.startsWith('image/'))
-  if (!imageFiles.length) return
-
-  const timestamp = Date.now()
-  pendingImages.value.push(
-    ...imageFiles.map((file, index) => {
-      const name = file.name || `clipboard-image-${timestamp}-${index + 1}.png`
-      return {
-        id: generateId(),
-        file,
-        previewUrl: URL.createObjectURL(file),
-        name,
-        size: file.size,
-      }
-    }),
-  )
+function setAttachmentFeedback(message: string, isError = false) {
+  attachmentFeedback.value = message
+  attachmentFeedbackIsError.value = isError
 }
 
-function removePendingImage(id: string) {
-  const image = pendingImages.value.find((item) => item.id === id)
-  if (image) {
-    URL.revokeObjectURL(image.previewUrl)
+function addAttachmentFiles(files: File[]) {
+  const conversationId = chatStore.currentConversation?.conversationId
+  if (!conversationId || !authStore.currentUser) {
+    setAttachmentFeedback('请先选择会话，再添加附件', true)
+    return false
   }
-  pendingImages.value = pendingImages.value.filter((item) => item.id !== id)
-}
-
-function clearPendingImages() {
-  for (const image of pendingImages.value) {
-    URL.revokeObjectURL(image.previewUrl)
+  if (isSendingMessage.value) {
+    setAttachmentFeedback('附件正在发送，请稍后再添加', true)
+    return false
   }
-  pendingImages.value = []
+  if (!files.length) {
+    setAttachmentFeedback('没有检测到可添加的文件', true)
+    return false
+  }
+
+  const result = attachmentDraftStore.addFiles(conversationId, files)
+  const messages: string[] = []
+  if (result.added.length) messages.push(`已添加 ${result.added.length} 个附件`)
+  if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复附件`)
+  if (result.errors.length) messages.push(...result.errors)
+  setAttachmentFeedback(messages.join('；'), result.errors.length > 0 || !result.added.length)
+  return result.added.length > 0
 }
 
-function addPendingFiles(files: File[]) {
-  if (!files.length) return
-
-  pendingFiles.value.push(
-    ...files.map((file) => ({
-      id: generateId(),
-      file,
-      name: file.name || 'file',
-      size: file.size,
-      status: 'idle' as const,
-      progress: 0,
-    }))
-  )
-}
-
-function removePendingFile(id: string) {
-  const item = pendingFiles.value.find((candidate) => candidate.id === id)
-  item?.controller?.abort()
-  if (item && chatStore.currentConversation && authStore.currentUser) {
+function removeAttachmentDraft(draft: AttachmentDraft) {
+  if (isSendingMessage.value) return
+  if (draft.kind === 'file' && authStore.currentUser) {
     void cancelConversationFileUpload(
-      item.file,
-      chatStore.currentConversation.conversationId,
+      draft.file,
+      draft.conversationId,
       authStore.currentUser.userId,
     ).catch(() => undefined)
   }
-  pendingFiles.value = pendingFiles.value.filter((item) => item.id !== id)
+  attachmentDraftStore.removeDraft(draft.conversationId, draft.id)
+  setAttachmentFeedback(`已移除 ${draft.name}`)
 }
 
-function clearPendingFiles() {
-  pendingFiles.value.forEach((item) => item.controller?.abort())
-  pendingFiles.value = []
+function pauseAttachmentDraft(draft: AttachmentDraft) {
+  if (draft.kind !== 'file') return
+  attachmentDraftStore.updateDraft(draft.conversationId, draft.id, {
+    status: 'paused',
+    error: undefined,
+  })
+  draft.controller?.abort()
 }
 
-function pausePendingFile(item: PendingFile) {
-  item.status = 'paused'
-  item.controller?.abort()
+function retryAttachmentDraft() {
+  void handleSendMessage()
 }
 
-function getPendingFileStatus(item: PendingFile) {
-  if (item.status === 'hashing') return `校验 ${Math.round(item.progress * 100)}%`
-  if (item.status === 'uploading') return `上传 ${Math.round(item.progress * 100)}%`
-  if (item.status === 'paused') return '已暂停'
-  if (item.status === 'failed') return item.error || '上传失败'
-  if (item.status === 'completed') return '已完成'
-  return ''
+function handleAttachmentDragEnter(event: DragEvent) {
+  if (!hasFileDragPayload(event.dataTransfer)) return
+  event.preventDefault()
+  const depth = attachmentDragDepth.enter()
+  isAttachmentDragActive.value = true
+  if (depth === 1) setAttachmentFeedback('松开以添加到当前会话')
+}
+
+function handleAttachmentDragOver(event: DragEvent) {
+  if (!hasFileDragPayload(event.dataTransfer)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleAttachmentDragLeave(event: DragEvent) {
+  if (!isAttachmentDragActive.value) return
+  event.preventDefault()
+  if (attachmentDragDepth.leave() === 0) {
+    isAttachmentDragActive.value = false
+    if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
+  }
+}
+
+function handleAttachmentDrop(event: DragEvent) {
+  if (!hasFileDragPayload(event.dataTransfer)) return
+  event.preventDefault()
+  event.stopPropagation()
+  attachmentDragDepth.reset()
+  isAttachmentDragActive.value = false
+  if (hasDirectoryDragItem(event.dataTransfer?.items)) {
+    setAttachmentFeedback('暂不支持拖入文件夹，请选择文件后重试', true)
+    return
+  }
+  addAttachmentFiles(Array.from(event.dataTransfer?.files || []))
+}
+
+function preventWindowFileDrop(event: DragEvent) {
+  if (!hasFileDragPayload(event.dataTransfer)) return
+  event.preventDefault()
+  if (event.type === 'drop') {
+    attachmentDragDepth.reset()
+    isAttachmentDragActive.value = false
+  }
+}
+
+function handleWindowDragLeave(event: DragEvent) {
+  if (!isAttachmentDragActive.value || event.relatedTarget) return
+  attachmentDragDepth.reset()
+  isAttachmentDragActive.value = false
+  if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string): File {
@@ -1581,7 +1607,7 @@ async function takeScreenshot() {
     const result = await window.imDesktop.startScreenshot()
     if (!result.canceled && result.dataUrl) {
       const file = dataUrlToFile(result.dataUrl, `screenshot-${Date.now()}.png`)
-      addPendingImages([file])
+      addAttachmentFiles([file])
       await nextTick()
       messageInputRef.value?.focus()
     }
@@ -1597,7 +1623,7 @@ function handleMessagePaste(event: ClipboardEvent) {
   if (!files.length) return
 
   event.preventDefault()
-  addPendingImages(files)
+  addAttachmentFiles(files)
   closeMentionPicker()
   closeEmojiPanel()
 }
@@ -2388,11 +2414,13 @@ async function recallCurrentMessage(msg: Message) {
   }
 }
 
-function sendTextMessage() {
+function sendTextMessage(
+  conv: Conversation | null = chatStore.currentConversation,
+  user: UserInfo | null = authStore.currentUser,
+) {
   const text = messageText.value.trim()
   if (!text) return false
-  const conv = chatStore.currentConversation
-  if (!conv || !wsManager || !authStore.currentUser) return false
+  if (!conv || !wsManager || !user) return false
 
   const clientMsgId = generateId()
   const mentions = pruneDraftMentions()
@@ -2401,10 +2429,10 @@ function sendTextMessage() {
   const localMessage: Message = {
     messageId: '',
     conversationId: conv.conversationId,
-    senderId: authStore.currentUser.userId,
-    senderName: authStore.currentUser.nickname,
-    senderAvatar: authStore.currentUser.avatar || '',
-    senderSignature: authStore.currentUser.signature || '',
+    senderId: user.userId,
+    senderName: user.nickname,
+    senderAvatar: user.avatar || '',
+    senderSignature: user.signature || '',
     messageType: 'TEXT',
     content,
     displayContent: text,
@@ -2429,102 +2457,96 @@ function sendTextMessage() {
 
 async function handleSendMessage() {
   if (isSendingMessage.value) return
-  // Upload media first so chat messages only reference persisted file metadata.
   const hasText = !!messageText.value.trim()
-  const hasImages = pendingImages.value.length > 0
-  const hasFiles = pendingFiles.value.length > 0
-  if (!hasText && !hasImages && !hasFiles) return
-
-  if (!chatStore.currentConversation || !authStore.currentUser) {
-    alert('请先选择会话')
+  const conversation = chatStore.currentConversation
+  const user = authStore.currentUser
+  const attachments = [...currentAttachmentDrafts.value]
+  if (!hasText && !attachments.length) return
+  if (!conversation || !user) {
+    setAttachmentFeedback('请先选择会话', true)
     return
   }
 
   isSendingMessage.value = true
   try {
-    for (const image of [...pendingImages.value]) {
-      try {
-        const res = await uploadFile(image.file, chatStore.currentConversation?.conversationId, 'image')
-        const url = res.data.url || getFileUrl(res.data.id)
-        const imageContent = JSON.stringify({
-          fileId: res.data.id,
-          url,
-          fileName: res.data.originalName || image.name,
-          fileSize: res.data.size || image.size,
-          contentType: res.data.contentType || image.file.type || 'image/png',
-        })
-        removePendingImage(image.id)
-        sendMediaMessage('IMAGE', imageContent, '[图片]')
-      } catch (err: any) {
-        alert(err?.response?.data?.message || '上传图片失败')
-        return
-      }
-    }
-
-    for (const item of [...pendingFiles.value]) {
-      if (!await processPendingFile(item)) return
-    }
-
-    if (hasText) {
-      sendTextMessage()
-    }
+    const completed = await runAttachmentQueue(
+      attachments,
+      (draft) => processAttachmentDraft(draft, conversation, user),
+    )
+    if (!completed) return
+    if (hasText) sendTextMessage(conversation, user)
+    if (attachments.length) setAttachmentFeedback('附件已加入发送队列')
   } finally {
     isSendingMessage.value = false
   }
 }
 
-async function processPendingFile(item: PendingFile) {
-  const conversation = chatStore.currentConversation
-  const user = authStore.currentUser
-  if (!conversation || !user) return false
+async function processAttachmentDraft(
+  draft: AttachmentDraft,
+  conversation: Conversation,
+  user: UserInfo,
+) {
   const controller = new AbortController()
-  item.controller = controller
-  item.status = 'hashing'
-  item.progress = 0
-  item.error = undefined
+  attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+    controller,
+    status: draft.kind === 'image' ? 'uploading' : 'hashing',
+    progress: 0,
+    error: undefined,
+  })
   try {
-    const file = await uploadConversationFile(item.file, conversation.conversationId, user.userId, {
-      signal: controller.signal,
-      onProgress: (progress) => {
-        item.status = progress.stage
-        item.progress = progress.progress
-      },
-    })
-    item.status = 'completed'
-    item.progress = 1
-    item.controller = undefined
-    const fileContent = {
-      fileId: file.id,
-      fileName: file.originalName || item.name,
-      fileSize: file.size || item.size,
-      contentType: file.contentType || item.file.type || 'application/octet-stream',
-      sha256: file.sha256,
-      transferMode: file.transferMode || 'object_storage',
-      downloadUrl: file.downloadUrl || file.url || getFileUrl(file.id),
+    if (draft.kind === 'image') {
+      const response = await uploadFile(
+        draft.file,
+        conversation.conversationId,
+        'image',
+        (progress) => attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+          status: 'uploading',
+          progress,
+        }),
+        controller.signal,
+      )
+      const image = response.data
+      const imageContent = {
+        fileId: image.id,
+        url: image.url || getFileUrl(image.id),
+        fileName: image.originalName || draft.name,
+        fileSize: image.size || draft.size,
+        contentType: image.contentType || draft.mimeType || 'image/png',
+      }
+      sendMediaMessage('IMAGE', JSON.stringify(imageContent), '[图片]', conversation, user)
+    } else {
+      const file = await uploadConversationFile(draft.file, conversation.conversationId, user.userId, {
+        signal: controller.signal,
+        onProgress: (progress) => attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+          status: progress.stage === 'completed' ? 'uploading' : progress.stage,
+          progress: progress.progress,
+        }),
+      })
+      const fileContent = {
+        fileId: file.id,
+        fileName: file.originalName || draft.name,
+        fileSize: file.size || draft.size,
+        contentType: file.contentType || draft.mimeType || 'application/octet-stream',
+        sha256: file.sha256,
+        transferMode: file.transferMode || 'object_storage',
+        downloadUrl: file.downloadUrl || file.url || getFileUrl(file.id),
+      }
+      sendMediaMessage('FILE', JSON.stringify(fileContent), `[文件] ${fileContent.fileName}`, conversation, user)
     }
-    pendingFiles.value = pendingFiles.value.filter((candidate) => candidate.id !== item.id)
-    sendMediaMessage('FILE', JSON.stringify(fileContent), `[文件] ${fileContent.fileName}`)
+    attachmentDraftStore.removeDraft(conversation.conversationId, draft.id)
     return true
   } catch (error: any) {
-    item.controller = undefined
-    if (controller.signal.aborted) {
-      item.status = 'paused'
-      item.error = undefined
-    } else {
-      item.status = 'failed'
-      item.error = error?.response?.data?.message || error?.message || '上传失败'
-    }
+    const errorMessage = error?.response?.data?.message || error?.message || '上传失败'
+    attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+      controller: undefined,
+      status: controller.signal.aborted ? 'paused' : 'failed',
+      error: controller.signal.aborted ? undefined : errorMessage,
+    })
+    setAttachmentFeedback(
+      controller.signal.aborted ? `${draft.name} 已暂停` : `${draft.name}：${errorMessage}`,
+      !controller.signal.aborted,
+    )
     return false
-  }
-}
-
-async function retryPendingFile(item: PendingFile) {
-  if (isSendingMessage.value) return
-  isSendingMessage.value = true
-  try {
-    await processPendingFile(item)
-  } finally {
-    isSendingMessage.value = false
   }
 }
 
@@ -2532,46 +2554,42 @@ function handleSendText() {
   void handleSendMessage()
 }
 
-async function onSendImage(e: Event) {
+function activateFileLabel(event: KeyboardEvent) {
+  if (isSendingMessage.value) return
+  ;(event.currentTarget as HTMLElement | null)?.click()
+}
+
+function onSendImage(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!chatStore.currentConversation || !authStore.currentUser) {
-    alert('请先选择会话')
-    input.value = ''
-    return
-  }
   const files = Array.from(input.files || []).filter((file) => file.type.startsWith('image/'))
-  if (files.length) {
-    addPendingImages(files)
-  }
+  if (files.length) addAttachmentFiles(files)
   input.value = ''
 }
 
-async function onSendFile(e: Event) {
+function onSendFile(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!chatStore.currentConversation || !authStore.currentUser) {
-    alert('请选择会话')
-    input.value = ''
-    return
-  }
   const files = Array.from(input.files || [])
-  if (files.length) {
-    addPendingFiles(files)
-  }
+  if (files.length) addAttachmentFiles(files)
   input.value = ''
 }
 
-function sendMediaMessage(type: string, content: string, displayContent = content) {
-  const conv = chatStore.currentConversation
-  if (!conv || !wsManager || !authStore.currentUser) return
+function sendMediaMessage(
+  type: string,
+  content: string,
+  displayContent = content,
+  conv = chatStore.currentConversation,
+  user: UserInfo | null = authStore.currentUser,
+) {
+  if (!conv || !user) return
 
   const clientMsgId = generateId()
   const localMessage: Message = {
     messageId: '',
     conversationId: conv.conversationId,
-    senderId: authStore.currentUser.userId,
-    senderName: authStore.currentUser.nickname,
-    senderAvatar: authStore.currentUser.avatar || '',
-    senderSignature: authStore.currentUser.signature || '',
+    senderId: user.userId,
+    senderName: user.nickname,
+    senderAvatar: user.avatar || '',
+    senderSignature: user.signature || '',
     messageType: type as any,
     content,
     displayContent,
@@ -2945,6 +2963,9 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleDocumentMouseDown)
   window.addEventListener('mousemove', handleUserActivity)
   window.addEventListener('keydown', handleUserActivity)
+  window.addEventListener('dragover', preventWindowFileDrop)
+  window.addEventListener('drop', preventWindowFileDrop)
+  window.addEventListener('dragleave', handleWindowDragLeave)
   resetIdleTimer()
   removeNotificationOpenListener = window.imDesktop?.onNotificationOpenConversation?.((conversationId) => {
     void openConversationFromNotification(conversationId)
@@ -2971,14 +2992,16 @@ onUnmounted(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)
   window.removeEventListener('keydown', handleUserActivity)
+  window.removeEventListener('dragover', preventWindowFileDrop)
+  window.removeEventListener('drop', preventWindowFileDrop)
+  window.removeEventListener('dragleave', handleWindowDragLeave)
   if (idleTimer) {
     clearTimeout(idleTimer)
     idleTimer = null
   }
   removeNotificationOpenListener?.()
   removeNotificationOpenListener = null
-  clearPendingImages()
-  clearPendingFiles()
+  attachmentDraftStore.clearAll()
   clearAuthenticatedImages()
   fileDownloadControllers.forEach((controller) => controller.abort())
   fileDownloadControllers.clear()
@@ -2994,8 +3017,9 @@ watch(
     memberSearch.value = ''
     memberAddKeyword.value = ''
     memberAddResults.value = []
-    clearPendingImages()
-    clearPendingFiles()
+    attachmentDragDepth.reset()
+    isAttachmentDragActive.value = false
+    attachmentFeedback.value = ''
     clearAuthenticatedImages()
     closeMentionPicker()
     closeEmojiPanel()
@@ -3013,6 +3037,7 @@ watch(
       loadInitialChatData()
       initWebSocket()
     } else {
+      attachmentDraftStore.clearAll()
       settingsStore.resetLocal()
       updateUnreadBadge()
     }
@@ -3886,6 +3911,55 @@ watch(
   border-top: 1px solid #e0e0e0;
   background: #f0f0f0;
   padding: 8px 16px 12px;
+  position: relative;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.input-area.is-file-drag-active {
+  border-color: #4053bf;
+}
+
+.attachment-drop-overlay {
+  align-items: center;
+  background: rgba(241, 244, 255, 0.96);
+  border: 2px dashed #4053bf;
+  border-radius: 10px;
+  color: #263ca8;
+  display: flex;
+  flex-direction: column;
+  inset: 6px;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  z-index: 30;
+}
+
+.attachment-drop-overlay img {
+  height: 28px;
+  margin-bottom: 6px;
+  width: 28px;
+}
+
+.attachment-drop-overlay strong {
+  font-size: 14px;
+}
+
+.attachment-drop-overlay span {
+  color: #475166;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.attachment-feedback {
+  color: #4053bf;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0 0 6px;
+}
+
+.attachment-feedback.error {
+  color: #a52f2a;
 }
 
 .reply-target {
@@ -3948,127 +4022,14 @@ watch(
   opacity: 0.55;
 }
 
-.pending-image-list {
-  display: flex;
-  gap: 8px;
-  max-height: 92px;
-  overflow-x: auto;
-  padding: 4px 0 8px;
-}
-
-.pending-image-item {
-  width: 72px;
-  height: 72px;
-  min-width: 72px;
-  border: 1px solid #d8dce8;
-  border-radius: 8px;
-  background: #fff;
-  overflow: hidden;
-  position: relative;
-}
-
-.pending-image-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.pending-image-remove {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 20px;
-  padding: 0;
-}
-
-.pending-image-remove:disabled {
+.tool-btn.disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.pending-file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 110px;
-  overflow-y: auto;
-  padding: 4px 0 8px;
-}
-
-.pending-file-item {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d8dce8;
-  border-radius: 8px;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 24px minmax(0, 1fr) auto minmax(58px, auto) auto 24px;
-  min-height: 38px;
-  padding: 6px 8px;
-}
-
-.pending-file-icon {
-  color: #4f63d8;
-  text-align: center;
-}
-
-.pending-file-name {
-  color: #333;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pending-file-size {
-  color: #8a8f99;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.pending-file-status {
-  color: #4f63d8;
-  font-size: 11px;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pending-file-action {
-  background: transparent;
-  border: none;
-  color: #4f63d8;
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
-}
-
-.pending-file-remove {
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  cursor: pointer;
-  font-size: 15px;
-  height: 20px;
-  line-height: 20px;
-  padding: 0;
-  width: 20px;
-  grid-column: -1;
-}
-
-.pending-file-remove:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.tool-btn:focus-visible {
+  outline: 2px solid #4053bf;
+  outline-offset: 2px;
 }
 
 .input-box {
@@ -4089,6 +4050,11 @@ watch(
   line-height: 1.5;
   min-height: 44px;
   max-height: 120px;
+}
+
+.message-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .send-btn {
@@ -4777,6 +4743,24 @@ watch(
 .dark-theme .message-input {
   background: #20242c;
   color: #edf0f5;
+}
+
+.dark-theme .attachment-drop-overlay {
+  background: rgba(37, 42, 54, 0.97);
+  border-color: #aeb8ff;
+  color: #d8ddff;
+}
+
+.dark-theme .attachment-drop-overlay span {
+  color: #c4cad6;
+}
+
+.dark-theme .attachment-feedback {
+  color: #aeb8ff;
+}
+
+.dark-theme .attachment-feedback.error {
+  color: #ffaaa4;
 }
 
 .dark-theme .conv-item:hover,

@@ -94,6 +94,7 @@ export function uploadFile(
   conversationId?: string,
   category: 'file' | 'image' = 'file',
   onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
 ) {
   const formData = new FormData()
   formData.append('file', file)
@@ -102,6 +103,7 @@ export function uploadFile(
   return http.post('/api/files/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,
+    signal,
     onUploadProgress: (event) => onProgress?.(event.total ? event.loaded / event.total : 0),
   }).then((res) => ({
     ...res,

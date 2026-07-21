@@ -60,6 +60,21 @@ describe('file transfer orchestrator', () => {
     expect(api.createUploadTask).not.toHaveBeenCalled()
   })
 
+  it('passes cancellation through to direct uploads', async () => {
+    api.uploadFile.mockResolvedValue({ data: fileVO() })
+    const controller = new AbortController()
+
+    await uploadConversationFile(file(1024), '3', '7', { signal: controller.signal })
+
+    expect(api.uploadFile).toHaveBeenCalledWith(
+      expect.anything(),
+      '3',
+      'file',
+      expect.any(Function),
+      controller.signal,
+    )
+  })
+
   it('rejects files larger than 50 GiB before hashing', async () => {
     await expect(uploadConversationFile(file(50 * 1024 * 1024 * 1024 + 1), '3', '7'))
       .rejects.toThrow('50GB')

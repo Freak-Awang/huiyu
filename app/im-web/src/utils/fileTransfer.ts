@@ -158,12 +158,18 @@ export async function uploadConversationFile(
   throwIfAborted(options.signal)
 
   if (file.size <= DIRECT_UPLOAD_MAX_SIZE) {
-    const response = await uploadFile(file, conversationId, 'file', (progress) => options.onProgress?.({
-      stage: 'uploading',
-      progress,
-      uploadedBytes: Math.round(file.size * progress),
-      totalBytes: file.size,
-    }))
+    const response = await uploadFile(
+      file,
+      conversationId,
+      'file',
+      (progress) => options.onProgress?.({
+        stage: 'uploading',
+        progress,
+        uploadedBytes: Math.round(file.size * progress),
+        totalBytes: file.size,
+      }),
+      options.signal,
+    )
     options.onProgress?.({ stage: 'completed', progress: 1, uploadedBytes: file.size, totalBytes: file.size })
     return response.data
   }
