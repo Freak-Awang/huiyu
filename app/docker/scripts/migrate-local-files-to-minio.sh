@@ -90,7 +90,7 @@ while IFS="${tab}" read -r file_id object_key expected_size expected_sha; do
         mc alias set app "${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}" --api S3v4 >/dev/null
         mc cp --quiet "/source/${OBJECT_KEY}" "app/${MINIO_BUCKET}/${OBJECT_KEY}"
         mc cat "app/${MINIO_BUCKET}/${OBJECT_KEY}" | sha256sum | awk '\''{print $1}'\''
-      ' | tail -n 1
+      ' </dev/null | tail -n 1
   )"
   if [ "${remote_sha}" != "${actual_sha}" ]; then
     printf '%s\t%s\t%s\n' "${file_id}" "${object_key}" "remote sha256 mismatch" >>"${missing}"
