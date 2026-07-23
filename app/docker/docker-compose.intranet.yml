@@ -31,6 +31,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.minio
+      additional_contexts:
+        minio_sources: ${MINIO_SOURCE_CACHE:-/opt/minio-source-cache}
       args:
         MINIO_COMMIT: 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
         MC_COMMIT: cf909e1063a9a0aea7926378b0c416ed0eea7742

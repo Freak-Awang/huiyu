@@ -86,6 +86,7 @@ done
 
 upsert FILE_STORAGE "$STORAGE"
 upsert LOCAL_UPLOAD_PATH /opt/im-project/huiyu/data/upload
+upsert MINIO_SOURCE_CACHE /opt/minio-source-cache
 upsert MINIO_DATA_PATH /opt/minio/data
 upsert MINIO_CONSOLE_BIND_IP 172.16.59.253
 upsert MINIO_BUCKET im-files

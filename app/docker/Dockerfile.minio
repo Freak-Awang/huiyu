@@ -3,22 +3,16 @@ FROM golang:1.24.8-bookworm AS build
 ARG TARGETARCH=amd64
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 ARG MC_COMMIT=cf909e1063a9a0aea7926378b0c416ed0eea7742
+ARG MINIO_SOURCE_SHA256=45521908307306e925c98d629e1c17d78c8b72b6ee242b1bfb1409f7d8ee5841
+ARG MC_SOURCE_SHA256=aff96a5eb9694dfefe21c9bc090021b0ae33df68b960429b07abe3cd5adc89ea
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=minio_sources minio.tar.gz /tmp/minio.tar.gz
+COPY --from=minio_sources mc.tar.gz /tmp/mc.tar.gz
 
 RUN mkdir -p /src/minio \
-    && cd /src/minio \
-    && git init \
-    && git remote add origin https://github.com/minio/minio.git \
-    && for attempt in 1 2 3 4 5; do \
-         git -c http.version=HTTP/1.1 fetch --depth 1 origin "${MINIO_COMMIT}" && break; \
-         echo "MinIO source fetch attempt ${attempt} failed; retrying" >&2; \
-         sleep 5; \
-       done \
-    && git checkout --detach FETCH_HEAD \
-    && test "$(git rev-parse HEAD)" = "${MINIO_COMMIT}"
+    && echo "${MINIO_SOURCE_SHA256}  /tmp/minio.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/minio.tar.gz --strip-components=1 -C /src/minio \
+    && test -f "/src/minio/README.md"
 
 WORKDIR /src/minio
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -28,16 +22,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
        go build -tags kqueue -trimpath --ldflags "${LDFLAGS}" -o /out/minio
 
 RUN mkdir -p /src/mc \
-    && cd /src/mc \
-    && git init \
-    && git remote add origin https://github.com/minio/mc.git \
-    && for attempt in 1 2 3 4 5; do \
-         git -c http.version=HTTP/1.1 fetch --depth 1 origin "${MC_COMMIT}" && break; \
-         echo "mc source fetch attempt ${attempt} failed; retrying" >&2; \
-         sleep 5; \
-       done \
-    && git checkout --detach FETCH_HEAD \
-    && test "$(git rev-parse HEAD)" = "${MC_COMMIT}"
+    && echo "${MC_SOURCE_SHA256}  /tmp/mc.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/mc.tar.gz --strip-components=1 -C /src/mc \
+    && test -f "/src/mc/README.md"
 
 WORKDIR /src/mc
 RUN --mount=type=cache,target=/go/pkg/mod \

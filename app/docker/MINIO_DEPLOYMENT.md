@@ -33,6 +33,7 @@ MinIO data directory, and then starts Nginx again.
 ## 3. Deploy storage routing and MinIO
 
 ```sh
+sh scripts/prepare-minio-sources.sh
 docker compose --env-file .env -f docker-compose.intranet.yml build backend minio
 docker compose --env-file .env -f docker-compose.intranet.yml up -d mysql redis backend nginx
 docker compose --env-file .env -f docker-compose.intranet.yml up -d minio
