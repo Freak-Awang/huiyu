@@ -12,7 +12,11 @@ RUN mkdir -p /src/minio \
     && cd /src/minio \
     && git init \
     && git remote add origin https://github.com/minio/minio.git \
-    && git fetch --depth 1 origin "${MINIO_COMMIT}" \
+    && for attempt in 1 2 3 4 5; do \
+         git -c http.version=HTTP/1.1 fetch --depth 1 origin "${MINIO_COMMIT}" && break; \
+         echo "MinIO source fetch attempt ${attempt} failed; retrying" >&2; \
+         sleep 5; \
+       done \
     && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "${MINIO_COMMIT}"
 
@@ -27,7 +31,11 @@ RUN mkdir -p /src/mc \
     && cd /src/mc \
     && git init \
     && git remote add origin https://github.com/minio/mc.git \
-    && git fetch --depth 1 origin "${MC_COMMIT}" \
+    && for attempt in 1 2 3 4 5; do \
+         git -c http.version=HTTP/1.1 fetch --depth 1 origin "${MC_COMMIT}" && break; \
+         echo "mc source fetch attempt ${attempt} failed; retrying" >&2; \
+         sleep 5; \
+       done \
     && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "${MC_COMMIT}"
 
