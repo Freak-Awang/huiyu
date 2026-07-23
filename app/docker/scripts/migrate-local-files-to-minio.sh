@@ -5,6 +5,11 @@ compose_file="${COMPOSE_FILE:-docker-compose.intranet.yml}"
 env_file="${ENV_FILE:-.env}"
 report_root="${MIGRATION_REPORT_ROOT:-./backups}"
 
+case "${env_file}" in
+  /*|./*|../*) ;;
+  *) env_file="./${env_file}" ;;
+esac
+
 if [ ! -f "${env_file}" ]; then
   echo "Missing environment file: ${env_file}" >&2
   exit 1
