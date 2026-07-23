@@ -1,5 +1,7 @@
 FROM golang:1.24.8-bookworm AS build
 
+ENV GOPROXY=https://goproxy.cn,direct
+
 ARG TARGETARCH=amd64
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 ARG MC_COMMIT=cf909e1063a9a0aea7926378b0c416ed0eea7742
