@@ -5,6 +5,8 @@ ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 ARG MC_COMMIT=cf909e1063a9a0aea7926378b0c416ed0eea7742
 ARG MINIO_SOURCE_SHA256=45521908307306e925c98d629e1c17d78c8b72b6ee242b1bfb1409f7d8ee5841
 ARG MC_SOURCE_SHA256=aff96a5eb9694dfefe21c9bc090021b0ae33df68b960429b07abe3cd5adc89ea
+ARG MINIO_VERSION=2025-10-15T17:29:55Z
+ARG MINIO_RELEASE_TAG=RELEASE.2025-10-15T17-29-55Z
 
 COPY --from=minio_sources minio.tar.gz /tmp/minio.tar.gz
 COPY --from=minio_sources mc.tar.gz /tmp/mc.tar.gz
@@ -17,7 +19,14 @@ RUN mkdir -p /src/minio \
 WORKDIR /src/minio
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    LDFLAGS="$(go run buildscripts/gen-ldflags.go)" \
+    LDFLAGS="-s -w \
+      -X github.com/minio/minio/cmd.Version=${MINIO_VERSION} \
+      -X github.com/minio/minio/cmd.CopyrightYear=2025 \
+      -X github.com/minio/minio/cmd.ReleaseTag=${MINIO_RELEASE_TAG} \
+      -X github.com/minio/minio/cmd.CommitID=${MINIO_COMMIT} \
+      -X github.com/minio/minio/cmd.ShortCommitID=$(printf '%s' "${MINIO_COMMIT}" | cut -c1-12) \
+      -X github.com/minio/minio/cmd.GOPATH=$(go env GOPATH) \
+      -X github.com/minio/minio/cmd.GOROOT=$(go env GOROOT)" \
     && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
        go build -tags kqueue -trimpath --ldflags "${LDFLAGS}" -o /out/minio
 
