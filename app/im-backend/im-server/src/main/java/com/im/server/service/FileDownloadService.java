@@ -8,6 +8,7 @@ import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.stereotype.Service;
 
@@ -22,17 +23,17 @@ public class FileDownloadService {
     private final FileMetadataService metadataService;
     private final ConversationMemberMapper conversationMemberMapper;
     private final UserMapper userMapper;
-    private final FileStorageClient storageClient;
+    private final FileStorageRouter storageRouter;
 
     public FileDownloadService(
             FileMetadataService metadataService,
             ConversationMemberMapper conversationMemberMapper,
             UserMapper userMapper,
-            FileStorageClient storageClient) {
+            FileStorageRouter storageRouter) {
         this.metadataService = metadataService;
         this.conversationMemberMapper = conversationMemberMapper;
         this.userMapper = userMapper;
-        this.storageClient = storageClient;
+        this.storageRouter = storageRouter;
     }
 
     public ImFile getDownloadableFile(Long userId, Long fileId) {
@@ -59,6 +60,7 @@ public class FileDownloadService {
 
     public StoredObject openFile(ImFile file, long offset, Long length) {
         try {
+            FileStorageClient storageClient = storageRouter.clientFor(file.getStorageType(), file.getBucket());
             return storageClient.open(file.getObjectKey(), offset, length);
         } catch (Exception e) {
             throw new BusinessException("Failed to open file: " + e.getMessage());

@@ -3,6 +3,7 @@ package com.im.server.service;
 import com.im.common.exception.BusinessException;
 import com.im.server.config.FileStorageProperties;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +27,9 @@ class FileUploadServiceTest {
 
     @Mock
     private FileStorageClient storageClient;
+
+    @Mock
+    private FileStorageRouter storageRouter;
 
     @Mock
     private FileStorageProperties properties;
@@ -79,6 +83,7 @@ class FileUploadServiceTest {
     @Test
     void conversationFileUploadAcceptsNonImageFile() throws Exception {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
+        when(storageRouter.defaultClient()).thenReturn(storageClient);
         when(storageClient.storageType()).thenReturn("minio");
         when(storageClient.bucket()).thenReturn("im-files");
 
@@ -125,6 +130,7 @@ class FileUploadServiceTest {
 
     private void mockImageUploadStorage() {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
+        when(storageRouter.defaultClient()).thenReturn(storageClient);
         when(storageClient.storageType()).thenReturn("minio");
         when(storageClient.bucket()).thenReturn("im-files");
     }

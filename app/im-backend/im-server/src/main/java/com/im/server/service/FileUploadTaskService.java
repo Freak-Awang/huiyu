@@ -13,6 +13,7 @@ import com.im.server.mapper.FileMapper;
 import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.FileUploadPartMapper;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +44,7 @@ public class FileUploadTaskService {
     private final FileUploadPartMapper uploadPartMapper;
     private final FileMapper fileMapper;
     private final FileMetadataService metadataService;
-    private final FileStorageClient storageClient;
+    private final FileStorageRouter storageRouter;
     private final FileStorageProperties properties;
 
     public FileUploadTaskService(
@@ -51,13 +52,13 @@ public class FileUploadTaskService {
             FileUploadPartMapper uploadPartMapper,
             FileMapper fileMapper,
             FileMetadataService metadataService,
-            FileStorageClient storageClient,
+            FileStorageRouter storageRouter,
             FileStorageProperties properties) {
         this.uploadMapper = uploadMapper;
         this.uploadPartMapper = uploadPartMapper;
         this.fileMapper = fileMapper;
         this.metadataService = metadataService;
-        this.storageClient = storageClient;
+        this.storageRouter = storageRouter;
         this.properties = properties;
     }
 
@@ -75,7 +76,7 @@ public class FileUploadTaskService {
             vo.setChunkSize(properties.getChunkSize());
             vo.setChunkCount(0);
             vo.setUploadMode("second_transfer");
-            vo.setStorageType(storageClient.storageType());
+            vo.setStorageType(reusable.getStorageType());
             vo.setStatus(STATUS_COMPLETED);
             vo.setUploadedParts(List.of());
             vo.setFile(metadataService.toFileVO(reusable));
@@ -87,6 +88,7 @@ public class FileUploadTaskService {
         String originalName = safeName(request.getFileName());
         String uploadId = "upload_" + UUID.randomUUID().toString().replace("-", "");
         String objectKey = finalObjectKey(originalName);
+        FileStorageClient storageClient = storageRouter.defaultClient();
 
         ImFileUpload upload = new ImFileUpload();
         upload.setUploadId(uploadId);
@@ -133,6 +135,8 @@ public class FileUploadTaskService {
 
         String partObjectKey = chunkObjectKey(upload, partNumber);
         try {
+            FileStorageClient storageClient =
+                    storageRouter.clientFor(upload.getStorageType(), upload.getBucket());
             storageClient.saveChunk(partObjectKey, file);
         } catch (Exception e) {
             throw new BusinessException("Failed to upload chunk: " + e.getMessage());
@@ -176,12 +180,14 @@ public class FileUploadTaskService {
                 .sorted(Comparator.comparing(ImFileUploadPart::getPartNumber))
                 .map(ImFileUploadPart::getObjectKey)
                 .collect(Collectors.toList());
+        FileStorageClient storageClient =
+                storageRouter.clientFor(upload.getStorageType(), upload.getBucket());
 
         try {
             storageClient.compose(upload.getObjectKey(), partKeys, upload.getFileSize(), upload.getContentType());
             String expectedHash = normalizeHash(firstText(request != null ? request.getSha256() : null, upload.getSha256()));
             if (StringUtils.hasText(expectedHash)) {
-                String actualHash = sha256Stored(upload.getObjectKey());
+                String actualHash = sha256Stored(storageClient, upload.getObjectKey());
                 if (!expectedHash.equalsIgnoreCase(actualHash)) {
                     storageClient.deleteQuietly(upload.getObjectKey());
                     throw new BusinessException(400, "File checksum mismatch");
@@ -224,6 +230,8 @@ public class FileUploadTaskService {
             throw new BusinessException(400, "Completed upload cannot be cancelled");
         }
         List<ImFileUploadPart> parts = getParts(uploadId);
+        FileStorageClient storageClient =
+                storageRouter.clientFor(upload.getStorageType(), upload.getBucket());
         parts.forEach(part -> storageClient.deleteQuietly(part.getObjectKey()));
         uploadPartMapper.delete(new LambdaQueryWrapper<ImFileUploadPart>()
                 .eq(ImFileUploadPart::getUploadId, uploadId));
@@ -368,7 +376,7 @@ public class FileUploadTaskService {
         return hash.startsWith("sha256_") ? hash.substring("sha256_".length()) : hash;
     }
 
-    private String sha256Stored(String objectKey) throws Exception {
+    private String sha256Stored(FileStorageClient storageClient, String objectKey) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] buffer = new byte[8192];
         StoredObject object = storageClient.open(objectKey, 0, null);

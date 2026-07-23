@@ -4,6 +4,7 @@ import com.im.common.entity.ImFile;
 import com.im.common.exception.BusinessException;
 import com.im.server.config.FileStorageProperties;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -22,15 +23,15 @@ import java.util.UUID;
 public class FileUploadService {
 
     private final FileMetadataService metadataService;
-    private final FileStorageClient storageClient;
+    private final FileStorageRouter storageRouter;
     private final FileStorageProperties properties;
 
     public FileUploadService(
             FileMetadataService metadataService,
-            FileStorageClient storageClient,
+            FileStorageRouter storageRouter,
             FileStorageProperties properties) {
         this.metadataService = metadataService;
-        this.storageClient = storageClient;
+        this.storageRouter = storageRouter;
         this.properties = properties;
     }
 
@@ -74,6 +75,7 @@ public class FileUploadService {
 
     private ImFile storeFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary, boolean imageOnly) {
         try {
+            FileStorageClient storageClient = storageRouter.defaultClient();
             String originalName = safeName(file.getOriginalFilename());
             String objectKey = finalObjectKey(originalName);
             String sha256 = sha256(file);

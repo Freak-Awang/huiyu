@@ -11,6 +11,7 @@ import com.im.server.mapper.FileMapper;
 import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.FileUploadPartMapper;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,6 +39,7 @@ class FileUploadTaskServiceTest {
     @Mock private FileMapper fileMapper;
     @Mock private FileMetadataService metadataService;
     @Mock private FileStorageClient storageClient;
+    @Mock private FileStorageRouter storageRouter;
     @Mock private FileStorageProperties properties;
 
     @InjectMocks private FileUploadTaskService service;
@@ -47,6 +49,7 @@ class FileUploadTaskServiceTest {
         when(properties.getMaxSize()).thenReturn(50L);
         when(properties.getChunkSize()).thenReturn(4L);
         when(properties.getUploadRetentionHours()).thenReturn(24);
+        when(storageRouter.defaultClient()).thenReturn(storageClient);
         when(storageClient.storageType()).thenReturn("local");
         when(storageClient.bucket()).thenReturn("local");
 
@@ -67,6 +70,7 @@ class FileUploadTaskServiceTest {
         when(properties.getChunkSize()).thenReturn(4L);
         ImFile existing = new ImFile();
         existing.setId(88L);
+        existing.setStorageType("local");
         when(fileMapper.selectOne(any())).thenReturn(existing);
 
         FileUploadTaskVO result = service.createTask(request(10L, "abc"), 7L);
@@ -92,6 +96,7 @@ class FileUploadTaskServiceTest {
     void uploadsExactChunkAndReturnsPartState() throws Exception {
         ImFileUpload upload = activeUpload(6L, 4L, 2);
         when(uploadMapper.selectOwnedForUpdate(any(), any())).thenReturn(upload);
+        when(storageRouter.clientFor("local", "local")).thenReturn(storageClient);
         when(uploadPartMapper.selectOne(any())).thenReturn(null);
         when(uploadPartMapper.selectList(any())).thenReturn(List.of());
         MockMultipartFile part = new MockMultipartFile("file", "part", "application/octet-stream", new byte[4]);
@@ -124,6 +129,7 @@ class FileUploadTaskServiceTest {
         completed.setId(99L);
         when(uploadMapper.selectOwnedForUpdate(any(), any())).thenReturn(upload);
         when(uploadPartMapper.selectList(any())).thenReturn(List.of(first, second));
+        when(storageRouter.clientFor("local", "local")).thenReturn(storageClient);
         when(metadataService.createAvailableFile(any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), any()))
                 .thenReturn(completed);
 
@@ -142,6 +148,7 @@ class FileUploadTaskServiceTest {
         ImFileUploadPart first = part(1, 4L, "chunks/upload-1/1");
         when(uploadMapper.selectOwnedForUpdate(any(), any())).thenReturn(upload);
         when(uploadPartMapper.selectList(any())).thenReturn(List.of(first));
+        when(storageRouter.clientFor("local", "local")).thenReturn(storageClient);
 
         service.cancelTask(upload.getUploadId(), 7L);
 

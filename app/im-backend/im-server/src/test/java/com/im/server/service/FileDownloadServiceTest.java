@@ -7,6 +7,8 @@ import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.storage.FileStorageClient;
+import com.im.server.service.storage.FileStorageRouter;
+import com.im.server.service.storage.StoredObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,6 +35,9 @@ class FileDownloadServiceTest {
 
     @Mock
     private FileStorageClient storageClient;
+
+    @Mock
+    private FileStorageRouter storageRouter;
 
     @InjectMocks
     private FileDownloadService fileDownloadService;
@@ -75,6 +81,20 @@ class FileDownloadServiceTest {
         when(conversationMemberMapper.selectOne(any())).thenReturn(new ImConversationMember());
 
         assertThat(fileDownloadService.getDownloadableFile(20L, 3L)).isSameAs(conversationFile);
+    }
+
+    @Test
+    void opensFileWithItsPersistedStorageBackend() throws Exception {
+        ImFile file = availableFile(4L);
+        file.setStorageType("local");
+        file.setBucket("local");
+        file.setObjectKey("files/legacy.bin");
+        StoredObject storedObject = new StoredObject(null, 10L, "application/octet-stream");
+        when(storageRouter.clientFor("local", "local")).thenReturn(storageClient);
+        when(storageClient.open("files/legacy.bin", 2L, 4L)).thenReturn(storedObject);
+
+        assertThat(fileDownloadService.openFile(file, 2L, 4L)).isSameAs(storedObject);
+        verify(storageRouter).clientFor("local", "local");
     }
 
     private ImFile availableFile(Long id) {

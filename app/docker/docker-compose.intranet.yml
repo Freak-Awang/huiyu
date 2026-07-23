@@ -28,21 +28,33 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.minio
+      args:
+        MINIO_COMMIT: 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
+        MC_COMMIT: cf909e1063a9a0aea7926378b0c416ed0eea7742
+    image: huiyu-minio:RELEASE.2025-10-15T17-29-55Z
     container_name: im-minio
-    restart: always
+    restart: unless-stopped
+    user: "1000:1000"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
       TZ: Asia/Shanghai
-    command: server /data --console-address ":9001"
+    command: server /data --address ":9000" --console-address ":9001"
+    ports:
+      - "${MINIO_CONSOLE_BIND_IP:-172.16.59.253}:9001:9001"
     volumes:
-      - minio-data:/data
+      - type: bind
+        source: ${MINIO_DATA_PATH:-/opt/minio/data}
+        target: /data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 20s
 
   backend:
     build:
@@ -56,17 +68,20 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
       SPRING_DATA_REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      FILE_STORAGE: minio
+      FILE_STORAGE: ${FILE_STORAGE:-local}
+      FILE_UPLOAD_PATH: /app/upload
       MINIO_ENDPOINT: http://minio:9000
       MINIO_BUCKET: ${MINIO_BUCKET:-im-files}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
+    volumes:
+      - type: bind
+        source: ${LOCAL_UPLOAD_PATH:-/opt/im-project/huiyu/data/upload}
+        target: /app/upload
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
 
   nginx:
@@ -83,6 +98,35 @@ services:
     depends_on:
       - backend
 
+  minio-init:
+    image: huiyu-minio:RELEASE.2025-10-15T17-29-55Z
+    profiles: ["ops"]
+    user: "1000:1000"
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-im-files}
+    entrypoint: ["/bin/sh", "/usr/local/bin/minio-init.sh"]
+    volumes:
+      - ./scripts/minio-init.sh:/usr/local/bin/minio-init.sh:ro
+      - ./minio/im-files-policy.json:/opt/minio/im-files-policy.json:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  minio-tools:
+    image: huiyu-minio:RELEASE.2025-10-15T17-29-55Z
+    profiles: ["ops"]
+    user: "1000:1000"
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-im-files}
+    entrypoint: ["mc"]
+
 volumes:
   mysql-data:
-  minio-data:

@@ -5,7 +5,6 @@ import io.minio.BucketExistsArgs;
 import io.minio.ComposeObjectArgs;
 import io.minio.ComposeSource;
 import io.minio.GetObjectArgs;
-import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
@@ -21,6 +20,7 @@ import java.util.stream.Collectors;
 public class MinioFileStorageClient implements FileStorageClient {
     private final MinioClient minioClient;
     private final String bucket;
+    private volatile boolean bucketVerified;
 
     public MinioFileStorageClient(MinioClient minioClient, FileStorageProperties properties) {
         this.minioClient = minioClient;
@@ -68,6 +68,7 @@ public class MinioFileStorageClient implements FileStorageClient {
 
     @Override
     public StoredObject open(String objectKey, long offset, Long length) throws Exception {
+        ensureBucket();
         GetObjectArgs.Builder builder = GetObjectArgs.builder()
                 .bucket(bucket)
                 .object(objectKey)
@@ -85,9 +86,18 @@ public class MinioFileStorageClient implements FileStorageClient {
     }
 
     private void ensureBucket() throws Exception {
-        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
-        if (!exists) {
-            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        if (bucketVerified) {
+            return;
+        }
+        synchronized (this) {
+            if (bucketVerified) {
+                return;
+            }
+            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+            if (!exists) {
+                throw new IllegalStateException("MinIO bucket does not exist: " + bucket);
+            }
+            bucketVerified = true;
         }
     }
 }
