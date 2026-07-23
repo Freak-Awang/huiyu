@@ -6,14 +6,16 @@ address.
 
 ## 1. Prepare secrets
 
-Copy `.env.example` to `.env`. Keep `FILE_STORAGE=local` for the first backend
-deployment. Generate `MINIO_ROOT_PASSWORD` and `MINIO_SECRET_KEY` with:
+Copy `.env.example` to `.env` if this is a new deployment. For an existing
+deployment, keep the current `.env` and add the MinIO settings without printing
+the generated secrets:
 
 ```sh
-openssl rand -hex 24
+sh scripts/configure-minio-env.sh --storage local
 ```
 
-The root and application credentials must be different. Keep `.env` mode 600.
+The script preserves non-placeholder MinIO secrets, generates separate root and
+application secrets when needed, and keeps `.env` mode 600.
 
 ## 2. Preserve local files
 
@@ -42,10 +44,11 @@ Verify that `im-minio` is healthy and that `im-backend` still has
 
 ## 4. Switch and migrate
 
-Set `FILE_STORAGE=minio` in `.env`, confirm there are no `UPLOADING` rows in
-`im_file_upload`, then recreate only the backend:
+Confirm there are no `UPLOADING` rows in `im_file_upload`, switch the default
+storage, then recreate only the backend:
 
 ```sh
+sh scripts/configure-minio-env.sh --storage minio
 docker compose --env-file .env -f docker-compose.intranet.yml up -d --no-deps backend
 sh scripts/migrate-local-files-to-minio.sh
 ```
@@ -56,6 +59,7 @@ in `backups/minio-migration-*/missing-files.tsv`.
 
 ## 5. Rollback
 
-Set `FILE_STORAGE=local` and recreate only `im-backend`. Existing MinIO rows
-remain readable because downloads and cleanup route by each row's
-`storage_type`. Keep the host local-file directory for at least seven days.
+Run `sh scripts/configure-minio-env.sh --storage local` and recreate only
+`im-backend`. Existing MinIO rows remain readable because downloads and cleanup
+route by each row's `storage_type`. Keep the host local-file directory for at
+least seven days.
