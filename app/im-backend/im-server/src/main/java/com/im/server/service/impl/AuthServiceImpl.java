@@ -7,7 +7,10 @@ import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.util.JwtUtil;
 import com.im.server.mapper.UserMapper;
+import com.im.server.security.AuthenticatedUser;
+import com.im.server.security.TokenAuthenticationService;
 import com.im.server.service.AuthService;
+import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +37,12 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private TokenAuthenticationService tokenAuthenticationService;
+
+    @Autowired
+    private WebSocketSessionManager sessionManager;
+
     @Override
     public LoginResponse login(LoginRequest request) {
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
@@ -41,14 +50,15 @@ public class AuthServiceImpl implements AuthService {
         SysUser user = userMapper.selectOne(wrapper);
 
         if (user == null || user.getStatus() != 1) {
-            throw new BusinessException("用户名或密码错误");
+            throw new BusinessException(401, "用户名或密码错误");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("用户名或密码错误");
+            throw new BusinessException(401, "用户名或密码错误");
         }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        int tokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0;
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole(), tokenVersion);
 
         LoginResponse response = new LoginResponse();
         response.setToken(token);
@@ -62,8 +72,14 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(String token) {
+        AuthenticatedUser currentUser = tokenAuthenticationService.authenticate(token);
+        revoke(token);
+        sessionManager.closeSessionsForUser(currentUser.userId());
+    }
+
+    private void revoke(String token) {
         redisTemplate.opsForValue().set(
-            "blacklist:" + token,
+            tokenAuthenticationService.revocationKey(token),
             "1",
             Duration.ofDays(7).toMillis(),
             TimeUnit.MILLISECONDS
@@ -72,18 +88,14 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse refresh(String token) {
-        if (!jwtUtil.validateToken(token)) {
-            throw new BusinessException(401, "Token invalid or expired");
-        }
-        if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + token))) {
-            throw new BusinessException(401, "Token has been revoked");
-        }
-        Long userId = jwtUtil.getUserIdFromToken(token);
-        SysUser user = userMapper.selectById(userId);
-        if (user == null || user.getStatus() != 1) {
-            throw new BusinessException(401, "User not found or disabled");
-        }
-        String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        AuthenticatedUser currentUser = tokenAuthenticationService.authenticate(token);
+        SysUser user = userMapper.selectById(currentUser.userId());
+        revoke(token);
+        String newToken = jwtUtil.generateToken(
+                user.getId(),
+                user.getUsername(),
+                user.getRole(),
+                user.getTokenVersion() != null ? user.getTokenVersion() : 0);
         LoginResponse response = new LoginResponse();
         response.setToken(newToken);
         response.setUserId(user.getId());

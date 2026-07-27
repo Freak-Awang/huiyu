@@ -154,7 +154,7 @@ export async function uploadConversationFile(
   options: UploadOptions = {},
 ): Promise<FileVO> {
   if (file.size <= 0) throw new Error('文件不能为空')
-  if (file.size > FILE_UPLOAD_MAX_SIZE) throw new Error('文件不能超过 50GB')
+  if (file.size > FILE_UPLOAD_MAX_SIZE) throw new Error('文件不能超过 2GB')
   throwIfAborted(options.signal)
 
   if (file.size <= DIRECT_UPLOAD_MAX_SIZE) {

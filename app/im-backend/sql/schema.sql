@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     dept_id BIGINT DEFAULT NULL COMMENT 'department id',
     role VARCHAR(32) NOT NULL DEFAULT 'user' COMMENT 'admin/user',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '0=disabled, 1=enabled',
+    token_version INT NOT NULL DEFAULT 0 COMMENT 'incremented to revoke issued tokens',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
     UNIQUE KEY uk_username (username),
@@ -224,9 +225,8 @@ CREATE TABLE IF NOT EXISTS im_client_update_event (
     KEY idx_update_release_stats (target_version, channel, event_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='desktop update telemetry';
 
-INSERT INTO sys_dept (name, parent_id, sort_order, status) VALUES
-('Head Office', 0, 0, 1);
-
--- Default admin account: admin / admin123
-INSERT INTO sys_user (username, password, nickname, role, status) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'System Admin', 'admin', 1);
+INSERT INTO sys_dept (name, parent_id, sort_order, status)
+SELECT 'Head Office', 0, 0, 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM sys_dept WHERE name = 'Head Office' AND parent_id = 0
+);

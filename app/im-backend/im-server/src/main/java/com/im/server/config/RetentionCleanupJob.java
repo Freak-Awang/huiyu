@@ -25,6 +25,7 @@ public class RetentionCleanupJob {
         try {
             // Temporary standalone files expire by policy; scheduled failure is logged but never blocks the app.
             fileRetentionService.cleanupExpiredTemporaryFiles();
+            fileRetentionService.cleanupExpiredUploadTasks();
         } catch (Exception e) {
             log.error("Retention cleanup failed", e);
         }

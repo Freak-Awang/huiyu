@@ -23,7 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 
 import java.util.Set;
 
@@ -138,6 +138,7 @@ class UserServiceImplTest {
 
         userService.updatePassword(10L, "old-password", "new-password");
 
-        verifyNoInteractions(sessionManager);
+        verify(sessionManager).closeSessionsForUser(10L);
+        verify(sessionManager, never()).sendToUser(any(), any());
     }
 }

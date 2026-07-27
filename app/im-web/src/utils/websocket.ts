@@ -9,94 +9,103 @@ export interface WsMessage {
 
 type MessageHandler = (msg: WsMessage) => void
 type ConnectionHandler = (connected: boolean) => void
+type TicketProvider = () => Promise<string>
 
 export class WebSocketManager {
   private ws: WebSocket | null = null
-  private token: string
-  private messageHandler: MessageHandler
-  private connectionHandler?: ConnectionHandler
+  private readonly ticketProvider: TicketProvider
+  private readonly messageHandler: MessageHandler
+  private readonly connectionHandler?: ConnectionHandler
   private seqCounter = 0
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private pongTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectCount = 0
-  private maxReconnect = 5
-  private reconnectDelay = 3000
+  private readonly reconnectBaseDelay = 1000
+  private readonly reconnectMaxDelay = 30000
   private intentionalClose = false
+  private generation = 0
 
-  constructor(token: string, handler: MessageHandler, connectionHandler?: ConnectionHandler) {
-    this.token = token
+  constructor(ticketProvider: TicketProvider, handler: MessageHandler, connectionHandler?: ConnectionHandler) {
+    this.ticketProvider = ticketProvider
     this.messageHandler = handler
     this.connectionHandler = connectionHandler
   }
 
   connect() {
-    // A fresh manual connect resets retry state; automatic reconnects go through scheduleReconnect instead.
     this.intentionalClose = false
     this.reconnectCount = 0
-    this.doConnect()
+    this.generation++
+    window.addEventListener('online', this.handleNetworkOnline)
+    void this.doConnect(this.generation)
   }
 
-  private doConnect() {
-    if (this.ws) {
-      this.ws.close()
-    }
+  private async doConnect(generation: number) {
+    if (this.intentionalClose || generation !== this.generation) return
+    this.clearReconnectTimer()
+    this.disposeSocket()
 
-    const url = `${getWsBaseUrl()}?token=${encodeURIComponent(this.token)}`
-    this.ws = new WebSocket(url)
+    try {
+      const ticket = await this.ticketProvider()
+      if (this.intentionalClose || generation !== this.generation) return
+      const separator = getWsBaseUrl().includes('?') ? '&' : '?'
+      const url = `${getWsBaseUrl()}${separator}ticket=${encodeURIComponent(ticket)}`
+      const socket = new WebSocket(url)
+      this.ws = socket
 
-    this.ws.onopen = () => {
-      this.reconnectCount = 0
-      this.connectionHandler?.(true)
-      this.startHeartbeat()
-    }
-
-    this.ws.onmessage = (event) => {
-      try {
-        const msg: WsMessage = JSON.parse(event.data)
-        this.messageHandler(msg)
-      } catch (e) {
-        console.error('Failed to parse WebSocket message:', e)
+      socket.onopen = () => {
+        if (socket !== this.ws) return
+        this.reconnectCount = 0
+        this.connectionHandler?.(true)
+        this.startHeartbeat()
       }
-    }
 
-    this.ws.onclose = () => {
-      this.stopHeartbeat()
-      this.connectionHandler?.(false)
-      if (!this.intentionalClose) {
-        // Network drops should retry, while explicit logout/navigation disconnects must stay closed.
-        this.scheduleReconnect()
+      socket.onmessage = (event) => {
+        try {
+          const msg: WsMessage = JSON.parse(event.data)
+          if (msg.cmd === 'PONG') {
+            this.clearPongTimer()
+          }
+          this.messageHandler(msg)
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
+        }
       }
-    }
 
-    this.ws.onerror = (err) => {
+      socket.onclose = () => {
+        if (socket !== this.ws) return
+        this.ws = null
+        this.stopHeartbeat()
+        this.connectionHandler?.(false)
+        if (!this.intentionalClose) this.scheduleReconnect()
+      }
+
+      socket.onerror = (err) => {
+        if (socket !== this.ws) return
+        this.connectionHandler?.(false)
+        console.error('WebSocket error:', err)
+      }
+    } catch (error) {
+      console.error('Failed to obtain WebSocket ticket:', error)
       this.connectionHandler?.(false)
-      console.error('WebSocket error:', err)
+      if (!this.intentionalClose) this.scheduleReconnect()
     }
   }
 
   disconnect() {
     this.intentionalClose = true
+    this.generation++
+    window.removeEventListener('online', this.handleNetworkOnline)
     this.stopHeartbeat()
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
-    }
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
+    this.clearReconnectTimer()
+    this.disposeSocket()
     this.connectionHandler?.(false)
   }
 
   send(cmd: string, data: any): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket not connected, cannot send:', cmd)
-      return false
-    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false
     const seq = ++this.seqCounter
-    // seq lets the backend ACK map a response back to the optimistic client action.
-    const payload = JSON.stringify({ cmd, seq, data })
-    this.ws.send(payload)
+    this.ws.send(JSON.stringify({ cmd, seq, data }))
     return true
   }
 
@@ -106,9 +115,12 @@ export class WebSocketManager {
 
   private startHeartbeat() {
     this.stopHeartbeat()
-    // Heartbeat keeps proxies and the backend aware of an active desktop/browser session.
     this.heartbeatTimer = setInterval(() => {
-      this.send('PING', {})
+      if (!this.send('PING', {})) return
+      this.clearPongTimer()
+      this.pongTimer = setTimeout(() => {
+        if (this.ws?.readyState === WebSocket.OPEN) this.ws.close()
+      }, 10000)
     }, 30000)
   }
 
@@ -117,17 +129,51 @@ export class WebSocketManager {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
+    this.clearPongTimer()
+  }
+
+  private clearPongTimer() {
+    if (this.pongTimer) {
+      clearTimeout(this.pongTimer)
+      this.pongTimer = null
+    }
   }
 
   private scheduleReconnect() {
-    if (this.reconnectCount >= this.maxReconnect) {
-      console.warn('Max reconnect attempts reached')
-      return
-    }
+    if (this.intentionalClose || this.reconnectTimer) return
+    const exponential = Math.min(
+      this.reconnectMaxDelay,
+      this.reconnectBaseDelay * 2 ** Math.min(this.reconnectCount, 5),
+    )
+    const delay = Math.round(exponential * (0.75 + Math.random() * 0.5))
     this.reconnectCount++
-    // Fixed-delay reconnect is intentionally simple; pending messages are recovered through backend delivery rows.
-    this.reconnectTimer = setTimeout(() => {
-      this.doConnect()
-    }, this.reconnectDelay)
+    const generation = this.generation
+    this.reconnectTimer = setTimeout(() => void this.doConnect(generation), delay)
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  private disposeSocket() {
+    if (!this.ws) return
+    const socket = this.ws
+    this.ws = null
+    socket.onopen = null
+    socket.onmessage = null
+    socket.onclose = null
+    socket.onerror = null
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close()
+    }
+  }
+
+  private handleNetworkOnline = () => {
+    if (this.intentionalClose || this.isConnected()) return
+    this.clearReconnectTimer()
+    void this.doConnect(this.generation)
   }
 }

@@ -63,7 +63,7 @@ public class FileDownloadService {
             FileStorageClient storageClient = storageRouter.clientFor(file.getStorageType(), file.getBucket());
             return storageClient.open(file.getObjectKey(), offset, length);
         } catch (Exception e) {
-            throw new BusinessException("Failed to open file: " + e.getMessage());
+            throw new BusinessException(500, "Failed to open file", e);
         }
     }
 
@@ -94,6 +94,11 @@ public class FileDownloadService {
     }
 
     private boolean isPublicStandaloneFile(ImFile imFile) {
-        return imFile.getConversationId() == null && Integer.valueOf(0).equals(imFile.getTemporary());
+        if (imFile.getConversationId() != null || !Integer.valueOf(0).equals(imFile.getTemporary())) {
+            return false;
+        }
+        String downloadPath = "/api/files/download/" + imFile.getId();
+        return userMapper.selectCount(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getAvatar, downloadPath)) > 0;
     }
 }

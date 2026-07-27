@@ -26,6 +26,8 @@ jobs:
 
       - name: Backend tests
         working-directory: app/im-backend
+        env:
+          JWT_SECRET: ci-only-jwt-secret-at-least-32-characters-long
         run: mvn test
 
       - name: Install IM web dependencies
@@ -34,7 +36,11 @@ jobs:
 
       - name: Build IM web
         working-directory: app/im-web
-        run: npm run build
+        run: |
+          npm test
+          npm run build
+          npm run build:electron
+          npm audit --omit=dev --audit-level=high
 
       - name: Install admin dependencies
         working-directory: app/im-admin
@@ -42,4 +48,69 @@ jobs:
 
       - name: Build admin
         working-directory: app/im-admin
-        run: npm run build
+        run: |
+          npm test
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $allErrors = @()
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $fileErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$fileErrors
+            )
+            $allErrors += $fileErrors
+          }
+          if ($allErrors.Count) { $allErrors | Format-List; exit 1 }
+
+      - name: Validate Bash scripts
+        shell: bash
+        run: |
+          while IFS= read -r file; do bash -n "$file"; done < <(git ls-files '*.sh')
+
+      - name: Reject known default credentials
+        shell: pwsh
+        run: |
+          $jwtMatches = git grep -n 'im-secret-key-needs-changing' -- app/docker app/im-backend/im-common/src/main app/im-backend/im-server/src/main app/im-backend/sql
+          if ($LASTEXITCODE -eq 0) { $jwtMatches; exit 1 }
+          $credentialMatches = git grep -n -E 'MINIO_ROOT_PASSWORD: impassword|MYSQL_ROOT_PASSWORD: root' -- app/docker app/im-backend/sql
+          if ($LASTEXITCODE -eq 0) { $credentialMatches; exit 1 }
+          exit 0
+
+      - name: Validate Compose configurations
+        shell: pwsh
+        working-directory: app/docker
+        env:
+          MYSQL_ROOT_PASSWORD: ci-mysql-root-password
+          MYSQL_APP_USER: im_app
+          MYSQL_APP_PASSWORD: ci-mysql-app-password
+          MYSQL_MIGRATION_USER: im_migrator
+          MYSQL_MIGRATION_PASSWORD: ci-mysql-migration-password
+          REDIS_PASSWORD: ci-redis-password
+          JWT_SECRET: ci-only-jwt-secret-at-least-32-characters-long
+          MINIO_ROOT_USER: minio-root
+          MINIO_ROOT_PASSWORD: ci-minio-root-password
+          MINIO_ACCESS_KEY: im-backend
+          MINIO_SECRET_KEY: ci-minio-app-password
+          TLS_CERT_PATH: C:\ci\tls.crt
+          TLS_KEY_PATH: C:\ci\tls.key
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.intranet.yml config --quiet
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

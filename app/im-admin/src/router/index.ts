@@ -1,6 +1,7 @@
 // Intent: index defines route guards and view mapping for the application shell.
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { isAuthorizedAdmin } from '../utils/authorization'
 
 const router = createRouter({
     history: createWebHashHistory(),
@@ -44,9 +45,9 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
     const authStore = useAuthStore()
     authStore.init()
-    if (to.meta.requiresAuth !== false && !authStore.isLoggedIn) {
+    if (to.meta.requiresAuth !== false && !isAuthorizedAdmin(authStore.token, authStore.role)) {
         next('/login')
-    } else if (to.path === '/login' && authStore.isLoggedIn) {
+    } else if (to.path === '/login' && isAuthorizedAdmin(authStore.token, authStore.role)) {
         next('/')
     } else {
         next()

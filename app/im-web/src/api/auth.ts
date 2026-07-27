@@ -8,3 +8,8 @@ export function login(username: string, password: string) {
 export function logout() {
   return http.post('/api/auth/logout')
 }
+
+export async function createWebSocketTicket() {
+  const response = await http.post<{ ticket: string }>('/api/auth/ws-ticket')
+  return response.data.ticket
+}

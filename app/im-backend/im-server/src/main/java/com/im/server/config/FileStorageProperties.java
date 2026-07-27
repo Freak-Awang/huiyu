@@ -10,8 +10,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "file")
 public class FileStorageProperties {
     private String storage = "local";
-    private Long maxSize = 53687091200L;
+    private Long maxSize = 2147483648L;
     private Long smallFileMaxSize = 104857600L;
+    private Long userQuotaBytes = 10737418240L;
     private Long chunkSize = 67108864L;
     private Integer retentionDays = 7;
     private Integer uploadRetentionHours = 24;
@@ -40,6 +41,14 @@ public class FileStorageProperties {
 
     public void setSmallFileMaxSize(Long smallFileMaxSize) {
         this.smallFileMaxSize = smallFileMaxSize;
+    }
+
+    public Long getUserQuotaBytes() {
+        return userQuotaBytes;
+    }
+
+    public void setUserQuotaBytes(Long userQuotaBytes) {
+        this.userQuotaBytes = userQuotaBytes;
     }
 
     public Long getChunkSize() {
@@ -85,8 +94,8 @@ public class FileStorageProperties {
     public static class Minio {
         private String endpoint = "http://localhost:9000";
         private String bucket = "im-files";
-        private String accessKey = "imadmin";
-        private String secretKey = "impassword";
+        private String accessKey = "";
+        private String secretKey = "";
 
         public String getEndpoint() {
             return endpoint;

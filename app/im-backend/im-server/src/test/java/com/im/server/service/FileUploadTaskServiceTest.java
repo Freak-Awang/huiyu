@@ -41,6 +41,7 @@ class FileUploadTaskServiceTest {
     @Mock private FileStorageClient storageClient;
     @Mock private FileStorageRouter storageRouter;
     @Mock private FileStorageProperties properties;
+    @Mock private FileQuotaService quotaService;
 
     @InjectMocks private FileUploadTaskService service;
 

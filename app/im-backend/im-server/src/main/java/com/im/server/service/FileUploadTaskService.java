@@ -46,6 +46,7 @@ public class FileUploadTaskService {
     private final FileMetadataService metadataService;
     private final FileStorageRouter storageRouter;
     private final FileStorageProperties properties;
+    private final FileQuotaService quotaService;
 
     public FileUploadTaskService(
             FileUploadMapper uploadMapper,
@@ -53,13 +54,15 @@ public class FileUploadTaskService {
             FileMapper fileMapper,
             FileMetadataService metadataService,
             FileStorageRouter storageRouter,
-            FileStorageProperties properties) {
+            FileStorageProperties properties,
+            FileQuotaService quotaService) {
         this.uploadMapper = uploadMapper;
         this.uploadPartMapper = uploadPartMapper;
         this.fileMapper = fileMapper;
         this.metadataService = metadataService;
         this.storageRouter = storageRouter;
         this.properties = properties;
+        this.quotaService = quotaService;
     }
 
     @Transactional
@@ -82,6 +85,7 @@ public class FileUploadTaskService {
             vo.setFile(metadataService.toFileVO(reusable));
             return vo;
         }
+        quotaService.assertCanStore(uploaderId, request.getFileSize());
 
         Long chunkSize = Math.max(1L, properties.getChunkSize());
         int chunkCount = (int) Math.ceil((double) request.getFileSize() / chunkSize);
@@ -139,7 +143,7 @@ public class FileUploadTaskService {
                     storageRouter.clientFor(upload.getStorageType(), upload.getBucket());
             storageClient.saveChunk(partObjectKey, file);
         } catch (Exception e) {
-            throw new BusinessException("Failed to upload chunk: " + e.getMessage());
+            throw new BusinessException(500, "Failed to upload chunk", e);
         }
 
         ImFileUploadPart part = new ImFileUploadPart();
@@ -150,7 +154,12 @@ public class FileUploadTaskService {
         part.setStatus(STATUS_UPLOADED);
         part.setCreateTime(LocalDateTime.now());
         part.setUpdateTime(LocalDateTime.now());
-        uploadPartMapper.insert(part);
+        try {
+            uploadPartMapper.insert(part);
+        } catch (RuntimeException e) {
+            storageRouter.clientFor(upload.getStorageType(), upload.getBucket()).deleteQuietly(partObjectKey);
+            throw e;
+        }
         return toTaskVO(upload);
     }
 
@@ -194,28 +203,43 @@ public class FileUploadTaskService {
                 }
                 upload.setSha256(actualHash);
             }
+            if (StringUtils.hasText(upload.getContentType())
+                    && upload.getContentType().toLowerCase().startsWith("image/")) {
+                String detectedContentType = detectStoredImageType(storageClient, upload.getObjectKey());
+                if (!StringUtils.hasText(detectedContentType)) {
+                    storageClient.deleteQuietly(upload.getObjectKey());
+                    throw new BusinessException(415, "Only PNG, JPEG, GIF, and WebP images are supported");
+                }
+                upload.setContentType(detectedContentType);
+            }
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("Failed to complete upload: " + e.getMessage());
+            throw new BusinessException(500, "Failed to complete upload", e);
         }
 
-        ImFile file = metadataService.createAvailableFile(
-                upload.getFileName(),
-                upload.getObjectKey(),
-                upload.getFileSize(),
-                upload.getContentType(),
-                uploaderId,
-                upload.getConversationId(),
-                upload.getSha256(),
-                storageClient.storageType(),
-                storageClient.bucket(),
-                false,
-                null);
-        upload.setStatus(STATUS_COMPLETED);
-        upload.setFileId(file.getId());
-        upload.setUpdateTime(LocalDateTime.now());
-        uploadMapper.updateById(upload);
+        ImFile file;
+        try {
+            file = metadataService.createAvailableFile(
+                    upload.getFileName(),
+                    upload.getObjectKey(),
+                    upload.getFileSize(),
+                    upload.getContentType(),
+                    uploaderId,
+                    upload.getConversationId(),
+                    upload.getSha256(),
+                    storageClient.storageType(),
+                    storageClient.bucket(),
+                    false,
+                    null);
+            upload.setStatus(STATUS_COMPLETED);
+            upload.setFileId(file.getId());
+            upload.setUpdateTime(LocalDateTime.now());
+            uploadMapper.updateById(upload);
+        } catch (RuntimeException e) {
+            storageClient.deleteQuietly(upload.getObjectKey());
+            throw e;
+        }
         partKeys.forEach(storageClient::deleteQuietly);
         return file;
     }
@@ -387,5 +411,12 @@ public class FileUploadTaskService {
             }
         }
         return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private String detectStoredImageType(FileStorageClient storageClient, String objectKey) throws Exception {
+        StoredObject object = storageClient.open(objectKey, 0, 12L);
+        try (InputStream input = object.getInputStream()) {
+            return ImageTypeDetector.detect(input);
+        }
     }
 }

@@ -7,7 +7,8 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,32 +20,34 @@ public class WebSocketSessionManager {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketSessionManager.class);
 
-    private final ConcurrentHashMap<Long, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Set<WebSocketSession>> sessions = new ConcurrentHashMap<>();
 
     public void addSession(Long userId, WebSocketSession session) {
-        // 每个用户只保留一个活跃 session，新连接会替换旧连接，避免多端重复收到同一实时事件。
-        WebSocketSession oldSession = sessions.put(userId, session);
-        if (oldSession != null && oldSession.isOpen()) {
-            try {
-                oldSession.close();
-            } catch (IOException e) {
-                log.warn("Failed to close old session for userId={}", userId, e);
-            }
-        }
+        sessions.computeIfAbsent(userId, ignored -> ConcurrentHashMap.newKeySet()).add(session);
     }
 
+    /**
+     * @return true when this was the user's final active session.
+     */
     public boolean removeSession(Long userId, WebSocketSession session) {
-        // A replaced session may close after its successor is already registered. Only the
-        // session that is still current is allowed to remove the user's routing entry.
-        return sessions.remove(userId, session);
+        Set<WebSocketSession> userSessions = sessions.get(userId);
+        if (userSessions == null || !userSessions.remove(session)) {
+            return false;
+        }
+        if (userSessions.isEmpty()) {
+            sessions.remove(userId, userSessions);
+            return true;
+        }
+        return false;
     }
 
-    public WebSocketSession getSession(Long userId) {
-        return sessions.get(userId);
+    public Collection<WebSocketSession> getSessions(Long userId) {
+        Set<WebSocketSession> userSessions = sessions.get(userId);
+        return userSessions == null ? Set.of() : Set.copyOf(userSessions);
     }
 
     public Set<Long> getOnlineUserIds() {
-        return Collections.unmodifiableSet(sessions.keySet());
+        return Set.copyOf(sessions.keySet());
     }
 
     public boolean isOnline(Long userId) {
@@ -52,16 +55,29 @@ public class WebSocketSessionManager {
     }
 
     public void sendToUser(Long userId, String message) {
-        WebSocketSession session = sessions.get(userId);
-        if (session == null) {
+        for (WebSocketSession session : getSessions(userId)) {
+            sendToSession(session, message);
+        }
+    }
+
+    public void closeSessionsForUser(Long userId) {
+        Set<WebSocketSession> userSessions = sessions.get(userId);
+        if (userSessions == null) {
             return;
         }
-        sendToSession(session, message);
+        for (WebSocketSession session : new HashSet<>(userSessions)) {
+            try {
+                if (session.isOpen()) {
+                    session.close();
+                }
+            } catch (IOException e) {
+                log.warn("Failed to close session={} for userId={}", session.getId(), userId, e);
+            }
+        }
     }
 
     public void sendToSession(WebSocketSession session, String message) {
         synchronized (session) {
-            // Spring WebSocket session is synchronized here because concurrent sends on the same session can interleave.
             try {
                 if (session.isOpen()) {
                     session.sendMessage(new TextMessage(message));

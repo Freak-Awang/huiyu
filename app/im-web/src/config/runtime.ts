@@ -5,6 +5,10 @@ function stripTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
 }
 
+function isLoopbackHostname(hostname: string) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
 export function isDesktopRuntime() {
   return typeof window !== 'undefined' && (window.location.protocol === 'file:' || !!window.imDesktop)
 }
@@ -17,6 +21,9 @@ export function normalizeServerOrigin(value: string) {
   const url = new URL(withProtocol)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('服务器地址必须使用 http 或 https')
+  }
+  if (import.meta.env.PROD && url.protocol !== 'https:' && !isLoopbackHostname(url.hostname)) {
+    throw new Error('Production server addresses must use HTTPS')
   }
   return stripTrailingSlash(url.origin)
 }

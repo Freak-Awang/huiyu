@@ -34,6 +34,9 @@ class FileUploadServiceTest {
     @Mock
     private FileStorageProperties properties;
 
+    @Mock
+    private FileQuotaService quotaService;
+
     @InjectMocks
     private FileUploadService fileUploadService;
 
@@ -48,7 +51,7 @@ class FileUploadServiceTest {
         verify(metadataService).createAvailableFile(
                 eq("photo.png"),
                 anyString(),
-                eq(5L),
+                eq(8L),
                 eq("image/png"),
                 eq(10L),
                 eq(20L),
@@ -69,7 +72,7 @@ class FileUploadServiceTest {
         verify(metadataService).createAvailableFile(
                 eq("avatar.png"),
                 anyString(),
-                eq(5L),
+                eq(8L),
                 eq("image/png"),
                 eq(10L),
                 isNull(),
@@ -111,7 +114,7 @@ class FileUploadServiceTest {
 
         assertThatThrownBy(() -> fileUploadService.uploadConversationImage(file("report.pdf"), 10L, 20L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("Only image uploads are supported")
+                .hasMessage("Only PNG, JPEG, GIF, and WebP images are supported")
                 .extracting("code")
                 .isEqualTo(415);
     }
@@ -136,7 +139,8 @@ class FileUploadServiceTest {
     }
 
     private MockMultipartFile image(String name) {
-        return new MockMultipartFile("file", name, "image/png", "hello".getBytes());
+        return new MockMultipartFile("file", name, "image/png",
+                new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A});
     }
 
     private MockMultipartFile file(String name) {

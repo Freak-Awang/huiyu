@@ -103,7 +103,7 @@
             v-model="form.password"
             type="password"
             show-password
-            placeholder="请输入密码（至少6位）"
+            placeholder="请输入密码（至少12位）"
           />
         </el-form-item>
         <el-form-item label="昵称" prop="nickname">
@@ -168,7 +168,7 @@
             v-model="resetPasswordData.newPassword"
             type="password"
             show-password
-            placeholder="请输入新密码（至少6位）"
+            placeholder="请输入新密码（至少12位）"
           />
         </el-form-item>
         <el-form-item label="确认密码" prop="confirmPassword">
@@ -271,13 +271,13 @@ const validateConfirmPassword: FormItemRule['validator'] = (_rule, value, callba
 
 const formRules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, min: 6, message: '密码至少6位', trigger: 'blur' }],
+  password: [{ required: true, min: 12, max: 128, message: '密码需为12至128位', trigger: 'blur' }],
   nickname: [{ required: true, message: '请输入昵称', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
 const resetPasswordRules: FormRules = {
-  newPassword: [{ required: true, min: 6, message: '密码至少6位', trigger: 'blur' }],
+  newPassword: [{ required: true, min: 12, max: 128, message: '密码需为12至128位', trigger: 'blur' }],
   confirmPassword: [{ validator: validateConfirmPassword, trigger: 'blur' }],
 }
 

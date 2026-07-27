@@ -1,6 +1,6 @@
 // Intent: Local message persistence keeps desktop chat history available when the network is unavailable.
-import { app } from 'electron'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { app, safeStorage } from 'electron'
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 export interface LocalMessageRecord {
@@ -36,15 +36,19 @@ export interface LocalMessageStats {
 }
 
 const STORE_VERSION = 1
+let mutationQueue: Promise<void> = Promise.resolve()
 
 function getStorePath() {
   return join(app.getPath('userData'), `local-messages-v${STORE_VERSION}.json`)
 }
 
-async function readStore(): Promise<LocalMessageStore> {
+async function readStoreUnlocked(): Promise<LocalMessageStore> {
   try {
-    const raw = await readFile(getStorePath(), 'utf8')
-    const parsed = JSON.parse(raw) as LocalMessageStore
+    const raw = await readFile(getStorePath())
+    const serialized = raw[0] === 0x7b
+      ? raw.toString('utf8')
+      : safeStorage.decryptString(raw)
+    const parsed = JSON.parse(serialized) as LocalMessageStore
     return parsed && parsed.users ? parsed : { users: {} }
   } catch {
     // Corrupt or missing cache should never block the desktop app; server sync can repopulate it.
@@ -52,10 +56,32 @@ async function readStore(): Promise<LocalMessageStore> {
   }
 }
 
-async function writeStore(store: LocalMessageStore) {
+async function writeStoreUnlocked(store: LocalMessageStore) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('OS-protected storage is unavailable; refusing to persist plaintext messages')
+  }
   const file = getStorePath()
+  const temporary = `${file}.${process.pid}.tmp`
   await mkdir(dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(store), 'utf8')
+  const encrypted = safeStorage.encryptString(JSON.stringify(store))
+  await writeFile(temporary, encrypted, { mode: 0o600 })
+  await rename(temporary, file)
+}
+
+async function readStore(): Promise<LocalMessageStore> {
+  await mutationQueue
+  return readStoreUnlocked()
+}
+
+function mutateStore<T>(mutator: (store: LocalMessageStore) => T | Promise<T>): Promise<T> {
+  const operation = mutationQueue.then(async () => {
+    const store = await readStoreUnlocked()
+    const result = await mutator(store)
+    await writeStoreUnlocked(store)
+    return result
+  })
+  mutationQueue = operation.then(() => undefined, () => undefined)
+  return operation
 }
 
 function getConversationBucket(store: LocalMessageStore, userId: string, conversationId: string) {
@@ -78,22 +104,21 @@ function sortMessages(messages: LocalMessageRecord[]) {
 
 export async function upsertLocalMessage(userId: string, message: LocalMessageRecord) {
   if (!userId || !message?.conversationId) return
-  const store = await readStore()
-  const bucket = getConversationBucket(store, userId, message.conversationId)
-  const key = messageKey(message)
-  const index = bucket.findIndex((item) => {
-    if (message.messageId && item.messageId === message.messageId) return true
-    if (message.clientMsgId && item.clientMsgId === message.clientMsgId) return true
-    return messageKey(item) === key
+  await mutateStore((store) => {
+    const bucket = getConversationBucket(store, userId, message.conversationId)
+    const key = messageKey(message)
+    const index = bucket.findIndex((item) => {
+      if (message.messageId && item.messageId === message.messageId) return true
+      if (message.clientMsgId && item.clientMsgId === message.clientMsgId) return true
+      return messageKey(item) === key
+    })
+    if (index >= 0) {
+      bucket[index] = { ...bucket[index], ...message }
+    } else {
+      bucket.push(message)
+    }
+    sortMessages(bucket)
   })
-  if (index >= 0) {
-    // Merge server-confirmed fields into optimistic local messages instead of duplicating the same send.
-    bucket[index] = { ...bucket[index], ...message }
-  } else {
-    bucket.push(message)
-  }
-  sortMessages(bucket)
-  await writeStore(store)
 }
 
 export async function listLocalMessages(
@@ -146,8 +171,8 @@ export async function getLocalMessageStats(userId: string): Promise<LocalMessage
 
 export async function clearLocalMessages(userId: string) {
   if (!userId) return false
-  const store = await readStore()
-  delete store.users[userId]
-  await writeStore(store)
-  return true
+  return mutateStore((store) => {
+    delete store.users[userId]
+    return true
+  })
 }

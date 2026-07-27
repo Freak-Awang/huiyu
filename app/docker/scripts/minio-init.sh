@@ -21,7 +21,8 @@ mc alias set admin "${endpoint}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" -
 mc ready admin
 mc mb --ignore-existing "admin/${MINIO_BUCKET}"
 mc anonymous set none "admin/${MINIO_BUCKET}"
-mc admin policy create admin im-files-rw /opt/minio/im-files-policy.json
+mc admin policy create admin im-files-rw /opt/minio/im-files-policy.json \
+  || mc admin policy info admin im-files-rw >/dev/null
 mc admin user add admin "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}"
 mc admin policy attach admin im-files-rw --user "${MINIO_ACCESS_KEY}"
 

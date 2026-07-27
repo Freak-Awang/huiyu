@@ -1,6 +1,5 @@
 package com.im.server.websocket;
 
-import com.im.common.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -17,10 +16,10 @@ import java.util.Map;
 @Component
 public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
 
-    private final JwtUtil jwtUtil;
+    private final WebSocketTicketService ticketService;
 
-    public WebSocketHandshakeInterceptor(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
+    public WebSocketHandshakeInterceptor(WebSocketTicketService ticketService) {
+        this.ticketService = ticketService;
     }
 
     @Override
@@ -28,9 +27,9 @@ public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
         if (request instanceof ServletServerHttpRequest servletRequest) {
             HttpServletRequest httpRequest = servletRequest.getServletRequest();
-            String token = httpRequest.getParameter("token");
-            if (token != null && jwtUtil.validateToken(token)) {
-                Long userId = jwtUtil.getUserIdFromToken(token);
+            String ticket = httpRequest.getParameter("ticket");
+            Long userId = ticketService.consume(ticket);
+            if (userId != null) {
                 attributes.put("userId", userId);
                 return true;
             }

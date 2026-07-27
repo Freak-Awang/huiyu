@@ -9,6 +9,7 @@ import com.im.common.exception.BusinessException;
 import com.im.common.result.Result;
 import com.im.server.service.FileDownloadService;
 import com.im.server.service.FileMetadataService;
+import com.im.server.service.ImageTypeDetector;
 import com.im.server.service.FileUploadService;
 import com.im.server.service.FileUploadTaskService;
 import com.im.server.service.UserService;
@@ -132,6 +133,8 @@ public class FileController {
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(imFile));
             headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+            headers.set("X-Content-Type-Options", "nosniff");
+            headers.set("Content-Security-Policy", "sandbox; default-src 'none'");
             headers.setContentLength(range.length);
             if (range.partial) {
                 headers.set(HttpHeaders.CONTENT_RANGE,
@@ -142,8 +145,12 @@ public class FileController {
             if (contentType == null || contentType.isBlank()) {
                 contentType = object.getContentType();
             }
-            headers.setContentType(MediaType.parseMediaType(
-                    contentType != null ? contentType : MediaType.APPLICATION_OCTET_STREAM_VALUE));
+            try {
+                headers.setContentType(MediaType.parseMediaType(
+                        contentType != null ? contentType : MediaType.APPLICATION_OCTET_STREAM_VALUE));
+            } catch (Exception ignored) {
+                headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            }
             return new ResponseEntity<>(
                     new InputStreamResource(object.getInputStream()),
                     headers,
@@ -166,7 +173,7 @@ public class FileController {
 
     private String contentDisposition(ImFile imFile) {
         String encoded = URLEncoder.encode(imFile.getOriginalName(), StandardCharsets.UTF_8).replace("+", "%20");
-        String mode = imFile.getContentType() != null && imFile.getContentType().startsWith("image/") ? "inline" : "attachment";
+        String mode = ImageTypeDetector.isSafeInlineType(imFile.getContentType()) ? "inline" : "attachment";
         return mode + "; filename*=UTF-8''" + encoded;
     }
 

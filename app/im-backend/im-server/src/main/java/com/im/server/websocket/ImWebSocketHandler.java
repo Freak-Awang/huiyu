@@ -8,7 +8,6 @@ import com.im.common.dto.SendMessageRequest;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
-import com.im.common.util.JwtUtil;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.MessageService;
@@ -48,7 +47,6 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private static final String CMD_MESSAGE_READ = "MESSAGE_READ";
     private static final String CMD_ONLINE_STATUS = "ONLINE_STATUS";
 
-    private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
     private final MessageService messageService;
     private final ConversationMemberMapper conversationMemberMapper;
@@ -56,14 +54,12 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private final WebSocketSessionManager sessionManager;
     private final ObjectMapper objectMapper;
 
-    public ImWebSocketHandler(JwtUtil jwtUtil,
-                              StringRedisTemplate redisTemplate,
+    public ImWebSocketHandler(StringRedisTemplate redisTemplate,
                               MessageService messageService,
                               ConversationMemberMapper conversationMemberMapper,
                               UserMapper userMapper,
                               WebSocketSessionManager sessionManager,
                               ObjectMapper objectMapper) {
-        this.jwtUtil = jwtUtil;
         this.redisTemplate = redisTemplate;
         this.messageService = messageService;
         this.conversationMemberMapper = conversationMemberMapper;
@@ -153,7 +149,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         }
 
         if (!sessionManager.removeSession(userId, session)) {
-            log.debug("Ignoring close callback for replaced session: userId={}, session={}",
+            log.debug("User still has another active session: userId={}, closedSession={}",
                     userId, session.getId());
             return;
         }

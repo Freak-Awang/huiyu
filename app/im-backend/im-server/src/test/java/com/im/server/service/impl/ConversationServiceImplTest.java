@@ -135,6 +135,7 @@ class ConversationServiceImplTest {
         user.setId(userId);
         user.setNickname("用户" + userId);
         user.setSignature("签名" + userId);
+        user.setStatus(1);
         return user;
     }
 

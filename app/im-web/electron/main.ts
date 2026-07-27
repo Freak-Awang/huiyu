@@ -1,5 +1,6 @@
 // Intent: Electron main process owns native window lifecycle, tray behavior, notifications, updates, screenshots, and IPC bridges.
 import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, shell } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
 import { createWriteStream } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
@@ -56,6 +57,36 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function isTrustedRendererUrl(value: string) {
+  try {
+    const target = new URL(value)
+    if (process.env.VITE_DEV_SERVER_URL) {
+      return target.origin === new URL(process.env.VITE_DEV_SERVER_URL).origin
+    }
+    return target.protocol === 'file:'
+      && fileURLToPath(target).toLowerCase() === join(__dirname, '../dist/index.html').toLowerCase()
+  } catch {
+    return false
+  }
+}
+
+function hardenRendererWindow(window: BrowserWindow) {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url)) event.preventDefault()
+  })
+  window.webContents.on('will-attach-webview', (event) => event.preventDefault())
+}
+
+function assertMainWindowSender(event: IpcMainInvokeEvent) {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('IPC request did not originate from the main application window')
+  }
+}
+
 function createMainWindow() {
   // 主窗口保持 renderer sandbox/contextIsolation，所有 native capability 都通过 preload IPC 白名单暴露。
   mainWindow = new BrowserWindow({
@@ -79,6 +110,7 @@ function createMainWindow() {
       mainWindow?.hide()
     }
   })
+  hardenRendererWindow(mainWindow)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -263,6 +295,7 @@ async function startScreenshot(): Promise<ScreenshotResult> {
     })
 
     screenshotWindow.setAlwaysOnTop(true, 'screen-saver')
+    hardenRendererWindow(screenshotWindow)
 
     return await new Promise<ScreenshotResult>((resolve) => {
       activeScreenshot = {
@@ -296,24 +329,34 @@ async function startScreenshot(): Promise<ScreenshotResult> {
 }
 
 // IPC handlers are the only native surface exposed to the renderer; keep payloads narrow and serializable.
-ipcMain.handle('app:getVersion', () => app.getVersion())
-ipcMain.handle('app:getPlatform', () => process.platform)
-ipcMain.handle('app:setCloseBehavior', (_event, behavior: 'tray' | 'exit') => {
+ipcMain.handle('app:getVersion', (event) => {
+  assertMainWindowSender(event)
+  return app.getVersion()
+})
+ipcMain.handle('app:getPlatform', (event) => {
+  assertMainWindowSender(event)
+  return process.platform
+})
+ipcMain.handle('app:setCloseBehavior', (event, behavior: 'tray' | 'exit') => {
+  assertMainWindowSender(event)
   closeBehavior = behavior === 'exit' ? 'exit' : 'tray'
   return true
 })
-ipcMain.handle('app:openExternal', async (_event, url: string) => {
+ipcMain.handle('app:openExternal', async (event, url: string) => {
+  assertMainWindowSender(event)
   if (/^https?:\/\//i.test(url)) {
     await shell.openExternal(url)
     return true
   }
   return false
 })
-ipcMain.handle('notification:setUnreadBadge', (_event, count: number) => {
+ipcMain.handle('notification:setUnreadBadge', (event, count: number) => {
+  assertMainWindowSender(event)
   updateUnreadBadge(count)
   return true
 })
-ipcMain.handle('notification:show', (_event, payload: { title?: string; body?: string; conversationId?: string }) => {
+ipcMain.handle('notification:show', (event, payload: { title?: string; body?: string; conversationId?: string }) => {
+  assertMainWindowSender(event)
   const title = payload?.title || 'ArtTalk'
   const body = payload?.body || '收到一条新消息'
   const conversationId = String(payload?.conversationId || '')
@@ -332,23 +375,34 @@ ipcMain.handle('notification:show', (_event, payload: { title?: string; body?: s
   }
   return true
 })
-ipcMain.handle('messages:upsert', async (_event, userId: string, message: LocalMessageRecord) => {
+ipcMain.handle('messages:upsert', async (event, userId: string, message: LocalMessageRecord) => {
+  assertMainWindowSender(event)
   // Renderer stores every confirmed/optimistic message so local history survives app restarts.
   await upsertLocalMessage(userId, message)
   return true
 })
 ipcMain.handle(
   'messages:list',
-  (_event, userId: string, conversationId: string, beforeMessageId?: string, pageSize?: number) =>
-    listLocalMessages(userId, conversationId, beforeMessageId, pageSize),
+  (event, userId: string, conversationId: string, beforeMessageId?: string, pageSize?: number) => {
+    assertMainWindowSender(event)
+    return listLocalMessages(userId, conversationId, beforeMessageId, pageSize)
+  },
 )
 ipcMain.handle(
   'messages:search',
-  (_event, userId: string, conversationId: string, keyword: string, limit?: number) =>
-    searchLocalMessages(userId, conversationId, keyword, limit),
+  (event, userId: string, conversationId: string, keyword: string, limit?: number) => {
+    assertMainWindowSender(event)
+    return searchLocalMessages(userId, conversationId, keyword, limit)
+  },
 )
-ipcMain.handle('messages:stats', (_event, userId: string) => getLocalMessageStats(userId))
-ipcMain.handle('messages:clear', (_event, userId: string) => clearLocalMessages(userId))
+ipcMain.handle('messages:stats', (event, userId: string) => {
+  assertMainWindowSender(event)
+  return getLocalMessageStats(userId)
+})
+ipcMain.handle('messages:clear', (event, userId: string) => {
+  assertMainWindowSender(event)
+  return clearLocalMessages(userId)
+})
 ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
     return { canceled: false, success: false, error: 'Invalid download source' }
@@ -361,7 +415,9 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
   let downloadUrl: URL
   try {
     const origin = new URL(payload.serverOrigin)
-    if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Unsupported protocol')
+    const loopback = origin.protocol === 'http:'
+      && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
+    if (origin.protocol !== 'https:' && !loopback) throw new Error('Downloads require HTTPS')
     downloadUrl = new URL(`/api/files/download/${fileId}`, origin.origin)
   } catch {
     return { canceled: false, success: false, error: 'Invalid server address' }
@@ -415,12 +471,16 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
     refreshUpdaterTransferState()
   }
 })
-ipcMain.handle('files:cancel-download', (_event, downloadId: string) => {
+ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
+  assertMainWindowSender(event)
   const controller = activeFileDownloads.get(String(downloadId || ''))
   controller?.abort()
   return !!controller
 })
-ipcMain.handle('screenshot:start', () => startScreenshot())
+ipcMain.handle('screenshot:start', (event) => {
+  assertMainWindowSender(event)
+  return startScreenshot()
+})
 ipcMain.handle('screenshot:getInitialData', (event) => {
   if (!isScreenshotSender(event)) return null
   return activeScreenshot?.payload ?? null

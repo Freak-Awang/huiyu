@@ -31,6 +31,8 @@ public class UserServiceImpl implements UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private static final int MAX_SIGNATURE_LENGTH = 128;
+    private static final int MIN_PASSWORD_LENGTH = 12;
+    private static final int MAX_PASSWORD_LENGTH = 128;
 
     @Autowired
     private UserMapper userMapper;
@@ -51,7 +53,7 @@ public class UserServiceImpl implements UserService {
     public SysUser getById(Long id) {
         SysUser user = userMapper.selectById(id);
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new BusinessException(404, "User not found");
         }
         return user;
     }
@@ -80,6 +82,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResult<SysUser> pageUsers(String keyword, Integer status, int page, int pageSize) {
+        page = Math.max(1, page);
+        pageSize = Math.min(100, Math.max(1, pageSize));
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w.like(SysUser::getUsername, keyword)
@@ -106,7 +110,9 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public SysUser create(SysUser user) {
+        validateNewPassword(user.getPassword());
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setTokenVersion(0);
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
         userMapper.insert(user);
@@ -115,39 +121,62 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public SysUser update(SysUser user) {
+        SysUser current = getById(user.getId());
         user.setUpdateTime(LocalDateTime.now());
         user.setPassword(null);
+        user.setTokenVersion((current.getTokenVersion() != null ? current.getTokenVersion() : 0) + 1);
         userMapper.updateById(user);
         SysUser saved = getById(user.getId());
+        sessionManager.closeSessionsForUser(saved.getId());
         notifyUserUpdated(saved);
         return saved;
     }
 
     @Override
     public void delete(Long id) {
-        userMapper.deleteById(id);
+        SysUser user = getById(id);
+        user.setStatus(0);
+        user.setTokenVersion((user.getTokenVersion() != null ? user.getTokenVersion() : 0) + 1);
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.updateById(user);
+        sessionManager.closeSessionsForUser(id);
+        notifyUserUpdated(user);
     }
 
     @Override
     public void updatePassword(Long userId, String oldPassword, String newPassword) {
         SysUser user = getById(userId);
         if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new RuntimeException("原密码错误");
+            throw new BusinessException(400, "Current password is incorrect");
         }
+        validateNewPassword(newPassword);
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setTokenVersion((user.getTokenVersion() != null ? user.getTokenVersion() : 0) + 1);
         user.setUpdateTime(LocalDateTime.now());
         userMapper.updateById(user);
+        sessionManager.closeSessionsForUser(userId);
     }
 
     @Override
     public void resetPassword(Long userId, String newPassword) {
-        if (!StringUtils.hasText(newPassword) || newPassword.length() < 6) {
-            throw new RuntimeException("密码至少6位");
-        }
+        validateNewPassword(newPassword);
         SysUser user = getById(userId);
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setTokenVersion((user.getTokenVersion() != null ? user.getTokenVersion() : 0) + 1);
         user.setUpdateTime(LocalDateTime.now());
         userMapper.updateById(user);
+        sessionManager.closeSessionsForUser(userId);
+    }
+
+    private void validateNewPassword(String password) {
+        if (!StringUtils.hasText(password)
+                || password.length() < MIN_PASSWORD_LENGTH
+                || password.length() > MAX_PASSWORD_LENGTH) {
+            throw new BusinessException(
+                    400,
+                    "Password must contain between " + MIN_PASSWORD_LENGTH + " and "
+                            + MAX_PASSWORD_LENGTH + " characters");
+        }
     }
 
     @Override

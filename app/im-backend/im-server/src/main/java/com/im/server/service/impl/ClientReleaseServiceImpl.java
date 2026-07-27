@@ -238,11 +238,13 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         int rollout = request.rolloutPercentage() == null ? 100 : request.rolloutPercentage();
         if (rollout < 0 || rollout > 100) throw new BusinessException(400, "rolloutPercentage must be between 0 and 100");
         normalizeBaseUrl(request.updateBaseUrl());
-        if (!StringUtils.hasText(request.installerName()) || !request.installerName().toLowerCase(Locale.ROOT).endsWith(".exe")) {
-            throw new BusinessException(400, "installerName must be an .exe file");
+        if (!StringUtils.hasText(request.installerName())
+                || !request.installerName().matches("[A-Za-z0-9 ._()\\-]{1,200}\\.exe")) {
+            throw new BusinessException(400, "installerName must be a safe .exe basename");
         }
-        if (!StringUtils.hasText(request.installerSha512()) || request.installerSha512().length() > 256) {
-            throw new BusinessException(400, "installerSha512 is required");
+        if (!StringUtils.hasText(request.installerSha512())
+                || !request.installerSha512().trim().matches("[A-Za-z0-9+/]{86}==")) {
+            throw new BusinessException(400, "installerSha512 must be a base64-encoded SHA-512 digest");
         }
     }
 
@@ -309,12 +311,17 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         if (!StringUtils.hasText(value)) throw new BusinessException(400, "updateBaseUrl is required");
         try {
             URI uri = URI.create(value.trim());
-            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) || uri.getHost() == null) {
+            String host = uri.getHost();
+            boolean loopback = "http".equalsIgnoreCase(uri.getScheme())
+                    && ("localhost".equalsIgnoreCase(host)
+                        || "127.0.0.1".equals(host)
+                        || "::1".equals(host));
+            if (host == null || (!"https".equalsIgnoreCase(uri.getScheme()) && !loopback)) {
                 throw new IllegalArgumentException();
             }
             return value.trim().endsWith("/") ? value.trim() : value.trim() + "/";
         } catch (Exception e) {
-            throw new BusinessException(400, "updateBaseUrl must be an HTTP(S) URL");
+            throw new BusinessException(400, "updateBaseUrl must use HTTPS (HTTP is allowed only for loopback)");
         }
     }
 

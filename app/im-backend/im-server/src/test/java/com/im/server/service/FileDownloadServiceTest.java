@@ -48,10 +48,24 @@ class FileDownloadServiceTest {
         avatar.setConversationId(null);
         avatar.setTemporary(0);
         when(metadataService.getById(1L)).thenReturn(avatar);
+        when(userMapper.selectCount(any())).thenReturn(1L);
 
         ImFile result = fileDownloadService.getDownloadableFile(null, 1L);
 
         assertThat(result).isSameAs(avatar);
+    }
+
+    @Test
+    void anonymousUserCannotDownloadUnreferencedStandaloneFile() {
+        ImFile file = availableFile(5L);
+        file.setConversationId(null);
+        file.setTemporary(0);
+        when(metadataService.getById(5L)).thenReturn(file);
+        when(userMapper.selectCount(any())).thenReturn(0L);
+
+        assertThatThrownBy(() -> fileDownloadService.getDownloadableFile(null, 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("No permission to download this file");
     }
 
     @Test

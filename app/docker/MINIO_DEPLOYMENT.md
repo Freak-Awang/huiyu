@@ -10,6 +10,11 @@ Copy `.env.example` to `.env` if this is a new deployment. For an existing
 deployment, keep the current `.env` and add the MinIO settings without printing
 the generated secrets:
 
+Provision the TLS certificate/key paths, separate MySQL application and
+migration accounts, a Redis password, and a unique JWT secret. Set
+`BOOTSTRAP_ADMIN_PASSWORD` only for the first successful startup; remove it
+from `.env` immediately afterwards and rotate that administrator password.
+
 ```sh
 sh scripts/configure-minio-env.sh --storage local
 ```
@@ -35,6 +40,7 @@ MinIO data directory, and then starts Nginx again.
 ```sh
 sh scripts/prepare-minio-sources.sh
 docker compose --env-file .env -f docker-compose.intranet.yml build backend minio
+docker compose --env-file .env -f docker-compose.intranet.yml config --quiet
 docker compose --env-file .env -f docker-compose.intranet.yml up -d mysql redis backend nginx
 docker compose --env-file .env -f docker-compose.intranet.yml up -d minio
 docker compose --env-file .env -f docker-compose.intranet.yml --profile ops run --rm minio-init

@@ -50,7 +50,7 @@
         <el-form-item label="更新日志"><el-input v-model="form.releaseNotesText" type="textarea" :rows="4" placeholder="每行一条用户可见更新说明" /></el-form-item>
         <el-form-item label="强制更新"><el-switch v-model="form.forceUpdate" /><span class="form-note">仅用于严重兼容或安全问题，发布前需二次确认</span></el-form-item>
         <el-divider content-position="left">流水线产物信息</el-divider>
-        <el-form-item label="更新基础地址" required><el-input v-model="form.updateBaseUrl" :disabled="immutable" placeholder="http://172.16.59.253:88/downloads/arttalk/stable/win-x64/" /></el-form-item>
+        <el-form-item label="更新基础地址" required><el-input v-model="form.updateBaseUrl" :disabled="immutable" placeholder="https://im.example.com/downloads/arttalk/stable/win-x64/" /></el-form-item>
         <div class="form-grid">
           <el-form-item label="安装包文件名" required><el-input v-model="form.installerName" :disabled="immutable" /></el-form-item>
           <el-form-item label="文件大小"><el-input-number v-model="form.installerSize" :disabled="immutable" :min="0" :controls="false" /></el-form-item>
@@ -103,7 +103,7 @@ const statusOptions = [
 const emptyForm = () => ({
   id: undefined as number | undefined, version: '', channel: 'stable' as 'stable' | 'beta', platform: 'win32', arch: 'x64',
   releaseName: '', releaseNotesText: '', minimumVersion: '', forceUpdate: false, rolloutPercentage: 10,
-  updateBaseUrl: 'http://172.16.59.253:88/downloads/arttalk/stable/win-x64/', installerName: '', installerSize: 0,
+  updateBaseUrl: 'https://im.example.com/downloads/arttalk/stable/win-x64/', installerName: '', installerSize: 0,
   installerSha512: '', allowDevices: '', denyDevices: '', allowUsers: '', denyUsers: '', allowDepts: '', denyDepts: '',
 })
 const form = reactive(emptyForm())

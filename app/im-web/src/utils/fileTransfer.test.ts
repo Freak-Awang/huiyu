@@ -12,7 +12,7 @@ const hash = vi.hoisted(() => vi.fn())
 
 vi.mock('../api/file', () => ({
   DIRECT_UPLOAD_MAX_SIZE: 100 * 1024 * 1024,
-  FILE_UPLOAD_MAX_SIZE: 50 * 1024 * 1024 * 1024,
+  FILE_UPLOAD_MAX_SIZE: 2 * 1024 * 1024 * 1024,
   ...api,
 }))
 vi.mock('./fileHash', () => ({ hashFile: hash }))
@@ -76,8 +76,8 @@ describe('file transfer orchestrator', () => {
   })
 
   it('rejects files larger than 50 GiB before hashing', async () => {
-    await expect(uploadConversationFile(file(50 * 1024 * 1024 * 1024 + 1), '3', '7'))
-      .rejects.toThrow('50GB')
+    await expect(uploadConversationFile(file(2 * 1024 * 1024 * 1024 + 1), '3', '7'))
+      .rejects.toThrow('2GB')
     expect(hash).not.toHaveBeenCalled()
   })
 
@@ -86,7 +86,7 @@ describe('file transfer orchestrator', () => {
       data: { fileExists: true, file: fileVO('50'), chunkSize: 64, chunkCount: 0, uploadedParts: [] },
     })
 
-    const result = await uploadConversationFile(file(50 * 1024 * 1024 * 1024), '3', '7')
+    const result = await uploadConversationFile(file(2 * 1024 * 1024 * 1024), '3', '7')
 
     expect(result.id).toBe('50')
   })

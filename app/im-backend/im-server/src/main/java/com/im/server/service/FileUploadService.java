@@ -25,14 +25,17 @@ public class FileUploadService {
     private final FileMetadataService metadataService;
     private final FileStorageRouter storageRouter;
     private final FileStorageProperties properties;
+    private final FileQuotaService quotaService;
 
     public FileUploadService(
             FileMetadataService metadataService,
             FileStorageRouter storageRouter,
-            FileStorageProperties properties) {
+            FileStorageProperties properties,
+            FileQuotaService quotaService) {
         this.metadataService = metadataService;
         this.storageRouter = storageRouter;
         this.properties = properties;
+        this.quotaService = quotaService;
     }
 
     @Transactional
@@ -64,27 +67,37 @@ public class FileUploadService {
     }
 
     private ImFile uploadImage(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
-        validateImageUpload(file);
-        return storeFile(file, uploaderId, conversationId, temporary, true);
+        String detectedContentType = validateImageUpload(file);
+        quotaService.assertCanStore(uploaderId, file.getSize());
+        return storeFile(file, uploaderId, conversationId, temporary, true, detectedContentType);
     }
 
     private ImFile uploadFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
         validateFileUpload(file);
-        return storeFile(file, uploaderId, conversationId, temporary, false);
+        quotaService.assertCanStore(uploaderId, file.getSize());
+        return storeFile(file, uploaderId, conversationId, temporary, false, file.getContentType());
     }
 
-    private ImFile storeFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary, boolean imageOnly) {
+    private ImFile storeFile(
+            MultipartFile file,
+            Long uploaderId,
+            Long conversationId,
+            boolean temporary,
+            boolean imageOnly,
+            String contentType) {
+        FileStorageClient storageClient = storageRouter.defaultClient();
+        String originalName = safeName(file.getOriginalFilename());
+        String objectKey = finalObjectKey(originalName);
+        boolean stored = false;
         try {
-            FileStorageClient storageClient = storageRouter.defaultClient();
-            String originalName = safeName(file.getOriginalFilename());
-            String objectKey = finalObjectKey(originalName);
             String sha256 = sha256(file);
             storageClient.save(objectKey, file);
+            stored = true;
             return metadataService.createAvailableFile(
                     originalName,
                     objectKey,
                     file.getSize(),
-                    file.getContentType(),
+                    contentType,
                     uploaderId,
                     conversationId,
                     sha256,
@@ -93,14 +106,30 @@ public class FileUploadService {
                     temporary,
                     temporary ? LocalDateTime.now().plusDays(properties.getRetentionDays()) : null);
         } catch (Exception e) {
-            throw new BusinessException("Failed to upload " + (imageOnly ? "image" : "file") + ": " + e.getMessage());
+            if (stored) {
+                storageClient.deleteQuietly(objectKey);
+            }
+            if (e instanceof BusinessException businessException) {
+                throw businessException;
+            }
+            throw new BusinessException(
+                    500,
+                    "Failed to upload " + (imageOnly ? "image" : "file"),
+                    e);
         }
     }
 
-    private void validateImageUpload(MultipartFile file) {
+    private String validateImageUpload(MultipartFile file) {
         validateUploadSize(file.getSize(), properties.getSmallFileMaxSize(), "Image exceeds upload size limit");
-        String contentType = file.getContentType();
-        if (!StringUtils.hasText(contentType) || !contentType.startsWith("image/")) {
+        try {
+            String detectedContentType = ImageTypeDetector.detect(file);
+            if (!StringUtils.hasText(detectedContentType)) {
+                throw new BusinessException(415, "Only PNG, JPEG, GIF, and WebP images are supported");
+            }
+            return detectedContentType;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
             throw new BusinessException(415, "Only image uploads are supported");
         }
     }

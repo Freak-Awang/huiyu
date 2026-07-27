@@ -193,10 +193,7 @@ public class ConversationServiceImpl implements ConversationService {
             conversationMemberMapper.insert(ownerMember);
 
             for (Long memberId : memberIds) {
-                SysUser user = userMapper.selectById(memberId);
-                if (user == null) {
-                    throw new BusinessException("User does not exist: " + memberId);
-                }
+                requireActiveUser(memberId);
                 ImConversationMember member = new ImConversationMember();
                 member.setConversationId(conversation.getId());
                 member.setUserId(memberId);
@@ -221,7 +218,7 @@ public class ConversationServiceImpl implements ConversationService {
         // 成员变更在事务内完成，通知在成员关系写入后发送，保证收到推送的用户能立即拉到会话。
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
-            throw new BusinessException("Conversation not found");
+            throw new BusinessException(404, "Conversation not found");
         }
         if (conversation.getType() == null || conversation.getType() != 2) {
             throw new BusinessException("Only group conversations can add members");
@@ -234,6 +231,7 @@ public class ConversationServiceImpl implements ConversationService {
         requireOwnerOrAdmin(operatorMember, "Only the owner or admin can add members");
 
         for (Long userId : userIds) {
+            requireActiveUser(userId);
             ImConversationMember existing = conversationMemberMapper.selectOne(
                     new LambdaQueryWrapper<ImConversationMember>()
                             .eq(ImConversationMember::getConversationId, conversationId)
@@ -254,12 +252,23 @@ public class ConversationServiceImpl implements ConversationService {
         notifyConversationUpdated(conversationId);
     }
 
+    private SysUser requireActiveUser(Long userId) {
+        SysUser user = userId != null ? userMapper.selectById(userId) : null;
+        if (user == null) {
+            throw new BusinessException(400, "User does not exist: " + userId);
+        }
+        if (!Integer.valueOf(1).equals(user.getStatus())) {
+            throw new BusinessException(400, "User is disabled: " + userId);
+        }
+        return user;
+    }
+
     @Override
     @Transactional
     public void removeMember(Long conversationId, Long userId, Long operatorId) {
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
-            throw new BusinessException("Conversation not found");
+            throw new BusinessException(404, "Conversation not found");
         }
 
         ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
@@ -297,7 +306,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("User is not a member of this conversation");
+            throw new BusinessException(403, "User is not a member of this conversation");
         }
 
         member.setIsPinned(pinned ? 1 : 0);
@@ -311,7 +320,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("User is not a member of this conversation");
+            throw new BusinessException(403, "User is not a member of this conversation");
         }
 
         member.setIsMuted(muted ? 1 : 0);
@@ -381,12 +390,12 @@ public class ConversationServiceImpl implements ConversationService {
                         .eq(ImConversationMember::getConversationId, id)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("User is not a member of this conversation");
+            throw new BusinessException(403, "User is not a member of this conversation");
         }
 
         ImConversation conversation = conversationMapper.selectById(id);
         if (conversation == null) {
-            throw new BusinessException("Conversation not found");
+            throw new BusinessException(404, "Conversation not found");
         }
         return buildConversationVO(conversation, userId);
     }
@@ -570,7 +579,7 @@ public class ConversationServiceImpl implements ConversationService {
     private ImConversation getGroupConversationOrThrow(Long conversationId) {
         ImConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
-            throw new BusinessException("Conversation not found");
+            throw new BusinessException(404, "Conversation not found");
         }
         if (conversation.getType() == null || conversation.getType() != 2) {
             throw new BusinessException(400, "Only group conversations can be managed");

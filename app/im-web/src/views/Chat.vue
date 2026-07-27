@@ -915,6 +915,7 @@ import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
+import { createWebSocketTicket } from '../api/auth'
 import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
 import {
@@ -2745,9 +2746,8 @@ function initWebSocket() {
   if (wsManager) {
     wsManager.disconnect()
   }
-  const token = authStore.token
-  if (!token) return
-  wsManager = new WebSocketManager(token, handleWsMessage, (connected) => {
+  if (!authStore.token) return
+  wsManager = new WebSocketManager(createWebSocketTicket, handleWsMessage, (connected) => {
     wsConnected.value = connected
     if (connected) {
       const currentConvId = chatStore.currentConversation?.conversationId

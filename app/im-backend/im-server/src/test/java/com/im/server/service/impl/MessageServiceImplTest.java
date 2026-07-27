@@ -166,8 +166,8 @@ class MessageServiceImplTest {
         when(conversationMemberMapper.selectOne(any())).thenReturn(member(11L, "member"));
         when(messageMapper.selectCount(any())).thenReturn(1L);
         when(messageMapper.selectList(any())).thenReturn(List.of(message));
-        when(userMapper.selectById(10L)).thenReturn(user(10L));
-        when(messageDeliveryMapper.selectCount(any())).thenReturn(0L);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(user(10L)));
+        when(messageDeliveryMapper.selectList(any())).thenReturn(List.of());
 
         PageResult<MessageVO> page = messageService.getMessages(11L, 1L, null, 50);
 

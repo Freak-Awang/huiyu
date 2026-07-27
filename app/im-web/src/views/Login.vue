@@ -11,7 +11,7 @@
           <input
             v-model="serverOrigin"
             type="text"
-            placeholder="服务器地址，如 192.168.1.10 或 http://im.local"
+            placeholder="服务器地址，如 https://im.example.com"
             autocomplete="url"
           />
         </div>

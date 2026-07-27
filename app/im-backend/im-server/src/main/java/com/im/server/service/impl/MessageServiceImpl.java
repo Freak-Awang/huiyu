@@ -1,10 +1,8 @@
 package com.im.server.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.MessageVO;
 import com.im.common.dto.SendMessageRequest;
@@ -22,15 +20,21 @@ import com.im.server.mapper.MessageDeliveryMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.FileMetadataService;
+import com.im.server.service.ImageTypeDetector;
 import com.im.server.service.MessageService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +44,8 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_PENDING_LIMIT = 500;
     private static final String MESSAGE_TYPE_TEXT = "TEXT";
     private static final String MESSAGE_TYPE_IMAGE = "IMAGE";
     private static final String MESSAGE_TYPE_FILE = "FILE";
@@ -72,12 +78,13 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public PageResult<MessageVO> getMessages(Long userId, Long conversationId, Long beforeMessageId, int pageSize) {
+        pageSize = normalizeLimit(pageSize, 20, MAX_PAGE_SIZE);
         ImConversationMember member = conversationMemberMapper.selectOne(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("Not a member of this conversation");
+            throw new BusinessException(403, "Not a member of this conversation");
         }
 
         Long total = messageMapper.selectCount(
@@ -93,21 +100,20 @@ public class MessageServiceImpl implements MessageService {
         wrapper.last("LIMIT " + pageSize);
 
         List<ImMessage> messages = messageMapper.selectList(wrapper);
-        List<MessageVO> voList = messages.stream()
-                .map(message -> toMessageVO(message, userId))
-                .collect(Collectors.toList());
+        List<MessageVO> voList = toMessageVOList(messages, userId);
 
         return PageResult.success(voList, total, 1, pageSize);
     }
 
     @Override
     public PageResult<MessageVO> searchMessages(Long userId, Long conversationId, String keyword, int pageSize) {
+        pageSize = normalizeLimit(pageSize, 20, MAX_PAGE_SIZE);
         ImConversationMember member = conversationMemberMapper.selectOne(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("Not a member of this conversation");
+            throw new BusinessException(403, "Not a member of this conversation");
         }
         if (!StringUtils.hasText(keyword)) {
             return PageResult.success(List.of(), 0, 1, pageSize);
@@ -120,22 +126,21 @@ public class MessageServiceImpl implements MessageService {
                 .orderByDesc(ImMessage::getCreateTime)
                 .last("LIMIT " + pageSize);
 
-        List<MessageVO> voList = messageMapper.selectList(wrapper).stream()
-                .map(message -> toMessageVO(message, userId))
-                .collect(Collectors.toList());
+        List<MessageVO> voList = toMessageVOList(messageMapper.selectList(wrapper), userId);
         return PageResult.success(voList, voList.size(), 1, pageSize);
     }
 
     @Override
     @Transactional
     public ImMessage sendMessage(Long senderId, SendMessageRequest request) {
+        validateSendRequest(request);
         // 发送消息的核心边界：先确认成员身份和业务权限，再写消息与 delivery rows，保证离线同步有数据可拉取。
         LambdaQueryWrapper<ImConversationMember> memberWrapper = new LambdaQueryWrapper<>();
         memberWrapper.eq(ImConversationMember::getConversationId, request.getConversationId())
                 .eq(ImConversationMember::getUserId, senderId);
         ImConversationMember member = conversationMemberMapper.selectOne(memberWrapper);
         if (member == null) {
-            throw new BusinessException("Not a member of this conversation");
+            throw new BusinessException(403, "Not a member of this conversation");
         }
         validateSupportedMessageType(request);
         validateMediaMessage(request);
@@ -162,7 +167,20 @@ public class MessageServiceImpl implements MessageService {
         message.setCreateTime(LocalDateTime.now());
         message.setExpiresAt(null);
 
-        messageMapper.insert(message);
+        try {
+            messageMapper.insert(message);
+        } catch (DuplicateKeyException e) {
+            if (StringUtils.hasText(request.getClientMsgId())) {
+                ImMessage existing = messageMapper.selectOne(
+                        new LambdaQueryWrapper<ImMessage>()
+                                .eq(ImMessage::getSenderId, senderId)
+                                .eq(ImMessage::getClientMsgId, request.getClientMsgId()));
+                if (existing != null) {
+                    return existing;
+                }
+            }
+            throw e;
+        }
         // Delivery rows are created synchronously so unread counts and pending-message replay stay consistent.
         createDeliveryRows(message);
 
@@ -185,14 +203,14 @@ public class MessageServiceImpl implements MessageService {
         // 撤回只允许发送者在短窗口内执行，并通过 WebSocket 推送让在线端替换本地消息状态。
         ImMessage message = messageMapper.selectById(messageId);
         if (message == null) {
-            throw new BusinessException("Message not found");
+            throw new BusinessException(404, "Message not found");
         }
         if (!userId.equals(message.getSenderId())) {
             throw new BusinessException(403, "Only the sender can recall this message");
         }
         if (message.getCreateTime() != null
                 && message.getCreateTime().isBefore(LocalDateTime.now().minusMinutes(RECALL_LIMIT_MINUTES))) {
-            throw new BusinessException("Messages can only be recalled within 2 minutes");
+            throw new BusinessException(409, "Messages can only be recalled within 2 minutes");
         }
 
         message.setStatus("RECALLED");
@@ -205,18 +223,28 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public List<MessageVO> getPendingMessages(Long userId, int limit) {
+        limit = normalizeLimit(limit, 100, MAX_PENDING_LIMIT);
         List<ImMessageDelivery> pendingDeliveries = messageDeliveryMapper.selectList(
                 new LambdaQueryWrapper<ImMessageDelivery>()
                         .eq(ImMessageDelivery::getUserId, userId)
                         .eq(ImMessageDelivery::getDelivered, 0)
                         .orderByAsc(ImMessageDelivery::getCreateTime)
-                        .last("LIMIT " + Math.max(1, Math.min(limit, 200))));
+                        .last("LIMIT " + limit));
 
-        return pendingDeliveries.stream()
-                .map(delivery -> messageMapper.selectById(delivery.getMessageId()))
-                .filter(message -> message != null)
-                .map(message -> toMessageVO(message, userId))
-                .collect(Collectors.toList());
+        List<Long> messageIds = pendingDeliveries.stream()
+                .map(ImMessageDelivery::getMessageId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (messageIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, ImMessage> byId = messageMapper.selectBatchIds(messageIds).stream()
+                .collect(Collectors.toMap(ImMessage::getId, Function.identity()));
+        List<ImMessage> messages = messageIds.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .toList();
+        return toMessageVOList(messages, userId);
     }
 
     @Override
@@ -245,17 +273,18 @@ public class MessageServiceImpl implements MessageService {
                         .eq(ImConversationMember::getConversationId, conversationId)
                         .eq(ImConversationMember::getUserId, userId));
         if (member == null) {
-            throw new BusinessException("Not a member of this conversation");
+            throw new BusinessException(403, "Not a member of this conversation");
         }
 
-        LocalDateTime readBoundary = LocalDateTime.now();
+        LocalDateTime readAt = LocalDateTime.now();
+        LocalDateTime boundaryTime = readAt;
         Long effectiveLastReadMessageId = lastReadMessageId;
         if (lastReadMessageId != null) {
             ImMessage boundaryMessage = messageMapper.selectById(lastReadMessageId);
             if (boundaryMessage == null || !conversationId.equals(boundaryMessage.getConversationId())) {
-                throw new BusinessException("Invalid last read message");
+                throw new BusinessException(400, "Invalid last read message");
             }
-            readBoundary = boundaryMessage.getCreateTime() != null ? boundaryMessage.getCreateTime() : readBoundary;
+            boundaryTime = boundaryMessage.getCreateTime() != null ? boundaryMessage.getCreateTime() : boundaryTime;
         } else {
             ImMessage latestMessage = messageMapper.selectOne(
                     new LambdaQueryWrapper<ImMessage>()
@@ -268,47 +297,22 @@ public class MessageServiceImpl implements MessageService {
             }
         }
 
-        List<Long> candidateMessageIds = messageMapper.selectList(
-                        new LambdaQueryWrapper<ImMessage>()
-                                .select(ImMessage::getId)
-                                .eq(ImMessage::getConversationId, conversationId)
-                                .le(ImMessage::getCreateTime, readBoundary))
-                .stream()
-                .map(ImMessage::getId)
-                .collect(Collectors.toList());
+        List<Long> newlyReadMessageIds = effectiveLastReadMessageId == null
+                ? List.of()
+                : messageDeliveryMapper.selectUnreadMessageIdsUpTo(
+                        conversationId, userId, boundaryTime, effectiveLastReadMessageId);
+        int updated = effectiveLastReadMessageId == null
+                ? 0
+                : messageDeliveryMapper.markReadUpTo(
+                        conversationId, userId, boundaryTime, effectiveLastReadMessageId, readAt);
 
-        List<Long> newlyReadMessageIds = List.of();
-        if (!candidateMessageIds.isEmpty()) {
-            newlyReadMessageIds = messageDeliveryMapper.selectList(
-                            new LambdaQueryWrapper<ImMessageDelivery>()
-                                    .select(ImMessageDelivery::getMessageId)
-                                    .eq(ImMessageDelivery::getConversationId, conversationId)
-                                    .eq(ImMessageDelivery::getUserId, userId)
-                                    .eq(ImMessageDelivery::getReadStatus, 0)
-                                    .in(ImMessageDelivery::getMessageId, candidateMessageIds))
-                    .stream()
-                    .map(ImMessageDelivery::getMessageId)
-                    .collect(Collectors.toList());
-        }
-
-        if (!newlyReadMessageIds.isEmpty()) {
-            LambdaUpdateWrapper<ImMessageDelivery> deliveryWrapper = new LambdaUpdateWrapper<>();
-            deliveryWrapper.eq(ImMessageDelivery::getConversationId, conversationId)
-                    .eq(ImMessageDelivery::getUserId, userId)
-                    .eq(ImMessageDelivery::getReadStatus, 0)
-                    .in(ImMessageDelivery::getMessageId, newlyReadMessageIds)
-                    .set(ImMessageDelivery::getReadStatus, 1)
-                    .set(ImMessageDelivery::getReadTime, readBoundary);
-            messageDeliveryMapper.update(null, deliveryWrapper);
-        }
-
-        if (member.getLastReadTime() == null || member.getLastReadTime().isBefore(readBoundary)) {
-            member.setLastReadTime(readBoundary);
+        if (member.getLastReadTime() == null || member.getLastReadTime().isBefore(readAt)) {
+            member.setLastReadTime(readAt);
             conversationMemberMapper.updateById(member);
         }
 
-        if (!newlyReadMessageIds.isEmpty()) {
-            pushConversationRead(conversationId, userId, effectiveLastReadMessageId, readBoundary, newlyReadMessageIds);
+        if (updated > 0) {
+            pushConversationRead(conversationId, userId, effectiveLastReadMessageId, readAt, newlyReadMessageIds);
         }
     }
 
@@ -360,20 +364,6 @@ public class MessageServiceImpl implements MessageService {
             }
             data.put("readTime", readTime != null ? readTime.toString() : null);
             data.putPOJO("readMessageIds", readMessageIds);
-            ArrayNode receipts = data.putArray("receipts");
-            for (Long messageId : readMessageIds) {
-                ImMessage message = messageMapper.selectById(messageId);
-                if (message == null) {
-                    continue;
-                }
-                MessageVO receipt = toMessageVO(message, message.getSenderId());
-                ObjectNode item = receipts.addObject();
-                item.put("messageId", receipt.getMessageId());
-                item.put("readCount", receipt.getReadCount() != null ? receipt.getReadCount() : 0);
-                item.put("recipientCount", receipt.getRecipientCount() != null ? receipt.getRecipientCount() : 0);
-                item.put("readStatus", receipt.getReadStatus() != null ? receipt.getReadStatus() : 0);
-                item.put("readTime", readTime != null ? readTime.toString() : null);
-            }
             String payload = objectMapper.writeValueAsString(root);
             for (ImConversationMember member : members) {
                 if (!member.getUserId().equals(readerId) && sessionManager.isOnline(member.getUserId())) {
@@ -460,6 +450,68 @@ public class MessageServiceImpl implements MessageService {
         return vo;
     }
 
+    private List<MessageVO> toMessageVOList(List<ImMessage> messages, Long viewerId) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<Long> messageIds = messages.stream().map(ImMessage::getId).filter(Objects::nonNull).toList();
+        List<Long> senderIds = messages.stream().map(ImMessage::getSenderId).filter(Objects::nonNull).distinct().toList();
+        Map<Long, SysUser> users = senderIds.isEmpty()
+                ? Collections.emptyMap()
+                : userMapper.selectBatchIds(senderIds).stream()
+                        .collect(Collectors.toMap(SysUser::getId, Function.identity()));
+        Map<Long, List<ImMessageDelivery>> deliveries = messageIds.isEmpty()
+                ? Collections.emptyMap()
+                : messageDeliveryMapper.selectList(
+                                new LambdaQueryWrapper<ImMessageDelivery>()
+                                        .in(ImMessageDelivery::getMessageId, messageIds))
+                        .stream()
+                        .collect(Collectors.groupingBy(ImMessageDelivery::getMessageId));
+
+        return messages.stream().map(message -> {
+            MessageVO vo = new MessageVO();
+            vo.setMessageId(message.getId());
+            vo.setConversationId(message.getConversationId());
+            vo.setSenderId(message.getSenderId());
+            vo.setMessageType(message.getMessageType());
+            vo.setContent(message.getContent());
+            vo.setStatus(message.getStatus());
+            vo.setClientMsgId(message.getClientMsgId());
+            vo.setCreateTime(message.getCreateTime());
+
+            SysUser sender = users.get(message.getSenderId());
+            if (sender != null) {
+                vo.setSenderName(sender.getNickname());
+                vo.setSenderAvatar(sender.getAvatar());
+                vo.setSenderSignature(sender.getSignature());
+            }
+
+            List<ImMessageDelivery> messageDeliveries =
+                    deliveries.getOrDefault(message.getId(), List.of());
+            int recipientCount = (int) messageDeliveries.stream()
+                    .filter(delivery -> !message.getSenderId().equals(delivery.getUserId()))
+                    .count();
+            int readCount = (int) messageDeliveries.stream()
+                    .filter(delivery -> !message.getSenderId().equals(delivery.getUserId()))
+                    .filter(delivery -> Integer.valueOf(1).equals(delivery.getReadStatus()))
+                    .count();
+            vo.setRecipientCount(recipientCount);
+            vo.setReadCount(readCount);
+            if (viewerId != null && viewerId.equals(message.getSenderId())) {
+                vo.setReadStatus(recipientCount == 0 || readCount >= recipientCount ? 1 : 0);
+            } else if (viewerId != null) {
+                messageDeliveries.stream()
+                        .filter(delivery -> viewerId.equals(delivery.getUserId()))
+                        .findFirst()
+                        .ifPresent(delivery -> {
+                            vo.setReadStatus(delivery.getReadStatus());
+                            vo.setReadTime(delivery.getReadTime());
+                        });
+            }
+            return vo;
+        }).toList();
+    }
+
     private void fillReadReceipt(MessageVO vo, ImMessage message, Long viewerId) {
         Long recipientCount = messageDeliveryMapper.selectCount(
                 new LambdaQueryWrapper<ImMessageDelivery>()
@@ -528,6 +580,13 @@ public class MessageServiceImpl implements MessageService {
         return content.length() > 50 ? content.substring(0, 50) : content;
     }
 
+    private int normalizeLimit(int requested, int fallback, int maximum) {
+        if (requested <= 0) {
+            return fallback;
+        }
+        return Math.min(requested, maximum);
+    }
+
     private void validateAllMentionPermission(SendMessageRequest request, ImConversationMember senderMember) {
         // @all is intentionally restricted to owner/admin so large groups cannot be globally interrupted by any member.
         if (!MESSAGE_TYPE_TEXT.equalsIgnoreCase(request.getMessageType()) || !containsAllMention(request.getContent())) {
@@ -556,6 +615,21 @@ public class MessageServiceImpl implements MessageService {
         throw new BusinessException(400, "Unsupported message type");
     }
 
+    private void validateSendRequest(SendMessageRequest request) {
+        if (request == null || request.getConversationId() == null) {
+            throw new BusinessException(400, "conversationId is required");
+        }
+        if (!StringUtils.hasText(request.getMessageType())) {
+            throw new BusinessException(400, "messageType is required");
+        }
+        if (!StringUtils.hasText(request.getContent()) || request.getContent().length() > 60000) {
+            throw new BusinessException(400, "Message content is empty or too large");
+        }
+        if (StringUtils.hasText(request.getClientMsgId()) && request.getClientMsgId().length() > 64) {
+            throw new BusinessException(400, "clientMsgId is too long");
+        }
+    }
+
     private void validateMediaMessage(SendMessageRequest request) {
         boolean isFile = MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType());
         boolean isImage = MESSAGE_TYPE_IMAGE.equalsIgnoreCase(request.getMessageType());
@@ -581,7 +655,7 @@ public class MessageServiceImpl implements MessageService {
             if (file.getConversationId() == null || !file.getConversationId().equals(request.getConversationId())) {
                 throw new BusinessException(403, "File does not belong to this conversation");
             }
-            if (isImage && (file.getContentType() == null || !file.getContentType().startsWith("image/"))) {
+            if (isImage && !ImageTypeDetector.isSafeInlineType(file.getContentType())) {
                 throw new BusinessException(415, "Image message must reference an image file");
             }
         } catch (BusinessException e) {

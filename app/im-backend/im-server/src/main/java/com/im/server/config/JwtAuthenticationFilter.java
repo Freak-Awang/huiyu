@@ -1,11 +1,12 @@
 package com.im.server.config;
 
-import com.im.common.util.JwtUtil;
+import com.im.common.exception.BusinessException;
+import com.im.server.security.AuthenticatedUser;
+import com.im.server.security.TokenAuthenticationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,12 +27,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    private final JwtUtil jwtUtil;
-    private final StringRedisTemplate redisTemplate;
+    private final TokenAuthenticationService authenticationService;
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil, StringRedisTemplate redisTemplate) {
-        this.jwtUtil = jwtUtil;
-        this.redisTemplate = redisTemplate;
+    public JwtAuthenticationFilter(TokenAuthenticationService authenticationService) {
+        this.authenticationService = authenticationService;
     }
 
     @Override
@@ -65,30 +64,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(BEARER_PREFIX.length());
-        Long userIdLong;
-        String role;
-
+        AuthenticatedUser authenticatedUser;
         try {
-            userIdLong = jwtUtil.getUserIdFromToken(token);
-            role = jwtUtil.getRoleFromToken(token);
-        } catch (Exception e) {
+            authenticatedUser = authenticationService.authenticate(token);
+        } catch (BusinessException e) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":401,\"message\":\"Invalid or expired token\"}");
+            response.getWriter().write("{\"code\":401,\"message\":\"Invalid, expired, or revoked token\"}");
             return;
         }
 
-        if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + token))) {
-            // Logout revokes the exact JWT through Redis blacklist without waiting for token expiry.
-            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":401,\"message\":\"Token has been revoked\"}");
-            return;
-        }
-
-        String userId = userIdLong != null ? String.valueOf(userIdLong) : null;
+        String userId = authenticatedUser.userId() != null ? String.valueOf(authenticatedUser.userId()) : null;
         if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+            String role = authenticatedUser.role();
             if (role != null && !role.isBlank()) {
                 authorities.add(new SimpleGrantedAuthority(role));
                 authorities.add(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()));
@@ -111,6 +100,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private boolean isPublicClientUpdateEndpoint(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/api/client/releases/policy") || path.equals("/api/client/update-events");
+        return path.equals("/api/client/releases/policy");
     }
 }

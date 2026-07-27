@@ -1,37 +1,43 @@
 package com.im.server.websocket;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WebSocketSessionManagerTest {
 
     @Test
-    void closingReplacedSessionDoesNotRemoveCurrentSession() throws Exception {
+    void multipleSessionsForOneUserStayConnectedAndReceiveMessages() throws Exception {
         WebSocketSessionManager manager = new WebSocketSessionManager();
-        WebSocketSession oldSession = openSession("old");
-        WebSocketSession newSession = openSession("new");
+        WebSocketSession first = openSession("first");
+        WebSocketSession second = openSession("second");
 
-        manager.addSession(10L, oldSession);
-        manager.addSession(10L, newSession);
+        manager.addSession(10L, first);
+        manager.addSession(10L, second);
+        manager.sendToUser(10L, "payload");
 
-        assertThat(manager.removeSession(10L, oldSession)).isFalse();
-        assertThat(manager.getSession(10L)).isSameAs(newSession);
+        assertThat(manager.getSessions(10L)).containsExactlyInAnyOrder(first, second);
+        verify(first).sendMessage(new TextMessage("payload"));
+        verify(second).sendMessage(new TextMessage("payload"));
         assertThat(manager.isOnline(10L)).isTrue();
     }
 
     @Test
-    void closingCurrentSessionRemovesRoutingEntry() {
+    void userStaysOnlineUntilFinalSessionCloses() {
         WebSocketSessionManager manager = new WebSocketSessionManager();
-        WebSocketSession session = openSession("current");
+        WebSocketSession first = openSession("first");
+        WebSocketSession second = openSession("second");
+        manager.addSession(10L, first);
+        manager.addSession(10L, second);
 
-        manager.addSession(10L, session);
-
-        assertThat(manager.removeSession(10L, session)).isTrue();
-        assertThat(manager.getSession(10L)).isNull();
+        assertThat(manager.removeSession(10L, first)).isFalse();
+        assertThat(manager.isOnline(10L)).isTrue();
+        assertThat(manager.removeSession(10L, second)).isTrue();
         assertThat(manager.isOnline(10L)).isFalse();
     }
 

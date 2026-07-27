@@ -4,7 +4,7 @@ import { toServerUrl } from '../config/runtime'
 import type { AxiosProgressEvent } from 'axios'
 
 export const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024
-export const FILE_UPLOAD_MAX_SIZE = 50 * 1024 * 1024 * 1024
+export const FILE_UPLOAD_MAX_SIZE = 2 * 1024 * 1024 * 1024
 
 export interface FileVO {
   id: string

@@ -70,7 +70,7 @@ class ClientReleaseServiceImplTest {
         release.setRolloutPercentage(rollout);
         release.setForceUpdate(false);
         release.setReleaseName("ArtTalk " + version);
-        release.setUpdateBaseUrl("http://172.16.59.253:88/downloads/arttalk/stable/win-x64/");
+        release.setUpdateBaseUrl("https://im.example.test/downloads/arttalk/stable/win-x64/");
         return release;
     }
 }

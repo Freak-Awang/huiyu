@@ -17,7 +17,11 @@ export interface LocalMessageStats {
 
 export async function upsertLocalMessage(message: Message, userId = getLocalMessageUserId()) {
   if (!canUseLocalMessageStore() || !userId) return
-  await window.imDesktop!.upsertMessage(userId, message)
+  try {
+    await window.imDesktop!.upsertMessage(userId, message)
+  } catch (error) {
+    console.warn('Local encrypted message cache is unavailable', error)
+  }
 }
 
 export async function listLocalMessages(
@@ -27,8 +31,13 @@ export async function listLocalMessages(
   userId = getLocalMessageUserId(),
 ): Promise<Message[]> {
   if (!canUseLocalMessageStore() || !userId) return []
-  const records = await window.imDesktop!.listMessages(userId, conversationId, beforeMessageId, pageSize)
-  return records.map((item) => normalizeMessage(item as RawMessage))
+  try {
+    const records = await window.imDesktop!.listMessages(userId, conversationId, beforeMessageId, pageSize)
+    return records.map((item) => normalizeMessage(item as RawMessage))
+  } catch (error) {
+    console.warn('Local encrypted message cache is unavailable', error)
+    return []
+  }
 }
 
 export async function searchLocalMessages(
@@ -38,16 +47,31 @@ export async function searchLocalMessages(
   userId = getLocalMessageUserId(),
 ): Promise<Message[]> {
   if (!canUseLocalMessageStore() || !userId) return []
-  const records = await window.imDesktop!.searchMessages(userId, conversationId, keyword, limit)
-  return records.map((item) => normalizeMessage(item as RawMessage))
+  try {
+    const records = await window.imDesktop!.searchMessages(userId, conversationId, keyword, limit)
+    return records.map((item) => normalizeMessage(item as RawMessage))
+  } catch (error) {
+    console.warn('Local encrypted message cache is unavailable', error)
+    return []
+  }
 }
 
 export async function getLocalMessageStats(userId = getLocalMessageUserId()): Promise<LocalMessageStats | null> {
   if (!canUseLocalMessageStore() || !userId || !window.imDesktop?.getMessageStats) return null
-  return window.imDesktop.getMessageStats(userId)
+  try {
+    return await window.imDesktop.getMessageStats(userId)
+  } catch (error) {
+    console.warn('Local encrypted message cache is unavailable', error)
+    return null
+  }
 }
 
 export async function clearLocalMessages(userId = getLocalMessageUserId()): Promise<boolean> {
   if (!canUseLocalMessageStore() || !userId || !window.imDesktop?.clearMessages) return false
-  return window.imDesktop.clearMessages(userId)
+  try {
+    return await window.imDesktop.clearMessages(userId)
+  } catch (error) {
+    console.warn('Local encrypted message cache is unavailable', error)
+    return false
+  }
 }

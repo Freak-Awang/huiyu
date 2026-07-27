@@ -280,12 +280,18 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function markAsRead(convId: string, lastReadMessageId?: string) {
-    // Clear local badges optimistically; backend read receipts will reconcile other participants through WebSocket.
+    const previousUnread = unreadCounts.value.get(convId) || 0
+    const previousMentions = mentionUnreadCounts.value.get(convId) || 0
     clearUnread(convId)
     try {
       await markRead(convId, lastReadMessageId)
     } catch {
-      // ignore
+      if ((unreadCounts.value.get(convId) || 0) === 0) {
+        unreadCounts.value.set(convId, previousUnread)
+      }
+      if ((mentionUnreadCounts.value.get(convId) || 0) === 0) {
+        mentionUnreadCounts.value.set(convId, previousMentions)
+      }
     }
   }
 

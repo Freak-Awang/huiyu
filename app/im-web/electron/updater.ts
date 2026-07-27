@@ -1,5 +1,6 @@
 import electronUpdater from 'electron-updater'
 import { app, BrowserWindow, ipcMain, net, powerMonitor } from 'electron'
+import type { WebContents } from 'electron'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
@@ -200,10 +201,15 @@ async function loadCachedForcePolicy() {
   }
 }
 
+function isLoopbackUrl(url: URL) {
+  return url.protocol === 'http:'
+    && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+}
+
 function configureFeed(policy: UpdatePolicy) {
   if (!policy.updateBaseUrl) throw new Error('Update policy did not provide an update source')
   const source = new URL(policy.updateBaseUrl)
-  if (!['http:', 'https:'].includes(source.protocol)) throw new Error('Unsupported update source protocol')
+  if (source.protocol !== 'https:' && !isLoopbackUrl(source)) throw new Error('Update source must use HTTPS')
   autoUpdater.setFeedURL({ provider: 'generic', url: source.toString() })
   autoUpdater.channel = configuration?.channel === 'beta' ? 'beta' : 'latest'
   // electron-updater enables downgrades when channel is assigned, so reset it afterwards.
@@ -375,9 +381,16 @@ function registerUpdaterEvents() {
 }
 
 function registerUpdaterIpc() {
-  ipcMain.handle('updater:configure', async (_event, value: UpdaterConfiguration) => {
+  const assertTrustedSender = (sender: WebContents) => {
+    const mainWindow = dependencies?.getMainWindow()
+    if (!mainWindow || sender !== mainWindow.webContents) {
+      throw new Error('Updater IPC request did not originate from the main application window')
+    }
+  }
+  ipcMain.handle('updater:configure', async (event, value: UpdaterConfiguration) => {
+    assertTrustedSender(event.sender)
     const url = new URL(value.serverOrigin)
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported server protocol')
+    if (url.protocol !== 'https:' && !isLoopbackUrl(url)) throw new Error('Server must use HTTPS')
     configuration = {
       serverOrigin: url.origin,
       token: value.token || undefined,
@@ -388,11 +401,24 @@ function registerUpdaterIpc() {
     await reportSuccessfulStart()
     return state
   })
-  ipcMain.handle('updater:get-state', () => ({ ...state, transferBlockers: totalTransferBlockers() }))
-  ipcMain.handle('updater:check', () => checkForUpdates(true))
-  ipcMain.handle('updater:download', () => downloadUpdate())
-  ipcMain.handle('updater:install', () => installUpdate())
-  ipcMain.handle('updater:set-transfer-count', async (_event, count: number) => {
+  ipcMain.handle('updater:get-state', (event) => {
+    assertTrustedSender(event.sender)
+    return { ...state, transferBlockers: totalTransferBlockers() }
+  })
+  ipcMain.handle('updater:check', (event) => {
+    assertTrustedSender(event.sender)
+    return checkForUpdates(true)
+  })
+  ipcMain.handle('updater:download', (event) => {
+    assertTrustedSender(event.sender)
+    return downloadUpdate()
+  })
+  ipcMain.handle('updater:install', (event) => {
+    assertTrustedSender(event.sender)
+    return installUpdate()
+  })
+  ipcMain.handle('updater:set-transfer-count', async (event, count: number) => {
+    assertTrustedSender(event.sender)
     rendererTransferCount = Math.max(0, Math.floor(Number(count) || 0))
     setState({ transferBlockers: totalTransferBlockers() })
     if (installWhenReady && totalTransferBlockers() === 0) await installUpdate()

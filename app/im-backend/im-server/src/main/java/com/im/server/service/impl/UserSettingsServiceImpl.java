@@ -178,7 +178,7 @@ public class UserSettingsServiceImpl implements UserSettingsService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (Exception e) {
-            throw new BusinessException("Failed to save settings");
+            throw new BusinessException(500, "Failed to save settings", e);
         }
     }
 }
