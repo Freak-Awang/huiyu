@@ -88,9 +88,9 @@ function statusText(draft: AttachmentDraft) {
 
 .attachment-draft-item {
   align-items: center;
-  background: #fff;
-  border: 1px solid #d8dce8;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
   display: grid;
   gap: 8px;
   grid-template-columns: 40px minmax(0, 1fr) auto minmax(58px, auto) auto 24px;
@@ -99,12 +99,12 @@ function statusText(draft: AttachmentDraft) {
 }
 
 .attachment-draft-item.has-error {
-  border-color: #c2413b;
+  border-color: var(--danger-strong);
 }
 
 .attachment-draft-thumbnail,
 .attachment-draft-icon {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   height: 36px;
   width: 36px;
 }
@@ -115,7 +115,7 @@ function statusText(draft: AttachmentDraft) {
 
 .attachment-draft-icon {
   align-items: center;
-  background: #eef0ff;
+  background: var(--accent-bg-light);
   display: flex;
   justify-content: center;
 }
@@ -126,16 +126,16 @@ function statusText(draft: AttachmentDraft) {
 }
 
 .attachment-draft-name {
-  color: #333;
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .attachment-draft-size {
-  color: #606775;
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
   white-space: nowrap;
 }
 
@@ -161,13 +161,13 @@ function statusText(draft: AttachmentDraft) {
 .attachment-draft-action {
   background: transparent;
   border: none;
-  color: #4053bf;
-  font-size: 11px;
+  color: var(--accent);
+  font-size: var(--font-xs);
   padding: 4px;
 }
 
 .attachment-draft-action:hover:not(:disabled) {
-  color: #263ca8;
+  color: var(--accent-hover);
   text-decoration: underline;
 }
 
@@ -190,7 +190,7 @@ function statusText(draft: AttachmentDraft) {
 
 .attachment-draft-action:focus-visible,
 .attachment-draft-remove:focus-visible {
-  outline: 2px solid #4053bf;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

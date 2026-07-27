@@ -301,9 +301,9 @@ onUnmounted(() => {
   justify-content: center;
   gap: 8px;
   padding: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: rgba(24, 28, 36, 0.94);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-overlay);
 }
 
 .screenshot-toolbar button {

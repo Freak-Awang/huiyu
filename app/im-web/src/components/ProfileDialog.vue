@@ -4,7 +4,7 @@
       <header class="profile-cover">
         <button type="button" class="profile-close" title="关闭" @click="close">x</button>
         <div class="profile-avatar">
-          <img v-if="avatarPreview" :src="avatarPreview" alt="头像" />
+          <img v-if="avatarPreview" :src="avatarPreview" @error="avatarLoadFailed = true" alt="头像" />
           <span v-else>{{ avatarInitial }}</span>
           <span class="presence-dot" :class="`presence-${presenceStatus}`"></span>
         </div>
@@ -138,7 +138,11 @@ const profileUserId = computed(() => String(profileUser.value.userId || profileU
 const isSelf = computed(() => profileUserId.value === String(authStore.currentUser?.userId || ''))
 const displayName = computed(() => profileUser.value.nickname || profileUser.value.username || '用户')
 const avatarInitial = computed(() => displayName.value[0] || 'U')
-const avatarPreview = computed(() => avatarObjectUrl.value || profileUser.value.avatar || '')
+const avatarLoadFailed = ref(false)
+const avatarPreview = computed(() => {
+  const url = avatarObjectUrl.value || profileUser.value.avatar || ''
+  return url && !avatarLoadFailed.value ? url : ''
+})
 const presenceStatus = computed(() => normalizePresenceStatus(props.presence || (isSelf.value ? 'online' : 'offline')))
 const presenceLabel = computed(() => getPresenceLabel(presenceStatus.value))
 
@@ -171,6 +175,7 @@ function resetForm() {
   form.signature = profileUser.value.signature || ''
   selectedAvatar.value = null
   selectedAvatarName.value = ''
+  avatarLoadFailed.value = false
   revokeAvatarObjectUrl()
 }
 
@@ -305,15 +310,15 @@ function revokeAvatarObjectUrl() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.38);
+  background: var(--bg-overlay);
 }
 
 .profile-dialog {
   width: min(430px, calc(100vw - 40px));
   overflow: hidden;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-dialog);
 }
 
 .profile-cover {
@@ -402,25 +407,25 @@ function revokeAvatarObjectUrl() {
 
 .profile-info-grid span,
 .signature-box span {
-  color: #7b8190;
+  color: var(--text-tertiary);
 }
 
 .profile-info-grid strong {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: #273142;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .signature-box {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid #eef0f4;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .signature-box p {
   margin: 8px 0 0;
-  color: #273142;
+  color: var(--text-primary);
   line-height: 1.6;
 }
 
@@ -429,17 +434,17 @@ function revokeAvatarObjectUrl() {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
-  color: #273142;
-  font-size: 14px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
   font-weight: 600;
 }
 
 .profile-field input,
 .profile-field textarea {
-  border: 1px solid #d8dce6;
-  border-radius: 8px;
-  color: #333;
-  font-size: 14px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: var(--font-md);
   line-height: 1.5;
   padding: 9px 11px;
 }
@@ -456,8 +461,8 @@ function revokeAvatarObjectUrl() {
 
 .profile-field small {
   align-self: flex-end;
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
   font-weight: 400;
 }
 
@@ -472,22 +477,22 @@ function revokeAvatarObjectUrl() {
 .save-btn {
   height: 34px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-base);
 }
 
 .plain-btn {
   min-width: 84px;
-  background: #eef0ff;
-  color: #4f63d8;
+  background: var(--accent-bg-light);
+  color: var(--accent);
 }
 
 .avatar-file-name {
   min-width: 0;
   overflow: hidden;
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -495,15 +500,15 @@ function revokeAvatarObjectUrl() {
 .profile-error,
 .profile-status {
   margin: 12px 0 0;
-  font-size: 13px;
+  font-size: var(--font-base);
 }
 
 .profile-error {
-  color: #d93026;
+  color: var(--danger-strong);
 }
 
 .profile-status {
-  color: #15803d;
+  color: var(--success);
 }
 
 .profile-footer {
@@ -515,8 +520,8 @@ function revokeAvatarObjectUrl() {
 
 .cancel-btn {
   min-width: 72px;
-  background: #f0f1f5;
-  color: #4b5563;
+  background: var(--bg-header);
+  color: var(--text-secondary);
 }
 
 .save-btn {

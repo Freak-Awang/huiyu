@@ -64,17 +64,17 @@ onUnmounted(() => update.dispose())
   padding: 10px 14px;
   transform: translateX(-50%);
   border: 1px solid #c7d2fe;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: #eef2ff;
-  color: #273142;
-  box-shadow: 0 8px 28px rgba(39, 49, 66, 0.16);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .update-banner button,
 .force-update-card button {
   border: 0;
-  border-radius: 6px;
-  background: #4f63d8;
+  border-radius: var(--radius-md);
+  background: var(--accent);
   color: white;
   padding: 7px 14px;
   cursor: pointer;
@@ -92,14 +92,14 @@ onUnmounted(() => update.dispose())
 .force-update-card {
   width: min(460px, calc(100vw - 40px));
   padding: 32px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: white;
-  color: #273142;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-dialog);
 }
 
 .force-update-card h2 { margin: 0 0 12px; }
 .progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: #e5e7eb; }
-.progress-track span { display: block; height: 100%; background: #4f63d8; }
+.progress-track span { display: block; height: 100%; background: var(--accent); }
 .error-text { color: #c62828; }
 </style>

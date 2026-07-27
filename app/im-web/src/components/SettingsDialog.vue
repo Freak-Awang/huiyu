@@ -318,7 +318,7 @@ function flashStatus(text: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.38);
+  background: var(--bg-overlay);
 }
 
 .settings-dialog {
@@ -326,9 +326,9 @@ function flashStatus(text: string) {
   height: min(560px, calc(100vh - 48px));
   display: flex;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: #f6f7fb;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--shadow-dialog);
 }
 
 .settings-nav {
@@ -378,14 +378,14 @@ function flashStatus(text: string) {
 }
 
 .settings-user span {
-  color: #222;
-  font-size: 14px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
   font-weight: 600;
 }
 
 .settings-user small {
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
 }
 
 .settings-nav-item {
@@ -395,10 +395,10 @@ function flashStatus(text: string) {
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
-  color: #4b5563;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
   text-align: left;
 }
 
@@ -407,8 +407,8 @@ function flashStatus(text: string) {
 }
 
 .settings-nav-item.active {
-  background: #fff;
-  color: #4f63d8;
+  background: var(--bg-surface);
+  color: var(--accent);
   box-shadow: 0 1px 3px rgba(31, 35, 48, 0.08);
 }
 
@@ -422,7 +422,7 @@ function flashStatus(text: string) {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  background: #fff;
+  background: var(--bg-surface);
 }
 
 .settings-header {
@@ -430,34 +430,34 @@ function flashStatus(text: string) {
   align-items: flex-start;
   justify-content: space-between;
   padding: 22px 26px 16px;
-  border-bottom: 1px solid #eef0f4;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-header h2 {
   margin: 0;
-  color: #1f2937;
+  color: var(--text-primary);
   font-size: 20px;
 }
 
 .settings-header p {
   margin-top: 5px;
-  color: #8a8f99;
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: var(--font-base);
 }
 
 .settings-close {
   width: 30px;
   height: 30px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: #8a8f99;
+  color: var(--text-tertiary);
   font-size: 24px;
   line-height: 1;
 }
 
 .settings-close:hover {
-  background: #f0f1f5;
-  color: #333;
+  background: var(--bg-header);
+  color: var(--text-primary);
 }
 
 .settings-section {
@@ -479,7 +479,7 @@ function flashStatus(text: string) {
   justify-content: space-between;
   gap: 20px;
   padding: 14px 16px;
-  background: #fff;
+  background: var(--bg-surface);
   border-bottom: 1px solid #edf0f4;
 }
 
@@ -489,32 +489,32 @@ function flashStatus(text: string) {
 
 .setting-row strong {
   display: block;
-  color: #273142;
-  font-size: 14px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
   font-weight: 600;
 }
 
 .setting-row small {
   display: block;
   margin-top: 4px;
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
 }
 
 .setting-row select {
   width: 210px;
   height: 34px;
-  border: 1px solid #d8dce6;
-  border-radius: 6px;
-  background: #fff;
-  color: #333;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   padding: 0 9px;
 }
 
 .setting-row input[type='checkbox'] {
   width: 18px;
   height: 18px;
-  accent-color: #4f63d8;
+  accent-color: var(--accent);
 }
 
 .storage-summary {
@@ -536,15 +536,15 @@ function flashStatus(text: string) {
 }
 
 .storage-value {
-  color: #273142;
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 700;
 }
 
 .storage-summary small,
 .storage-note {
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
 }
 
 .about-card,
@@ -559,35 +559,35 @@ function flashStatus(text: string) {
   margin-bottom: 16px;
   padding: 18px;
   border: 1px solid #edf0f4;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: #f8f9fc;
 }
 
 .about-card strong,
 .about-card small { display: block; }
-.about-card strong { color: #273142; font-size: 20px; }
-.about-card small { margin-top: 4px; color: #8a8f99; }
-.update-status { color: #4f63d8; font-size: 13px; }
+.about-card strong { color: var(--text-primary); font-size: 20px; }
+.about-card small { margin-top: 4px; color: var(--text-tertiary); }
+.update-status { color: var(--accent); font-size: var(--font-base); }
 .update-details { margin-bottom: 16px; }
-.release-notes { padding: 0 16px 12px; color: #5f6673; font-size: 13px; }
+.release-notes { padding: 0 16px 12px; color: #5f6673; font-size: var(--font-base); }
 .release-notes p { margin: 6px 0; }
 .download-progress { height: 6px; overflow: hidden; background: #e7e9ef; }
-.download-progress span { display: block; height: 100%; background: #4f63d8; }
+.download-progress span { display: block; height: 100%; background: var(--accent); }
 .about-actions { justify-content: flex-start; }
-.about-actions select { height: 34px; border: 1px solid #d8dce6; border-radius: 6px; padding: 0 9px; }
+.about-actions select { height: 34px; border: 1px solid var(--border-input); border-radius: var(--radius-md); padding: 0 9px; }
 .update-error { color: #c62828; }
 
 .danger-btn,
 .plain-btn {
   min-width: 72px;
   height: 34px;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-base);
 }
 
 .danger-btn {
-  background: #fff1f0;
-  color: #d93026;
+  background: var(--danger-bg);
+  color: var(--danger-strong);
 }
 
 .danger-btn:hover {
@@ -600,8 +600,8 @@ function flashStatus(text: string) {
 }
 
 .plain-btn {
-  background: #eef0ff;
-  color: #4f63d8;
+  background: var(--accent-bg-light);
+  color: var(--accent);
 }
 
 .plain-btn:hover {
@@ -615,7 +615,7 @@ function flashStatus(text: string) {
 .settings-footer {
   height: 34px;
   padding: 0 26px;
-  color: #8a8f99;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
 }
 </style>

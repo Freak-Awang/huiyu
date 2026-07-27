@@ -1,4 +1,7 @@
-* {
+/* ===== CSS Reset ===== */
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -7,10 +10,136 @@
 html, body, #app {
   height: 100%;
   width: 100%;
-  font-family: 'Microsoft YaHei', sans-serif;
+  font-family: 'Microsoft YaHei', system-ui, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
 }
 
+/* ===== Design Tokens: Light Theme (default) ===== */
+:root {
+  /* Background layers */
+  --bg-app:              #f5f5f5;
+  --bg-sidebar:          #2e2e2e;
+  --bg-panel:            #ebebeb;
+  --bg-chat:             #f8f8f8;
+  --bg-header:           #f0f0f0;
+  --bg-surface:          #ffffff;
+  --bg-input-rest:       #dcdcdc;
+  --bg-input-focus:      #ffffff;
+  --bg-hover-subtle:     #d0d0d0;
+  --bg-hover-light:      #e0e0e0;
+  --bg-overlay:          rgba(0, 0, 0, 0.4);
+
+  /* Text */
+  --text-primary:        #333333;
+  --text-secondary:      #666666;
+  --text-tertiary:       #999999;
+  --text-muted:          #aaaaaa;
+  --text-disabled:       #bbbbbb;
+  --text-placeholder:    #cccccc;
+
+  /* Accent / Primary */
+  --accent:              #667eea;
+  --accent-hover:        #5a6fd8;
+  --accent-avatar:       #5566cc;
+  --accent-bg-active:    #d0d5f0;
+  --accent-bg-light:     #eef0ff;
+  --accent-text-on:      #ffffff;
+
+  /* Borders */
+  --border:              #e0e0e0;
+  --border-light:        #dddddd;
+  --border-subtle:       #eeeeee;
+  --border-input:        #d8dce6;
+
+  /* Semantic */
+  --danger:              #e74c3c;
+  --danger-strong:       #d93026;
+  --danger-bg:           #fff1f0;
+  --success:             #15803d;
+  --warning-bg:          #ff7a45;
+
+  /* Presence */
+  --presence-online:     #22c55e;
+  --presence-busy:       #ef4444;
+  --presence-away:       #f59e0b;
+  --presence-dnd:        #8b5cf6;
+  --presence-offline:    #9ca3af;
+
+  /* Shadows */
+  --shadow-sm:           0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:           0 8px 28px rgba(39, 49, 66, 0.16);
+  --shadow-lg:           0 12px 36px rgba(0, 0, 0, 0.18);
+  --shadow-dialog:       0 22px 70px rgba(0, 0, 0, 0.24);
+  --shadow-overlay:      0 10px 28px rgba(0, 0, 0, 0.3);
+
+  /* Radii */
+  --radius-sm:           4px;
+  --radius-md:           6px;
+  --radius-lg:           8px;
+  --radius-xl:           10px;
+  --radius-2xl:          12px;
+
+  /* Transitions */
+  --transition-fast:     0.15s ease;
+  --transition-normal:   0.2s ease;
+
+  /* Font sizes */
+  --font-2xs:            10px;
+  --font-xs:             11px;
+  --font-sm:             12px;
+  --font-base:           13px;
+  --font-md:             14px;
+  --font-lg:             16px;
+  --font-xl:             18px;
+}
+
+/* ===== Design Tokens: Dark Theme ===== */
+.dark-theme {
+  --bg-app:              #1f232b;
+  --bg-sidebar:          #1a1d24;
+  --bg-panel:            #252932;
+  --bg-chat:             #1f232b;
+  --bg-header:           #2d323c;
+  --bg-surface:          #303642;
+  --bg-input-rest:       #20242c;
+  --bg-input-focus:      #2a2f3a;
+  --bg-hover-subtle:     #3a3f4a;
+  --bg-hover-light:      #343a46;
+  --bg-overlay:          rgba(0, 0, 0, 0.6);
+
+  --text-primary:        #edf0f5;
+  --text-secondary:      #bdc4d1;
+  --text-tertiary:       #8a8f99;
+  --text-muted:          #6b7280;
+  --text-disabled:       #4b5563;
+  --text-placeholder:    #5f6673;
+
+  --accent:              #5868d8;
+  --accent-hover:        #4a5ac5;
+  --accent-avatar:       #5868d8;
+  --accent-bg-active:    #3b4260;
+  --accent-bg-light:     #2e3550;
+  --accent-text-on:      #edf0f5;
+
+  --border:              #3b414f;
+  --border-light:        #363b48;
+  --border-subtle:       #333844;
+  --border-input:        #4c5362;
+
+  --danger:              #f08b84;
+  --danger-strong:       #ffaaa4;
+  --danger-bg:           rgba(240, 139, 132, 0.12);
+
+  --warning-bg:          #ff7a45;
+
+  --shadow-sm:           0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md:           0 8px 28px rgba(0, 0, 0, 0.35);
+  --shadow-lg:           0 12px 36px rgba(0, 0, 0, 0.45);
+  --shadow-dialog:       0 22px 70px rgba(0, 0, 0, 0.5);
+  --shadow-overlay:      0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* ===== Base Element Styles ===== */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -29,9 +158,15 @@ a {
   color: inherit;
 }
 
-input, textarea {
+input, textarea, select {
   font-family: inherit;
   outline: none;
+}
+
+/* Focus-visible: global accessible focus ring */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button {
@@ -39,4 +174,9 @@ button {
   border: none;
   outline: none;
   font-family: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }

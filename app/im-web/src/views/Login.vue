@@ -150,10 +150,10 @@ onMounted(async () => {
 
 .login-card {
   width: 400px;
-  background: #fff;
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-2xl);
   padding: 40px 36px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-dialog);
 }
 
 .login-logo {
@@ -168,13 +168,13 @@ onMounted(async () => {
 
 .login-logo h1 {
   font-size: 24px;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
 .login-logo p {
-  font-size: 13px;
-  color: #999;
+  font-size: var(--font-base);
+  color: var(--text-tertiary);
 }
 
 .login-form {
@@ -187,16 +187,16 @@ onMounted(async () => {
   width: 100%;
   height: 44px;
   padding: 0 14px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-  background: #f8f9fa;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-md);
+  transition: border-color var(--transition-normal);
+  background: var(--bg-input-rest);
 }
 
 .form-item input:focus {
-  border-color: #667eea;
-  background: #fff;
+  border-color: var(--accent);
+  background: var(--bg-surface);
 }
 
 .form-options {
@@ -209,14 +209,14 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #666;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
 }
 
 .checkbox-label input {
-  accent-color: #667eea;
+  accent-color: var(--accent);
 }
 
 .login-btn {
@@ -224,8 +224,8 @@ onMounted(async () => {
   height: 44px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
-  font-size: 16px;
-  border-radius: 8px;
+  font-size: var(--font-lg);
+  border-radius: var(--radius-lg);
   border: none;
   cursor: pointer;
   transition: opacity 0.2s;
@@ -242,8 +242,8 @@ onMounted(async () => {
 }
 
 .error-msg {
-  color: #e74c3c;
-  font-size: 13px;
+  color: var(--danger);
+  font-size: var(--font-base);
   text-align: center;
 }
 </style>

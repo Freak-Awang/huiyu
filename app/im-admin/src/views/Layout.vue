@@ -68,13 +68,23 @@ async function handleLogout() {
 }
 </script>
 
+<style>
+/* Element Plus theme variable overrides */
+:root {
+  --el-menu-bg-color: #304156;
+  --el-menu-text-color: #bfcbd9;
+  --el-menu-active-color: #409eff;
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.05);
+}
+</style>
+
 <style scoped>
 .layout-container {
   height: 100vh;
 }
 
 .el-aside {
-  background-color: #304156;
+  background-color: var(--el-menu-bg-color, #304156);
 }
 
 .sidebar {
@@ -109,7 +119,7 @@ async function handleLogout() {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  color: #bfcbd9;
+  color: var(--el-menu-text-color, #bfcbd9);
   font-size: 14px;
 }
 
