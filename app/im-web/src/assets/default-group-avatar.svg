@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title">
+  <title id="title">群聊默认头像</title>
+  <circle cx="50" cy="50" r="50" fill="#5868d8"/>
+  <text
+    x="50"
+    y="65"
+    fill="#ffffff"
+    font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif"
+    font-size="48"
+    font-weight="600"
+    text-anchor="middle"
+  >群</text>
+</svg>

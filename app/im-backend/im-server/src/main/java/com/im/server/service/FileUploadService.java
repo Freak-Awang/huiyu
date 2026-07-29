@@ -22,6 +22,8 @@ import java.util.UUID;
 @Service
 public class FileUploadService {
 
+    private static final long AVATAR_MAX_SIZE = 5L * 1024 * 1024;
+
     private final FileMetadataService metadataService;
     private final FileStorageRouter storageRouter;
     private final FileStorageProperties properties;
@@ -63,11 +65,36 @@ public class FileUploadService {
 
     @Transactional
     public ImFile uploadAvatarFile(MultipartFile file, Long uploaderId) {
-        return uploadImage(file, uploaderId, null, false);
+        return uploadImage(file, uploaderId, null, false, AVATAR_MAX_SIZE);
+    }
+
+    @Transactional
+    public ImFile uploadGroupAvatarFile(MultipartFile file, Long uploaderId, Long conversationId) {
+        if (conversationId == null) {
+            throw new BusinessException(400, "conversationId is required");
+        }
+        return uploadImage(file, uploaderId, conversationId, false, AVATAR_MAX_SIZE);
+    }
+
+    public void discardStoredFileQuietly(ImFile file) {
+        if (file == null || !StringUtils.hasText(file.getObjectKey())) {
+            return;
+        }
+        FileStorageClient storageClient = storageRouter.clientFor(file.getStorageType(), file.getBucket());
+        storageClient.deleteQuietly(file.getObjectKey());
     }
 
     private ImFile uploadImage(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
-        String detectedContentType = validateImageUpload(file);
+        return uploadImage(file, uploaderId, conversationId, temporary, properties.getSmallFileMaxSize());
+    }
+
+    private ImFile uploadImage(
+            MultipartFile file,
+            Long uploaderId,
+            Long conversationId,
+            boolean temporary,
+            long maxSize) {
+        String detectedContentType = validateImageUpload(file, maxSize);
         quotaService.assertCanStore(uploaderId, file.getSize());
         return storeFile(file, uploaderId, conversationId, temporary, true, detectedContentType);
     }
@@ -119,8 +146,8 @@ public class FileUploadService {
         }
     }
 
-    private String validateImageUpload(MultipartFile file) {
-        validateUploadSize(file.getSize(), properties.getSmallFileMaxSize(), "Image exceeds upload size limit");
+    private String validateImageUpload(MultipartFile file, long maxSize) {
+        validateUploadSize(file.getSize(), maxSize, "Image exceeds upload size limit");
         try {
             String detectedContentType = ImageTypeDetector.detect(file);
             if (!StringUtils.hasText(detectedContentType)) {

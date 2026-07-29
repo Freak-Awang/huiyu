@@ -3,6 +3,7 @@ package com.im.server.controller;
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.ConversationMembersRequest;
 import com.im.common.dto.CreateConversationRequest;
+import com.im.common.dto.TransferConversationOwnerRequest;
 import com.im.common.dto.UpdateConversationSettingsRequest;
 import com.im.common.dto.UpdateMemberRoleRequest;
 import com.im.common.result.Result;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -73,6 +75,23 @@ public class ConversationController {
                                                    @RequestBody UpdateMemberRoleRequest request) {
         Long currentUserId = getCurrentUserId();
         return Result.success(conversationService.updateMemberRole(conversationId, userId, currentUserId, request));
+    }
+
+    @PostMapping("/{id}/avatar")
+    public Result<ConversationVO> updateAvatar(@PathVariable("id") Long conversationId,
+                                                @RequestParam("file") MultipartFile file) {
+        return Result.success(conversationService.updateAvatar(conversationId, getCurrentUserId(), file));
+    }
+
+    @DeleteMapping("/{id}/avatar")
+    public Result<ConversationVO> restoreDefaultAvatar(@PathVariable("id") Long conversationId) {
+        return Result.success(conversationService.restoreDefaultAvatar(conversationId, getCurrentUserId()));
+    }
+
+    @PutMapping("/{id}/owner")
+    public Result<ConversationVO> transferOwner(@PathVariable("id") Long conversationId,
+                                                 @RequestBody TransferConversationOwnerRequest request) {
+        return Result.success(conversationService.transferOwner(conversationId, getCurrentUserId(), request));
     }
 
     @PutMapping("/{id}/pin")

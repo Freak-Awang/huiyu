@@ -19,6 +19,16 @@ public class ConversationVO {
 
     private String avatar;
 
+    private String avatarType;
+
+    private Long avatarUpdatedBy;
+
+    private LocalDateTime avatarUpdatedAt;
+
+    private Long ownerId;
+
+    private Boolean canEditAvatar;
+
     private String announcement;
 
     private Long announcementUpdatedBy;

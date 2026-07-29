@@ -42,6 +42,7 @@ class FileUploadServiceTest {
 
     @Test
     void conversationImageUploadIsPersistentAndConversationScoped() throws Exception {
+        when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
         mockImageUploadStorage();
 
         fileUploadService.uploadConversationImage(image("photo.png"), 10L, 20L);
@@ -81,6 +82,39 @@ class FileUploadServiceTest {
                 eq("im-files"),
                 eq(false),
                 isNull());
+    }
+
+    @Test
+    void groupAvatarUploadIsPersistentAndConversationScoped() throws Exception {
+        mockImageUploadStorage();
+
+        fileUploadService.uploadGroupAvatarFile(image("group.png"), 10L, 20L);
+
+        verify(storageClient).save(anyString(), any());
+        verify(metadataService).createAvailableFile(
+                eq("group.png"),
+                anyString(),
+                eq(8L),
+                eq("image/png"),
+                eq(10L),
+                eq(20L),
+                anyString(),
+                eq("minio"),
+                eq("im-files"),
+                eq(false),
+                isNull());
+    }
+
+    @Test
+    void groupAvatarRejectsImagesLargerThanFiveMegabytes() {
+        MockMultipartFile oversized = new MockMultipartFile(
+                "file", "large.png", "image/png", new byte[5 * 1024 * 1024 + 1]);
+
+        assertThatThrownBy(() -> fileUploadService.uploadGroupAvatarFile(oversized, 10L, 20L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Image exceeds upload size limit")
+                .extracting("code")
+                .isEqualTo(413);
     }
 
     @Test
@@ -132,7 +166,6 @@ class FileUploadServiceTest {
     }
 
     private void mockImageUploadStorage() {
-        when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
         when(storageRouter.defaultClient()).thenReturn(storageClient);
         when(storageClient.storageType()).thenReturn("minio");
         when(storageClient.bucket()).thenReturn("im-files");

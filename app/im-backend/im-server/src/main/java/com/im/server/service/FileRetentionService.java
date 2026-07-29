@@ -10,6 +10,7 @@ import com.im.server.mapper.FileUploadPartMapper;
 import com.im.server.service.storage.FileStorageClient;
 import com.im.server.service.storage.FileStorageRouter;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -76,5 +77,17 @@ public class FileRetentionService {
             upload.setUpdateTime(LocalDateTime.now());
             uploadMapper.updateById(upload);
         }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void retireFile(Long fileId) {
+        ImFile imFile = fileId != null ? fileMapper.selectById(fileId) : null;
+        if (imFile == null || !FileMetadataService.STATUS_AVAILABLE.equals(imFile.getStatus())) {
+            return;
+        }
+        metadataService.markExpired(imFile);
+        FileStorageClient storageClient =
+                storageRouter.clientFor(imFile.getStorageType(), imFile.getBucket());
+        storageClient.deleteQuietly(imFile.getObjectKey());
     }
 }

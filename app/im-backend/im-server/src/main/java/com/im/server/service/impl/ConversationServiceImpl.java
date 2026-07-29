@@ -7,10 +7,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
 import com.im.common.dto.MemberVO;
+import com.im.common.dto.TransferConversationOwnerRequest;
 import com.im.common.dto.UpdateConversationSettingsRequest;
 import com.im.common.dto.UpdateMemberRoleRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
+import com.im.common.entity.ImFile;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
@@ -19,13 +21,18 @@ import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.ConversationService;
+import com.im.server.service.FileRetentionService;
+import com.im.server.service.FileUploadService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,6 +54,9 @@ public class ConversationServiceImpl implements ConversationService {
     private static final String ROLE_OWNER = "owner";
     private static final String ROLE_ADMIN = "admin";
     private static final String ROLE_MEMBER = "member";
+    private static final String AVATAR_TYPE_DEFAULT = "default";
+    private static final String AVATAR_TYPE_CUSTOM = "custom";
+    private static final String FILE_DOWNLOAD_PATH = "/api/files/download/";
 
     @Autowired
     private ConversationMapper conversationMapper;
@@ -65,6 +75,12 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private FileUploadService fileUploadService;
+
+    @Autowired
+    private FileRetentionService fileRetentionService;
 
     @Override
     public List<ConversationVO> listConversations(Long userId) {
@@ -178,6 +194,8 @@ public class ConversationServiceImpl implements ConversationService {
             ImConversation conversation = new ImConversation();
             conversation.setType(2);
             conversation.setName(request.getName());
+            conversation.setAvatar(null);
+            conversation.setAvatarType(AVATAR_TYPE_DEFAULT);
             conversation.setOwnerId(userId);
             conversation.setCreateTime(LocalDateTime.now());
             conversation.setUpdateTime(LocalDateTime.now());
@@ -271,8 +289,16 @@ public class ConversationServiceImpl implements ConversationService {
             throw new BusinessException(404, "Conversation not found");
         }
 
-        ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
-        ImConversationMember targetMember = getMemberOrThrow(conversationId, userId, "User is not a member of this conversation");
+        boolean groupConversation = conversation.getType() != null && conversation.getType() == 2;
+        if (groupConversation) {
+            conversation = getGroupConversationOrThrowForUpdate(conversationId);
+        }
+        ImConversationMember operatorMember = groupConversation
+                ? getMemberForUpdate(conversationId, operatorId, "Operator is not a member of this conversation")
+                : getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
+        ImConversationMember targetMember = groupConversation
+                ? getMemberForUpdate(conversationId, userId, "User is not a member of this conversation")
+                : getMemberOrThrow(conversationId, userId, "User is not a member of this conversation");
 
         boolean isOwner = ROLE_OWNER.equals(operatorMember.getRole());
         boolean isAdmin = ROLE_ADMIN.equals(operatorMember.getRole());
@@ -361,7 +387,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public ConversationVO updateMemberRole(Long conversationId, Long targetUserId, Long operatorId, UpdateMemberRoleRequest request) {
-        getGroupConversationOrThrow(conversationId);
+        getGroupConversationOrThrowForUpdate(conversationId);
         ImConversationMember operatorMember = getMemberOrThrow(conversationId, operatorId, "Operator is not a member of this conversation");
         if (!ROLE_OWNER.equals(operatorMember.getRole())) {
             throw new BusinessException(403, "Only the group owner can update member roles");
@@ -381,6 +407,89 @@ public class ConversationServiceImpl implements ConversationService {
         conversationMemberMapper.updateById(targetMember);
         notifyConversationUpdated(conversationId);
         return buildConversationVO(conversationMapper.selectById(conversationId), operatorId);
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO updateAvatar(Long conversationId, Long operatorId, MultipartFile file) {
+        ImConversation initialConversation = getGroupConversationOrThrow(conversationId);
+        requireConversationOwner(initialConversation, operatorId, "仅群主可修改群头像");
+
+        ImFile uploadedFile = fileUploadService.uploadGroupAvatarFile(file, operatorId, conversationId);
+        registerRollbackCleanup(uploadedFile);
+
+        ImConversation conversation = getGroupConversationOrThrowForUpdate(conversationId);
+        requireConversationOwner(conversation, operatorId, "仅群主可修改群头像");
+        String previousAvatar = conversation.getAvatar();
+
+        conversation.setAvatar(FILE_DOWNLOAD_PATH + uploadedFile.getId());
+        conversation.setAvatarType(AVATAR_TYPE_CUSTOM);
+        conversation.setAvatarUpdatedBy(operatorId);
+        conversation.setAvatarUpdatedAt(LocalDateTime.now());
+        conversation.setUpdateTime(LocalDateTime.now());
+        conversationMapper.updateById(conversation);
+
+        retireAvatarAfterCommit(previousAvatar);
+        notifyConversationUpdatedAfterCommit(conversationId);
+        return buildConversationVO(conversation, operatorId);
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO restoreDefaultAvatar(Long conversationId, Long operatorId) {
+        ImConversation conversation = getGroupConversationOrThrowForUpdate(conversationId);
+        requireConversationOwner(conversation, operatorId, "仅群主可修改群头像");
+
+        if (AVATAR_TYPE_DEFAULT.equals(conversation.getAvatarType())
+                && !StringUtils.hasText(conversation.getAvatar())) {
+            return buildConversationVO(conversation, operatorId);
+        }
+
+        String previousAvatar = conversation.getAvatar();
+        conversation.setAvatar(null);
+        conversation.setAvatarType(AVATAR_TYPE_DEFAULT);
+        conversation.setAvatarUpdatedBy(operatorId);
+        conversation.setAvatarUpdatedAt(LocalDateTime.now());
+        conversation.setUpdateTime(LocalDateTime.now());
+        conversationMapper.updateById(conversation);
+
+        retireAvatarAfterCommit(previousAvatar);
+        notifyConversationUpdatedAfterCommit(conversationId);
+        return buildConversationVO(conversation, operatorId);
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO transferOwner(
+            Long conversationId,
+            Long operatorId,
+            TransferConversationOwnerRequest request) {
+        ImConversation conversation = getGroupConversationOrThrowForUpdate(conversationId);
+        requireConversationOwner(conversation, operatorId, "Only the group owner can transfer ownership");
+        Long newOwnerId = request != null ? request.getNewOwnerId() : null;
+        if (newOwnerId == null) {
+            throw new BusinessException(400, "New owner is required");
+        }
+        if (newOwnerId.equals(operatorId)) {
+            throw new BusinessException(400, "The selected member is already the group owner");
+        }
+
+        ImConversationMember previousOwner = getMemberForUpdate(
+                conversationId, operatorId, "Current group owner is not a member of this conversation");
+        ImConversationMember newOwner = getMemberForUpdate(
+                conversationId, newOwnerId, "New owner must be a current group member");
+
+        previousOwner.setRole(ROLE_MEMBER);
+        newOwner.setRole(ROLE_OWNER);
+        conversationMemberMapper.updateById(previousOwner);
+        conversationMemberMapper.updateById(newOwner);
+
+        conversation.setOwnerId(newOwnerId);
+        conversation.setUpdateTime(LocalDateTime.now());
+        conversationMapper.updateById(conversation);
+
+        notifyConversationUpdatedAfterCommit(conversationId);
+        return buildConversationVO(conversation, operatorId);
     }
 
     @Override
@@ -476,6 +585,14 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setType(conversation.getType());
         vo.setName(conversation.getName());
         vo.setAvatar(conversation.getAvatar());
+        vo.setAvatarType(resolveAvatarType(conversation));
+        vo.setAvatarUpdatedBy(conversation.getAvatarUpdatedBy());
+        vo.setAvatarUpdatedAt(conversation.getAvatarUpdatedAt());
+        vo.setOwnerId(conversation.getOwnerId());
+        vo.setCanEditAvatar(conversation.getType() != null
+                && conversation.getType() == 2
+                && userId != null
+                && userId.equals(conversation.getOwnerId()));
         vo.setAnnouncement(conversation.getAnnouncement());
         vo.setAnnouncementUpdatedBy(conversation.getAnnouncementUpdatedBy());
         vo.setAnnouncementUpdatedAt(conversation.getAnnouncementUpdatedAt());
@@ -587,6 +704,20 @@ public class ConversationServiceImpl implements ConversationService {
         return conversation;
     }
 
+    private ImConversation getGroupConversationOrThrowForUpdate(Long conversationId) {
+        ImConversation conversation = conversationMapper.selectOne(
+                new LambdaQueryWrapper<ImConversation>()
+                        .eq(ImConversation::getId, conversationId)
+                        .last("FOR UPDATE"));
+        if (conversation == null) {
+            throw new BusinessException(404, "Conversation not found");
+        }
+        if (conversation.getType() == null || conversation.getType() != 2) {
+            throw new BusinessException(400, "Only group conversations can be managed");
+        }
+        return conversation;
+    }
+
     private ImConversationMember getMemberOrThrow(Long conversationId, Long userId, String message) {
         ImConversationMember member = conversationMemberMapper.selectOne(
                 new LambdaQueryWrapper<ImConversationMember>()
@@ -596,6 +727,120 @@ public class ConversationServiceImpl implements ConversationService {
             throw new BusinessException(message);
         }
         return member;
+    }
+
+    private ImConversationMember getMemberForUpdate(
+            Long conversationId,
+            Long userId,
+            String message) {
+        ImConversationMember member = conversationMemberMapper.selectOne(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId)
+                        .eq(ImConversationMember::getUserId, userId)
+                        .last("FOR UPDATE"));
+        if (member == null) {
+            throw new BusinessException(400, message);
+        }
+        return member;
+    }
+
+    private void requireConversationOwner(
+            ImConversation conversation,
+            Long operatorId,
+            String message) {
+        if (conversation.getOwnerId() == null || !conversation.getOwnerId().equals(operatorId)) {
+            throw new BusinessException(403, message);
+        }
+    }
+
+    private String resolveAvatarType(ImConversation conversation) {
+        if (conversation.getType() == null || conversation.getType() != 2) {
+            return null;
+        }
+        if (AVATAR_TYPE_CUSTOM.equals(conversation.getAvatarType())
+                && StringUtils.hasText(conversation.getAvatar())) {
+            return AVATAR_TYPE_CUSTOM;
+        }
+        return StringUtils.hasText(conversation.getAvatar())
+                ? AVATAR_TYPE_CUSTOM
+                : AVATAR_TYPE_DEFAULT;
+    }
+
+    private void registerRollbackCleanup(ImFile uploadedFile) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    try {
+                        fileUploadService.discardStoredFileQuietly(uploadedFile);
+                    } catch (Exception e) {
+                        log.warn("Failed to discard rolled-back group avatar: fileId={}",
+                                uploadedFile.getId(), e);
+                    }
+                }
+            }
+        });
+    }
+
+    private void retireAvatarAfterCommit(String avatar) {
+        Long fileId = localFileId(avatar);
+        if (fileId == null) {
+            return;
+        }
+        runAfterCommit(() -> {
+            try {
+                fileRetentionService.retireFile(fileId);
+            } catch (Exception e) {
+                log.warn("Failed to retire previous group avatar: fileId={}", fileId, e);
+            }
+        });
+    }
+
+    private void notifyConversationUpdatedAfterCommit(Long conversationId) {
+        runAfterCommit(() -> {
+            try {
+                notifyConversationUpdated(conversationId);
+            } catch (Exception e) {
+                log.error("Failed to broadcast committed conversation update: conversationId={}",
+                        conversationId, e);
+            }
+        });
+    }
+
+    private void runAfterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private Long localFileId(String avatar) {
+        if (!StringUtils.hasText(avatar)) {
+            return null;
+        }
+        int marker = avatar.indexOf(FILE_DOWNLOAD_PATH);
+        if (marker < 0) {
+            return null;
+        }
+        String value = avatar.substring(marker + FILE_DOWNLOAD_PATH.length());
+        int separator = value.indexOf('?');
+        if (separator >= 0) {
+            value = value.substring(0, separator);
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private void requireOwnerOrAdmin(ImConversationMember member, String message) {

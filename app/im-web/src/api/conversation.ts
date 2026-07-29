@@ -1,12 +1,18 @@
 // Intent: conversation wraps backend API calls so views and stores do not depend on raw HTTP details.
 import http from './index'
 import { toServerUrl } from '../config/runtime'
+import type { AxiosProgressEvent } from 'axios'
 
 export interface Conversation {
   conversationId: string
   type: 'SINGLE' | 'GROUP'
   name: string
   avatar: string
+  avatarType: 'default' | 'custom' | null
+  avatarUpdatedBy?: string
+  avatarUpdatedAt?: string
+  ownerId?: string
+  canEditAvatar: boolean
   lastMessage: MessagePreview | null
   announcement?: string
   announcementUpdatedBy?: string
@@ -44,6 +50,11 @@ export interface RawConversation {
   type?: number | string
   name?: string | null
   avatar?: string | null
+  avatarType?: string | null
+  avatarUpdatedBy?: number | string | null
+  avatarUpdatedAt?: string | null
+  ownerId?: number | string | null
+  canEditAvatar?: boolean | null
   lastMessage?: string | MessagePreview | null
   announcement?: string | null
   announcementUpdatedBy?: number | string | null
@@ -70,6 +81,14 @@ export type CreateConversationParams =
 export function normalizeConversation(raw: RawConversation): Conversation {
   const conversationId = String(raw.conversationId ?? raw.id ?? '')
   const type = raw.type === 1 || raw.type === '1' || raw.type === 'SINGLE' ? 'SINGLE' : 'GROUP'
+  const avatarType =
+    type === 'GROUP'
+      ? raw.avatarType === 'custom' && raw.avatar
+        ? 'custom'
+        : raw.avatar
+          ? 'custom'
+          : 'default'
+      : null
   const lastMessageTime = raw.lastMessageTime || raw.updatedAt || raw.updateTime || raw.createdAt || raw.createTime || ''
   const rawLastMessage = raw.lastMessage
   const lastMessage =
@@ -96,6 +115,11 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     type,
     name: raw.name || '',
     avatar: raw.avatar ? toServerUrl(raw.avatar) : '',
+    avatarType,
+    avatarUpdatedBy: raw.avatarUpdatedBy != null ? String(raw.avatarUpdatedBy) : undefined,
+    avatarUpdatedAt: raw.avatarUpdatedAt || '',
+    ownerId: raw.ownerId != null ? String(raw.ownerId) : undefined,
+    canEditAvatar: Boolean(raw.canEditAvatar),
     announcement: raw.announcement || '',
     announcementUpdatedBy: raw.announcementUpdatedBy != null ? String(raw.announcementUpdatedBy) : undefined,
     announcementUpdatedAt: raw.announcementUpdatedAt || '',
@@ -171,6 +195,40 @@ export function updateConversationSettings(
 
 export function updateMemberRole(convId: string, userId: string, role: 'admin' | 'member') {
   return http.put<RawConversation>(`/api/conversations/${convId}/members/${userId}/role`, { role }).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
+  }))
+}
+
+export function uploadGroupAvatar(
+  convId: string,
+  file: File,
+  onProgress?: (progress: number) => void,
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post<RawConversation>(`/api/conversations/${convId}/avatar`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 10 * 60 * 1000,
+    onUploadProgress: (event: AxiosProgressEvent) =>
+      onProgress?.(event.total ? event.loaded / event.total : 0),
+  }).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
+  }))
+}
+
+export function restoreDefaultGroupAvatar(convId: string) {
+  return http.delete<RawConversation>(`/api/conversations/${convId}/avatar`).then((res) => ({
+    ...res,
+    data: normalizeConversation(res.data),
+  }))
+}
+
+export function transferConversationOwner(convId: string, newOwnerId: string) {
+  return http.put<RawConversation>(`/api/conversations/${convId}/owner`, {
+    newOwnerId: Number(newOwnerId),
+  }).then((res) => ({
     ...res,
     data: normalizeConversation(res.data),
   }))

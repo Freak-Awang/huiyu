@@ -102,15 +102,19 @@
               :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
               @click="handleSelectConv(conv)"
             >
-              <div class="conv-avatar">
-                <img v-if="getConversationAvatar(conv) && !failedAvatars.has(getConversationAvatar(conv))" :src="getConversationAvatar(conv)" @error="failedAvatars.add(getConversationAvatar(conv))" alt="" />
-                <span v-else>{{ (getConversationName(conv) || '群')[0] }}</span>
+              <ConversationAvatar
+                class="conv-avatar"
+                :type="conv.type"
+                :src="getConversationAvatar(conv)"
+                :name="getConversationName(conv)"
+                :alt="`${getConversationName(conv)}头像`"
+              >
                 <span
                   v-if="showConversationPresence(conv)"
                   class="online-dot"
                   :class="`presence-${getConversationPresence(conv)}`"
                 ></span>
-              </div>
+              </ConversationAvatar>
               <div class="conv-info">
                 <div class="conv-top">
                   <span class="conv-name">{{ getConversationName(conv) }}</span>
@@ -139,15 +143,19 @@
             :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
             @click="handleSelectConv(conv)"
           >
-            <div class="conv-avatar">
-              <img v-if="getConversationAvatar(conv) && !failedAvatars.has(getConversationAvatar(conv))" :src="getConversationAvatar(conv)" @error="failedAvatars.add(getConversationAvatar(conv))" alt="" />
-              <span v-else>{{ (getConversationName(conv) || '群')[0] }}</span>
+            <ConversationAvatar
+              class="conv-avatar"
+              :type="conv.type"
+              :src="getConversationAvatar(conv)"
+              :name="getConversationName(conv)"
+              :alt="`${getConversationName(conv)}头像`"
+            >
               <span
                 v-if="showConversationPresence(conv)"
                 class="online-dot"
                 :class="`presence-${getConversationPresence(conv)}`"
               ></span>
-            </div>
+            </ConversationAvatar>
             <div class="conv-info">
               <div class="conv-top">
                 <span class="conv-name">{{ getConversationName(conv) }}</span>
@@ -276,6 +284,13 @@
     <div class="right-panel">
       <template v-if="chatStore.currentConversation">
         <div class="chat-header">
+          <ConversationAvatar
+            class="chat-header-avatar"
+            :type="chatStore.currentConversation.type"
+            :src="getConversationAvatar(chatStore.currentConversation)"
+            :name="getConversationName(chatStore.currentConversation)"
+            :alt="`${getConversationName(chatStore.currentConversation)}头像`"
+          />
           <div class="chat-header-info">
             <span class="chat-header-name">{{ getConversationName(chatStore.currentConversation) }}</span>
             <span
@@ -698,6 +713,55 @@
           placeholder="搜索成员..."
         />
         <div v-if="chatStore.currentConversation?.type === 'GROUP'" class="group-settings-box">
+          <div class="group-avatar-setting">
+            <ConversationAvatar
+              :type="'GROUP'"
+              :src="chatStore.currentConversation.avatar"
+              :name="chatStore.currentConversation.name"
+              alt="群头像"
+              :size="72"
+            />
+            <div class="group-avatar-details">
+              <span class="group-avatar-label">群头像</span>
+              <div v-if="canEditCurrentGroupAvatar" class="group-avatar-actions">
+                <button
+                  type="button"
+                  class="group-avatar-action"
+                  :disabled="groupAvatarSaving"
+                  @click="openGroupAvatarPicker"
+                >
+                  {{ groupAvatarSaving ? '处理中...' : '修改头像' }}
+                </button>
+                <button
+                  v-if="chatStore.currentConversation.avatarType === 'custom'"
+                  type="button"
+                  class="group-avatar-action danger"
+                  :disabled="groupAvatarSaving"
+                  @click="restoreGroupAvatar"
+                >
+                  恢复默认
+                </button>
+                <input
+                  ref="groupAvatarInputRef"
+                  class="visually-hidden"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  aria-label="选择群头像图片"
+                  @change="onGroupAvatarSelected"
+                />
+              </div>
+              <span v-else class="group-avatar-readonly">仅群主可修改群头像</span>
+              <p
+                v-if="groupAvatarStatus"
+                class="group-avatar-status"
+                :class="{ error: groupAvatarStatusIsError }"
+                :role="groupAvatarStatusIsError ? 'alert' : 'status'"
+                aria-live="polite"
+              >
+                {{ groupAvatarStatus }}
+              </p>
+            </div>
+          </div>
           <label class="group-setting-field">
             <span>群名称</span>
             <input
@@ -777,6 +841,14 @@
               {{ member.role === 'admin' ? '取消管理员' : '设为管理员' }}
             </button>
             <button
+              v-if="canTransferGroupOwner(member)"
+              type="button"
+              class="member-transfer-btn"
+              @click="transferGroupOwner(member)"
+            >
+              转让群主
+            </button>
+            <button
               v-if="canRemoveGroupMember(member)"
               type="button"
               class="member-remove-btn"
@@ -789,6 +861,40 @@
         </div>
       </div>
       </div>
+
+    <div v-if="showGroupAvatarPreview" class="dialog-overlay" @click.self="cancelGroupAvatarPreview">
+      <div class="dialog-box group-avatar-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="group-avatar-preview-title">
+        <div class="dialog-header">
+          <span id="group-avatar-preview-title">确认群头像</span>
+          <button class="dialog-close" aria-label="关闭头像预览" @click="cancelGroupAvatarPreview">✕</button>
+        </div>
+        <div class="dialog-body group-avatar-preview-body">
+          <ConversationAvatar
+            :type="'GROUP'"
+            :src="groupAvatarPreviewUrl"
+            name="群"
+            alt="待上传的群头像预览"
+            :size="120"
+          />
+          <p>{{ selectedGroupAvatar?.name }}</p>
+          <p
+            v-if="groupAvatarStatus"
+            class="group-avatar-status"
+            :class="{ error: groupAvatarStatusIsError }"
+            :role="groupAvatarStatusIsError ? 'alert' : 'status'"
+            aria-live="polite"
+          >
+            {{ groupAvatarStatus }}
+          </p>
+          <div class="group-avatar-preview-actions">
+            <button type="button" class="dialog-cancel" :disabled="groupAvatarSaving" @click="cancelGroupAvatarPreview">取消</button>
+            <button type="button" class="dialog-submit" :disabled="groupAvatarSaving" @click="confirmGroupAvatarUpload">
+              {{ groupAvatarSaving ? `上传中 ${groupAvatarProgress}%` : '确认上传' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Create Conversation Dialog -->
     <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
@@ -915,6 +1021,7 @@ import { useAttachmentDraftStore, type AttachmentDraft } from '../stores/attachm
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
+import ConversationAvatar from '../components/ConversationAvatar.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { createWebSocketTicket } from '../api/auth'
 import { getDeptTree, type DeptNode } from '../api/dept'
@@ -926,8 +1033,11 @@ import {
   normalizeConversation,
   pinConversation,
   removeMember,
+  restoreDefaultGroupAvatar,
+  transferConversationOwner,
   updateConversationSettings,
   updateMemberRole,
+  uploadGroupAvatar,
   type Conversation,
   type ConversationMember,
 } from '../api/conversation'
@@ -1176,6 +1286,14 @@ const groupSettingsName = ref('')
 const groupSettingsAnnouncement = ref('')
 const groupSettingsSaving = ref(false)
 const groupSettingsStatus = ref('')
+const groupAvatarInputRef = ref<HTMLInputElement | null>(null)
+const selectedGroupAvatar = ref<File | null>(null)
+const groupAvatarPreviewUrl = ref('')
+const showGroupAvatarPreview = ref(false)
+const groupAvatarSaving = ref(false)
+const groupAvatarProgress = ref(0)
+const groupAvatarStatus = ref('')
+const groupAvatarStatusIsError = ref(false)
 const chatSearchKeyword = ref('')
 const chatSearchResults = ref<Message[]>([])
 const showSearchResults = ref(false)
@@ -1228,6 +1346,11 @@ const canManageCurrentGroup = computed(() => {
 })
 
 const isCurrentUserGroupOwner = computed(() => currentGroupMember.value?.role === 'owner')
+const canEditCurrentGroupAvatar = computed(() => {
+  const conversation = chatStore.currentConversation
+  if (!conversation || conversation.type !== 'GROUP') return false
+  return conversation.canEditAvatar || isCurrentUserGroupOwner.value
+})
 
 function getInitialReadReceipt(conv: Conversation) {
   const recipientCount = Math.max(0, (conv.memberCount || conv.members?.length || 1) - 1)
@@ -1684,9 +1807,107 @@ async function openMembersDrawer() {
   memberAddKeyword.value = ''
   memberAddResults.value = []
   groupSettingsStatus.value = ''
+  groupAvatarStatus.value = ''
+  groupAvatarStatusIsError.value = false
   const refreshed = await chatStore.refreshConversation(conv.conversationId)
   groupSettingsName.value = refreshed?.name || conv.name || ''
   groupSettingsAnnouncement.value = refreshed?.announcement || conv.announcement || ''
+}
+
+function openGroupAvatarPicker() {
+  if (!canEditCurrentGroupAvatar.value || groupAvatarSaving.value) return
+  if (groupAvatarInputRef.value) {
+    groupAvatarInputRef.value.value = ''
+    groupAvatarInputRef.value.click()
+  }
+}
+
+function onGroupAvatarSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+  if (!allowedTypes.has(file.type)) {
+    groupAvatarStatus.value = '仅支持 JPG、PNG、GIF 和 WebP 图片'
+    groupAvatarStatusIsError.value = true
+    input.value = ''
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    groupAvatarStatus.value = '群头像图片不能超过 5MB'
+    groupAvatarStatusIsError.value = true
+    input.value = ''
+    return
+  }
+  clearGroupAvatarSelection()
+  selectedGroupAvatar.value = file
+  groupAvatarPreviewUrl.value = URL.createObjectURL(file)
+  groupAvatarStatus.value = ''
+  groupAvatarStatusIsError.value = false
+  groupAvatarProgress.value = 0
+  showGroupAvatarPreview.value = true
+}
+
+function clearGroupAvatarSelection() {
+  if (groupAvatarPreviewUrl.value) {
+    URL.revokeObjectURL(groupAvatarPreviewUrl.value)
+  }
+  groupAvatarPreviewUrl.value = ''
+  selectedGroupAvatar.value = null
+  if (groupAvatarInputRef.value) groupAvatarInputRef.value.value = ''
+}
+
+function cancelGroupAvatarPreview() {
+  if (groupAvatarSaving.value) return
+  showGroupAvatarPreview.value = false
+  clearGroupAvatarSelection()
+}
+
+async function confirmGroupAvatarUpload() {
+  const conv = chatStore.currentConversation
+  const file = selectedGroupAvatar.value
+  if (!conv || conv.type !== 'GROUP' || !file || !canEditCurrentGroupAvatar.value) return
+  groupAvatarSaving.value = true
+  groupAvatarProgress.value = 0
+  groupAvatarStatus.value = ''
+  groupAvatarStatusIsError.value = false
+  try {
+    const res = await uploadGroupAvatar(
+      conv.conversationId,
+      file,
+      (progress) => {
+        groupAvatarProgress.value = Math.round(progress * 100)
+      },
+    )
+    chatStore.upsertConversation(res.data)
+    groupAvatarStatus.value = '群头像已更新'
+    showGroupAvatarPreview.value = false
+    clearGroupAvatarSelection()
+  } catch (err: any) {
+    groupAvatarStatus.value = err?.response?.data?.message || err?.message || '群头像上传失败'
+    groupAvatarStatusIsError.value = true
+  } finally {
+    groupAvatarSaving.value = false
+  }
+}
+
+async function restoreGroupAvatar() {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP' || !canEditCurrentGroupAvatar.value || groupAvatarSaving.value) return
+  if (!window.confirm('恢复系统默认“群”字头像？')) return
+  groupAvatarSaving.value = true
+  groupAvatarStatus.value = ''
+  groupAvatarStatusIsError.value = false
+  try {
+    const res = await restoreDefaultGroupAvatar(conv.conversationId)
+    chatStore.upsertConversation(res.data)
+    groupAvatarStatus.value = '已恢复默认群头像'
+  } catch (err: any) {
+    groupAvatarStatus.value = err?.response?.data?.message || err?.message || '恢复默认头像失败'
+    groupAvatarStatusIsError.value = true
+  } finally {
+    groupAvatarSaving.value = false
+  }
 }
 
 function onGroupNameInput(event: Event) {
@@ -1755,6 +1976,27 @@ function canRemoveGroupMember(member: ConversationMember): boolean {
 function canUpdateMemberRole(member: ConversationMember): boolean {
   const currentUserId = String(authStore.currentUser?.userId ?? '')
   return isCurrentUserGroupOwner.value && member.userId !== currentUserId && member.role !== 'owner'
+}
+
+function canTransferGroupOwner(member: ConversationMember): boolean {
+  const currentUserId = String(authStore.currentUser?.userId ?? '')
+  return isCurrentUserGroupOwner.value
+    && member.userId !== currentUserId
+    && member.role !== 'owner'
+}
+
+async function transferGroupOwner(member: ConversationMember) {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP' || !canTransferGroupOwner(member)) return
+  const memberName = getMemberName(member)
+  if (!window.confirm(`确认将群主转让给“${memberName}”？转让后你将成为普通成员。`)) return
+  try {
+    const res = await transferConversationOwner(conv.conversationId, member.userId)
+    chatStore.upsertConversation(res.data)
+    groupSettingsStatus.value = `群主已转让给 ${memberName}`
+  } catch (err: any) {
+    groupSettingsStatus.value = err?.response?.data?.message || err?.message || '群主转让失败'
+  }
 }
 
 async function toggleMemberRole(member: ConversationMember) {
@@ -3012,6 +3254,7 @@ onUnmounted(() => {
   fileDownloadControllers.forEach((controller) => controller.abort())
   fileDownloadControllers.clear()
   revokeCustomStickerUrls()
+  clearGroupAvatarSelection()
   wsManager?.disconnect()
 })
 
@@ -3023,6 +3266,8 @@ watch(
     memberSearch.value = ''
     memberAddKeyword.value = ''
     memberAddResults.value = []
+    showGroupAvatarPreview.value = false
+    clearGroupAvatarSelection()
     attachmentDragDepth.reset()
     isAttachmentDragActive.value = false
     attachmentFeedback.value = ''
@@ -3577,6 +3822,13 @@ watch(
 .chat-header-info {
   display: flex;
   flex-direction: column;
+  margin-left: 10px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.chat-header-avatar {
+  font-size: var(--font-lg);
 }
 
 .chat-header-name {
@@ -4370,6 +4622,83 @@ watch(
   padding: 0 12px 12px;
 }
 
+.group-avatar-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.group-avatar-details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.group-avatar-label {
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.group-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group-avatar-action {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  padding: 5px 9px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.group-avatar-action:hover:not(:disabled),
+.group-avatar-action:focus-visible {
+  background: var(--accent-bg-light);
+  border-color: var(--accent);
+}
+
+.group-avatar-action.danger {
+  color: var(--danger-strong);
+}
+
+.group-avatar-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.group-avatar-readonly,
+.group-avatar-status {
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.group-avatar-status.error {
+  color: var(--danger-strong);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .group-setting-field {
   display: flex;
   flex-direction: column;
@@ -4511,6 +4840,22 @@ watch(
   cursor: pointer;
   font-size: var(--font-sm);
   padding: 5px 8px;
+}
+
+.member-transfer-btn {
+  border: 1px solid #f0b36b;
+  border-radius: var(--radius-md);
+  background: #fff8ed;
+  color: #a85400;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  padding: 5px 8px;
+}
+
+.member-transfer-btn:hover,
+.member-transfer-btn:focus-visible {
+  background: #ffefd6;
+  border-color: #d9822b;
 }
 
 
@@ -4677,6 +5022,59 @@ watch(
 .dialog-submit:disabled {
   background: var(--text-disabled);
   cursor: not-allowed;
+}
+
+.group-avatar-preview-dialog {
+  width: 360px;
+}
+
+.group-avatar-preview-body {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.group-avatar-preview-body > p {
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-avatar-preview-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.group-avatar-preview-actions .dialog-submit {
+  margin-top: 0;
+}
+
+.dialog-cancel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-md);
+  padding: 10px;
+}
+
+.dialog-cancel:hover:not(:disabled),
+.dialog-cancel:focus-visible {
+  background: var(--bg-hover-light);
+  border-color: var(--text-tertiary);
+}
+
+.dialog-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .avatar-img {

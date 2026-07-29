@@ -18,6 +18,9 @@ public class ImConversation {
     private Integer type;
     private String name;
     private String avatar;
+    private String avatarType;
+    private Long avatarUpdatedBy;
+    private LocalDateTime avatarUpdatedAt;
     private Long ownerId;
     private String announcement;
     private Long announcementUpdatedBy;

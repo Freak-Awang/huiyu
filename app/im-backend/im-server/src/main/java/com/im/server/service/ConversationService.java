@@ -2,8 +2,11 @@ package com.im.server.service;
 
 import com.im.common.dto.ConversationVO;
 import com.im.common.dto.CreateConversationRequest;
+import com.im.common.dto.TransferConversationOwnerRequest;
 import com.im.common.dto.UpdateConversationSettingsRequest;
 import com.im.common.dto.UpdateMemberRoleRequest;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
 /**
  * Intent: ConversationService defines the service contract used by controllers and async workflows.
@@ -26,6 +29,12 @@ public interface ConversationService {
     ConversationVO updateSettings(Long conversationId, Long operatorId, UpdateConversationSettingsRequest request);
 
     ConversationVO updateMemberRole(Long conversationId, Long targetUserId, Long operatorId, UpdateMemberRoleRequest request);
+
+    ConversationVO updateAvatar(Long conversationId, Long operatorId, MultipartFile file);
+
+    ConversationVO restoreDefaultAvatar(Long conversationId, Long operatorId);
+
+    ConversationVO transferOwner(Long conversationId, Long operatorId, TransferConversationOwnerRequest request);
 
     ConversationVO getById(Long id, Long userId);
 }
