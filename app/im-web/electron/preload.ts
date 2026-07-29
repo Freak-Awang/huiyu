@@ -121,6 +121,20 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.on('updater:state-changed', listener)
     return () => ipcRenderer.removeListener('updater:state-changed', listener)
   },
+
+  /** 自定义窗口控制：最小化、最大/恢复、关闭、查询当前最大化状态 */
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize') as Promise<boolean>,
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize') as Promise<boolean>,
+    close: () => ipcRenderer.invoke('window:close') as Promise<boolean>,
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized') as Promise<boolean>,
+    /** 监听主进程广播的最大化状态变化，返回取消监听的函数 */
+    onMaximizeChanged: (handler: (maximized: boolean) => void) => {
+      const listener = (_event: unknown, maximized: boolean) => handler(maximized)
+      ipcRenderer.on('window:maximize-changed', listener)
+      return () => ipcRenderer.removeListener('window:maximize-changed', listener)
+    },
+  },
 })
 
 /** 截图窗口专用 API */
