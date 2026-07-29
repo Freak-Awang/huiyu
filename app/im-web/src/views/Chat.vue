@@ -195,7 +195,7 @@
               @dblclick="createSingleChat(user)"
             >
               <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                <img v-if="getResolvedUser(user).avatar && !failedAvatars.has(getResolvedUser(user).avatar)" :src="getResolvedUser(user).avatar" @error="failedAvatars.add(getResolvedUser(user).avatar)" alt="" />
+                <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                 <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
               </div>
@@ -225,7 +225,7 @@
                   @dblclick="createSingleChat(user)"
                 >
                   <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                    <img v-if="getResolvedUser(user).avatar && !failedAvatars.has(getResolvedUser(user).avatar)" :src="getResolvedUser(user).avatar" @error="failedAvatars.add(getResolvedUser(user).avatar)" alt="" />
+                    <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                     <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                     <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                   </div>
@@ -254,7 +254,7 @@
                       @dblclick="createSingleChat(user)"
                     >
                       <div class="contact-avatar" @click.stop="openUserProfile(user)">
-                        <img v-if="getResolvedUser(user).avatar && !failedAvatars.has(getResolvedUser(user).avatar)" :src="getResolvedUser(user).avatar" @error="failedAvatars.add(getResolvedUser(user).avatar)" alt="" />
+                        <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                         <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                         <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                       </div>
@@ -547,7 +547,7 @@
                 @mousedown.prevent="selectMention(member)"
               >
                 <div class="mention-avatar">
-                  <img v-if="getResolvedUser(member).avatar && !failedAvatars.has(getResolvedUser(member).avatar)" :src="getResolvedUser(member).avatar" @error="failedAvatars.add(getResolvedUser(member).avatar)" alt="" />
+                  <img v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))" :src="getUserAvatar(member)" @error="failedAvatars.add(getUserAvatar(member))" alt="" />
                   <span v-else>{{ getMemberName(member)[0] }}</span>
                 </div>
                 <span>{{ getMemberName(member) }}</span>
@@ -757,7 +757,7 @@
             class="member-row"
           >
             <div class="member-avatar" @click="openUserProfile(member)">
-              <img v-if="getResolvedUser(member).avatar && !failedAvatars.has(getResolvedUser(member).avatar)" :src="getResolvedUser(member).avatar" @error="failedAvatars.add(getResolvedUser(member).avatar)" alt="" />
+              <img v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))" :src="getUserAvatar(member)" @error="failedAvatars.add(getUserAvatar(member))" alt="" />
               <span v-else>{{ getMemberName(member)[0] }}</span>
               <span class="online-dot" :class="`presence-${getUserPresence(member)}`"></span>
             </div>
@@ -824,7 +824,7 @@
                 @click="doCreateSingleChat(user)"
               >
                 <div class="contact-avatar">
-                  <img v-if="getResolvedUser(user).avatar && !failedAvatars.has(getResolvedUser(user).avatar)" :src="getResolvedUser(user).avatar" @error="failedAvatars.add(getResolvedUser(user).avatar)" alt="" />
+                  <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                   <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 </div>
                 <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
@@ -863,7 +863,7 @@
                 @click="addMemberSelection(user)"
               >
                 <div class="contact-avatar">
-                  <img v-if="getResolvedUser(user).avatar && !failedAvatars.has(getResolvedUser(user).avatar)" :src="getResolvedUser(user).avatar" @error="failedAvatars.add(getResolvedUser(user).avatar)" alt="" />
+                  <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                   <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 </div>
                 <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
@@ -1244,6 +1244,10 @@ function getUserId(user: any): string {
 
 function getResolvedUser(user: UserProfileSnapshot | null | undefined): UserProfileSnapshot {
   return userProfileStore.resolveProfile(user)
+}
+
+function getUserAvatar(user: UserProfileSnapshot | null | undefined): string {
+  return getResolvedUser(user).avatar || ''
 }
 
 function reconcileDirectoryMembership(profile: UserProfileSnapshot) {

@@ -22,7 +22,7 @@ export function normalizeServerOrigin(value: string) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('服务器地址必须使用 http 或 https')
   }
-  if (import.meta.env.PROD && url.protocol !== 'https:' && !isLoopbackHostname(url.hostname)) {
+  if (import.meta.env.PROD && !isDesktopRuntime() && url.protocol !== 'https:' && !isLoopbackHostname(url.hostname)) {
     throw new Error('Production server addresses must use HTTPS')
   }
   return stripTrailingSlash(url.origin)
