@@ -1,3 +1,6 @@
+/**
+ * 用户资料 Store 单元测试：验证资料更新策略、快照合并、在线状态管理及登出清理逻辑。
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 

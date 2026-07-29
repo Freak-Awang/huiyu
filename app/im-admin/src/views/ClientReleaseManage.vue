@@ -1,3 +1,4 @@
+<!-- 客户端版本发布管理：创建/编辑/发布/暂停版本，配置灰度和定向规则，查看更新统计 -->
 <template>
   <div class="release-manage">
     <el-card>
@@ -80,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+// 客户端版本发布管理：管理版本列表、创建/编辑版本、发布/暂停、灰度策略、定向规则、更新统计
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRelease, getReleasePage, getReleaseStatistics, pauseRelease, publishRelease, saveRelease, type ClientRelease, type TargetRule } from '../api/release'
@@ -90,11 +92,11 @@ const rows = ref<ClientRelease[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filters = reactive({ channel: '', status: '' })
-const dialogVisible = ref(false)
-const editingStatus = ref('DRAFT')
-const statsVisible = ref(false)
-const statistics = ref<any>(null)
+const filters = reactive({ channel: '', status: '' }) // 列表筛选条件
+const dialogVisible = ref(false) // 编辑/创建弹窗可见性
+const editingStatus = ref('DRAFT') // 当前编辑版本的原始状态
+const statsVisible = ref(false) // 统计弹窗可见性
+const statistics = ref<any>(null) // 统计数据
 const statusOptions = [
   { label: '草稿', value: 'DRAFT' }, { label: '已发布', value: 'PUBLISHED' },
   { label: '已暂停', value: 'PAUSED' }, { label: '已替代', value: 'REPLACED' },
@@ -107,13 +109,18 @@ const emptyForm = () => ({
   installerSha512: '', allowDevices: '', denyDevices: '', allowUsers: '', denyUsers: '', allowDepts: '', denyDepts: '',
 })
 const form = reactive(emptyForm())
-const immutable = computed(() => editingStatus.value !== 'DRAFT')
+const immutable = computed(() => editingStatus.value !== 'DRAFT') // 非草稿状态不可编辑核心字段
 
+// 状态标签映射
 function statusLabel(value: string) { return statusOptions.find((item) => item.value === value)?.label || value }
+// 状态对应的 Element UI tag 类型
 function statusType(value: string) { return value === 'PUBLISHED' ? 'success' : value === 'PAUSED' ? 'warning' : value === 'REPLACED' ? 'info' : 'primary' }
+// 将逗号/换行分隔的字符串拆分为数组
 function splitValues(value: string) { return value.split(/[\s,，]+/).map((item) => item.trim()).filter(Boolean) }
+// 将字符串值转换为 TargetRule 数组
 function rules(value: string, targetType: TargetRule['targetType'], mode: TargetRule['mode']): TargetRule[] { return splitValues(value).map((targetValue) => ({ targetType, targetValue, mode })) }
 
+// 加载版本列表
 async function loadReleases() {
   loading.value = true
   try {
@@ -123,7 +130,8 @@ async function loadReleases() {
   } finally { loading.value = false }
 }
 
-function openCreate() { Object.assign(form, emptyForm()); editingStatus.value = 'DRAFT'; dialogVisible.value = true }
+function openCreate() { Object.assign(form, emptyForm()); editingStatus.value = 'DRAFT'; dialogVisible.value = true } // 打开创建版本弹窗
+// 打开编辑版本弹窗：从服务器加载完整版本数据和定向规则
 async function openEdit(row: ClientRelease) {
   const { data } = await getRelease(row.id)
   const release = data.release as ClientRelease
@@ -137,6 +145,7 @@ async function openEdit(row: ClientRelease) {
   dialogVisible.value = true
 }
 
+// 提交版本表单（创建或更新）
 async function submit() {
   if (!form.version || !form.releaseName || !form.updateBaseUrl || !form.installerName || !form.installerSha512) {
     ElMessage.warning('请填写版本、标题和流水线产物信息')
@@ -162,14 +171,17 @@ async function submit() {
   } finally { saving.value = false }
 }
 
+// 发布版本：二次确认后调用发布接口
 async function publish(row: ClientRelease) {
   await ElMessageBox.confirm(`发布 ${row.version} 后客户端将按灰度策略收到更新，确认流水线文件已完整发布？`, '发布确认', { type: 'warning' })
   await publishRelease(row.id); ElMessage.success('版本已发布'); await loadReleases()
 }
+// 暂停版本：新设备不再收到该版本更新
 async function pause(row: ClientRelease) {
   await ElMessageBox.confirm(`暂停 ${row.version} 后新设备将不再收到该版本。`, '暂停确认', { type: 'warning' })
   await pauseRelease(row.id); ElMessage.success('版本已暂停'); await loadReleases()
 }
+// 查看版本更新统计
 async function showStatistics(row: ClientRelease) { statistics.value = (await getReleaseStatistics(row.id)).data; statsVisible.value = true }
 
 void loadReleases()

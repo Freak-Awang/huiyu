@@ -1,4 +1,7 @@
-// Intent: chat keeps shared UI state and side effects in one Pinia store.
+/**
+ * 聊天核心 Store：管理会话列表、当前会话、消息缓存、未读数与 @ 未读数，
+ * 处理消息收发、已读回执、历史消息合并及本地消息持久化等复杂状态逻辑。
+ */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
@@ -23,12 +26,23 @@ import {
 } from '../utils/localMessageStore'
 import { useUserProfileStore } from './userProfiles'
 
+/**
+ * 聊天核心 Store：集中管理会话与消息状态。
+ * state: conversations - 会话列表；currentConversation - 当前选中会话；
+ *        messages - 按会话 ID 分组的消息缓存；unreadCounts - 未读消息数；
+ *        mentionUnreadCounts - @ 我的未读消息数
+ */
 export const useChatStore = defineStore('chat', () => {
   const userProfiles = useUserProfileStore()
+  /** 会话列表 */
   const conversations = ref<Conversation[]>([])
+  /** 当前选中会话 */
   const currentConversation = ref<Conversation | null>(null)
+  /** 按会话 ID 分组的消息缓存 */
   const messages = ref<Map<string, Message[]>>(new Map())
+  /** 各会话未读消息数 */
   const unreadCounts = ref<Map<string, number>>(new Map())
+  /** 各会话 @ 我的未读消息数 */
   const mentionUnreadCounts = ref<Map<string, number>>(new Map())
 
   const currentMessages = computed(() => {
@@ -44,6 +58,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.filter((c) => !c.pinned)
   )
 
+  /** 拉取会话列表并同步未读数、用户资料快照 */
   async function fetchConversations() {
     const res = await listConversations()
     conversations.value = res.data
@@ -62,6 +77,10 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 选中并切换到指定会话，同时加载该会话消息。
+   * @param convId 会话 ID
+   */
   async function selectConversation(convId: string) {
     const conv = conversations.value.find((c) => c.conversationId === convId)
     if (!conv) return
@@ -69,6 +88,10 @@ export const useChatStore = defineStore('chat', () => {
     await fetchMessages(convId)
   }
 
+  /**
+   * 插入或更新会话信息，同步未读数与当前会话引用。
+   * @param conv 会话对象
+   */
   function upsertConversation(conv: Conversation) {
     seedConversationProfiles(conv)
     const index = conversations.value.findIndex(
@@ -86,6 +109,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 从服务器刷新指定会话详情。
+   * @param convId 会话 ID
+   * @returns 刷新后的会话对象，失败返回 null
+   */
   async function refreshConversation(convId: string): Promise<Conversation | null> {
     try {
       const res = await getConversation(convId)
@@ -96,6 +124,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 确保指定会话存在于本地列表中，不存在则从服务器拉取。
+   * @param convId 会话 ID
+   * @returns 会话对象，获取失败返回 null
+   */
   async function ensureConversation(convId: string): Promise<Conversation | null> {
     const existing = conversations.value.find((c) => c.conversationId === convId)
     if (existing) return existing
@@ -107,6 +140,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 加载会话历史消息。
+   * 桌面端优先读取本地缓存实现秒开，再与服务器数据合并；
+   * Web 端直接请求服务器分页数据。
+   * @param convId 会话 ID
+   * @param beforeId 分页锚点消息 ID（加载更早消息时传入）
+   */
   async function fetchMessages(convId: string, beforeId?: string) {
     if (canUseLocalMessageStore()) {
       // Desktop mode reads local history first so the chat opens instantly and still works during transient server outages.
@@ -143,6 +183,13 @@ export const useChatStore = defineStore('chat', () => {
     return Number.isFinite(time) ? time : 0
   }
 
+  /**
+   * 合并服务器消息到本地消息列表。
+   * 按 messageId / clientMsgId 匹配去重，更新消息状态与已读信息，
+   * 最后按时间排序并写回缓存。
+   * @param convId 会话 ID
+   * @param serverMessages 服务器返回的消息列表
+   */
   function mergeServerMessages(convId: string, serverMessages: Message[]) {
     if (!serverMessages.length) return
     serverMessages.forEach(seedMessageProfile)
@@ -190,6 +237,7 @@ export const useChatStore = defineStore('chat', () => {
     return msg.displayContent || msg.content
   }
 
+  /** 拉取离线待收消息并逐条确认接收（ACK） */
   async function fetchPendingMessages() {
     const res = await getPendingMessages()
     for (const msg of res.data) {
@@ -204,6 +252,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 更新会话的最后一条消息预览，可选将会话置顶到列表顶部。
+   * @param msg 最新消息对象
+   * @param moveToTop 是否将会话移动到列表顶部
+   */
   function updateConversationLastMessage(msg: Message, moveToTop: boolean) {
     const conv = conversations.value.find((c) => c.conversationId === msg.conversationId)
     if (!conv) return
@@ -226,6 +279,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 插入或更新消息到本地缓存。
+   * 实时消息、ACK 确认、重试与本地缓存回放统一走此路径，
+   * 保证消息顺序稳定并同步更新会话预览。
+   * @param msg 消息对象
+   */
   function upsertMessage(msg: Message) {
     seedMessageProfile(msg)
     // Realtime messages, ACKs, retries, and local cache replay all converge through this path to keep ordering stable.
@@ -258,6 +317,14 @@ export const useChatStore = defineStore('chat', () => {
     upsertMessage(msg)
   }
 
+  /**
+   * 处理接收到的实时消息。
+   * 确保会话存在、插入消息、更新未读数与 @ 未读数。
+   * @param msg 接收到的消息
+   * @param currentUserId 当前用户 ID（用于判断是否自己发送）
+   * @param countAsUnread 是否计入未读数
+   * @returns 消息所属会话对象
+   */
   async function receiveMessage(
     msg: Message,
     currentUserId?: string,
@@ -279,6 +346,11 @@ export const useChatStore = defineStore('chat', () => {
     return conv
   }
 
+  /**
+   * 标记会话为已读，失败时回滚未读数。
+   * @param convId 会话 ID
+   * @param lastReadMessageId 已读到的最后一条消息 ID
+   */
   async function markAsRead(convId: string, lastReadMessageId?: string) {
     const previousUnread = unreadCounts.value.get(convId) || 0
     const previousMentions = mentionUnreadCounts.value.get(convId) || 0
@@ -295,11 +367,20 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 清空指定会话的未读数与 @ 未读数。
+   * @param convId 会话 ID
+   */
   function clearUnread(convId: string) {
     unreadCounts.value.set(convId, 0)
     mentionUnreadCounts.value.set(convId, 0)
   }
 
+  /**
+   * 批量应用消息已读回执，更新消息已读状态。
+   * @param convId 会话 ID
+   * @param receipts 已读回执列表
+   */
   function applyReadReceipts(convId: string, receipts: MessageReadReceipt[]) {
     const convMessages = messages.value.get(convId)
     if (!Array.isArray(convMessages) || !receipts.length) return
@@ -369,14 +450,30 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 获取指定会话的未读消息数。
+   * @param convId 会话 ID
+   * @returns 未读消息数
+   */
   function getUnreadCount(convId: string): number {
     return unreadCounts.value.get(convId) || 0
   }
 
+  /**
+   * 获取指定会话的 @ 我的未读消息数。
+   * @param convId 会话 ID
+   * @returns @ 未读消息数
+   */
   function getMentionUnreadCount(convId: string): number {
     return mentionUnreadCounts.value.get(convId) || 0
   }
 
+  /**
+   * 根据客户端消息 ID 更新消息的服务端 ID 与状态（用于发送确认）。
+   * @param clientMsgId 客户端消息 ID
+   * @param serverMsgId 服务端消息 ID
+   * @param status 新状态，默认 SENT
+   */
   function updateMessageStatus(clientMsgId: string, serverMsgId: string, status = 'SENT') {
     for (const [, convMessages] of messages.value) {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
@@ -389,6 +486,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 根据客户端消息 ID 设置消息状态（如发送失败）。
+   * @param clientMsgId 客户端消息 ID
+   * @param status 新状态
+   */
   function setMessageStatus(clientMsgId: string, status: string) {
     for (const [, convMessages] of messages.value) {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)

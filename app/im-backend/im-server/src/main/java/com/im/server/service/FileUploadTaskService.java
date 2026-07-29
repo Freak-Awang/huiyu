@@ -30,7 +30,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Intent: FileUploadTaskService owns resumable multipart uploads and final composition.
+ * 分片上传任务服务：负责大文件断点续传的分片上传、合并及秒传复用。
  */
 @Service
 public class FileUploadTaskService {
@@ -65,6 +65,16 @@ public class FileUploadTaskService {
         this.quotaService = quotaService;
     }
 
+    /**
+     * 创建分片上传任务。
+     * <p>
+     * 若同会话下存在相同 SHA-256 且大小一致的可用文件，则直接返回秒传结果；
+     * 否则创建新的上传任务并返回分片参数。
+     *
+     * @param request 创建请求
+     * @param uploaderId 上传者 ID
+     * @return 上传任务视图
+     */
     @Transactional
     public FileUploadTaskVO createTask(FileUploadTaskCreateRequest request, Long uploaderId) {
         validateCreateRequest(request);
@@ -126,6 +136,18 @@ public class FileUploadTaskService {
         return vo;
     }
 
+    /**
+     * 上传单个分片。
+     * <p>
+     * 使用 SELECT ... FOR UPDATE 锁定任务行，防止并发上传同一分片导致重复写存储。
+     * 分片记录插入失败时会删除已上传的分片对象，避免产生孤儿数据。
+     *
+     * @param uploadId 上传任务 ID
+     * @param partNumber 分片序号（从 1 开始）
+     * @param file 分片文件
+     * @param uploaderId 上传者 ID
+     * @return 任务视图
+     */
     @Transactional
     public FileUploadTaskVO uploadPart(String uploadId, Integer partNumber, MultipartFile file, Long uploaderId) {
         ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);
@@ -163,10 +185,28 @@ public class FileUploadTaskService {
         return toTaskVO(upload);
     }
 
+    /**
+     * 查询上传任务的分片进度。
+     *
+     * @param uploadId 上传任务 ID
+     * @param uploaderId 上传者 ID
+     * @return 任务视图
+     */
     public FileUploadTaskVO getTaskParts(String uploadId, Long uploaderId) {
         return toTaskVO(getOwnedUpload(uploadId, uploaderId));
     }
 
+    /**
+     * 完成分片上传：合并所有分片、校验哈希、写入文件元数据并清理分片。
+     * <p>
+     * 若任务已完成则直接返回已有文件；合并后若 SHA-256 校验失败或图片类型非法，
+     * 会删除已合并对象并抛出异常，保证存储数据一致性。
+     *
+     * @param uploadId 上传任务 ID
+     * @param request 完成请求（可携带最终 SHA-256）
+     * @param uploaderId 上传者 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile completeTask(String uploadId, FileUploadCompleteRequest request, Long uploaderId) {
         ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);
@@ -244,6 +284,12 @@ public class FileUploadTaskService {
         return file;
     }
 
+    /**
+     * 取消上传任务：删除已上传分片并标记任务为已中止。
+     *
+     * @param uploadId 上传任务 ID
+     * @param uploaderId 上传者 ID
+     */
     @Transactional
     public void cancelTask(String uploadId, Long uploaderId) {
         ImFileUpload upload = getOwnedUploadForUpdate(uploadId, uploaderId);

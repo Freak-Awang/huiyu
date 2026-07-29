@@ -1,3 +1,4 @@
+<!-- 登录页面：用户认证入口，支持记住账号、自动登录、自定义服务器地址 -->
 <template>
   <div class="login-page">
     <div class="login-card">
@@ -6,7 +7,9 @@
         <h1>绘语</h1>
         <p>绘语 ArtTalk</p>
       </div>
+      <!-- 登录表单 -->
       <form class="login-form" @submit.prevent="handleLogin">
+        <!-- 服务器地址输入（桌面端或已配置地址时显示） -->
         <div v-if="showServerConfig" class="form-item">
           <input
             v-model="serverOrigin"
@@ -51,8 +54,7 @@
 </template>
 
 <script setup lang="ts">
-// Intent: Login composes route-level UI behavior and data loading for this screen.
-
+// 登录页：处理用户认证、记住账号/自动登录、自定义服务器地址配置
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -63,17 +65,18 @@ const authStore = useAuthStore()
 
 const username = ref('')
 const password = ref('')
-const serverOrigin = ref(getServerOrigin())
-const rememberMe = ref(false)
-const autoLogin = ref(false)
-const loading = ref(false)
-const errorMsg = ref('')
+const serverOrigin = ref(getServerOrigin()) // 服务器地址
+const rememberMe = ref(false) // 是否记住账号
+const autoLogin = ref(false) // 是否自动登录
+const loading = ref(false) // 登录加载状态
+const errorMsg = ref('') // 错误提示信息
 const hasExplicitServerOrigin =
   !!localStorage.getItem('imServerOrigin') ||
   !!import.meta.env.VITE_IM_SERVER_ORIGIN ||
   !!import.meta.env.VITE_API_BASE_URL
-const showServerConfig = isDesktopRuntime() || hasExplicitServerOrigin
+const showServerConfig = isDesktopRuntime() || hasExplicitServerOrigin // 桌面端或已配置地址时显示服务器地址输入框
 
+// 处理登录：校验输入、设置服务器地址、调用认证接口
 function handleLogin() {
   if (showServerConfig && !serverOrigin.value.trim()) {
     errorMsg.value = '请输入内网服务器地址'
@@ -88,6 +91,7 @@ function handleLogin() {
   loading.value = true
   errorMsg.value = ''
 
+  // 保存服务器地址到本地存储
   try {
     if (serverOrigin.value.trim()) {
       serverOrigin.value = setServerOrigin(serverOrigin.value)
@@ -98,6 +102,7 @@ function handleLogin() {
     return
   }
 
+  // 调用认证接口，成功后保存记住账号/自动登录偏好并跳转到主页
   authStore.login(username.value, password.value).then(() => {
     if (rememberMe.value) {
       localStorage.setItem('savedUsername', username.value)
@@ -115,17 +120,19 @@ function handleLogin() {
   })
 }
 
+// 挂载时恢复保存的账号信息和自动登录状态
 onMounted(async () => {
   const savedUsername = localStorage.getItem('savedUsername')
   const savedRemember = localStorage.getItem('rememberMe')
   const savedAutoLogin = localStorage.getItem('autoLogin')
-  localStorage.removeItem('savedPassword')
+  localStorage.removeItem('savedPassword') // 安全起见清除保存的密码
 
   if (savedRemember === 'true') {
     rememberMe.value = true
     if (savedUsername) username.value = savedUsername
   }
 
+  // 自动登录：已有 token 时直接进入主页
   if (savedAutoLogin === 'true') {
     autoLogin.value = true
     if (localStorage.getItem('token')) {

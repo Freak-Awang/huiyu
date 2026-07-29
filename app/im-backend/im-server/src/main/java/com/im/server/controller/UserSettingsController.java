@@ -12,7 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Intent: UserSettingsController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ * 用户设置控制器。
+ * <p>
+ * 提供用户个人设置的查询和保存接口，
+ * URL 前缀为 {@code /api/settings}。
+ * </p>
  */
 @RestController
 @RequestMapping("/api/settings")
@@ -21,11 +25,22 @@ public class UserSettingsController {
     @Autowired
     private UserSettingsService userSettingsService;
 
+    /**
+     * 查询当前用户设置。
+     *
+     * @return 用户设置
+     */
     @GetMapping
     public Result<UserSettingsVO> getSettings() {
         return Result.success(userSettingsService.getSettings(getCurrentUserId()));
     }
 
+    /**
+     * 保存当前用户设置。
+     *
+     * @param settings 用户设置
+     * @return 保存后的用户设置
+     */
     @PutMapping
     public Result<UserSettingsVO> saveSettings(@RequestBody UserSettingsVO settings) {
         return Result.success(userSettingsService.saveSettings(getCurrentUserId(), settings));

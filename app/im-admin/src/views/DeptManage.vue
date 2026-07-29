@@ -1,3 +1,4 @@
+<!-- 部门管理页：以树形结构展示部门层级，支持新增、编辑、删除及状态切换 -->
 <template>
   <div class="dept-manage">
     <el-card>
@@ -7,6 +8,7 @@
         </el-button>
       </div>
 
+      <!-- 部门树：展示层级关系，行内提供编辑/删除/状态操作 -->
       <el-tree
         :data="treeData"
         :props="{ label: 'name', children: 'children' }"
@@ -46,6 +48,7 @@
       </el-tree>
     </el-card>
 
+    <!-- 新增/编辑部门弹窗 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑部门' : '新增部门'"
@@ -99,8 +102,6 @@
 </template>
 
 <script setup lang="ts">
-// Intent: DeptManage composes route-level UI behavior and data loading for this screen.
-
 import { ref, reactive } from 'vue'
 import { Plus, Edit, Delete, Folder } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -116,11 +117,11 @@ interface DeptNode {
   children: DeptNode[]
 }
 
-const treeData = ref<DeptNode[]>([])
+const treeData = ref<DeptNode[]>([]) // 部门树数据
 
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const submitLoading = ref(false)
+const dialogVisible = ref(false) // 弹窗显隐
+const isEdit = ref(false) // 是否为编辑模式
+const submitLoading = ref(false) // 提交按钮加载态
 const formRef = ref<FormInstance>()
 
 const defaultForm = () => ({
@@ -138,11 +139,13 @@ const formRules: FormRules = {
   sortOrder: [{ required: true, message: '请输入排序值', trigger: 'blur' }],
 }
 
+/** 重置表单为初始值 */
 function resetForm() {
   Object.assign(form, defaultForm())
   formRef.value?.resetFields()
 }
 
+/** 加载部门树 */
 async function fetchTree() {
   try {
     const res = await getDeptTree()
@@ -152,12 +155,14 @@ async function fetchTree() {
   }
 }
 
+/** 打开新增弹窗，可预选上级部门 */
 function handleAdd(parentDept: DeptNode | null) {
   isEdit.value = false
   form.parentId = parentDept?.id
   dialogVisible.value = true
 }
 
+/** 打开编辑弹窗并回填数据 */
 function handleEdit(data: DeptNode) {
   isEdit.value = true
   form.id = data.id
@@ -168,6 +173,7 @@ function handleEdit(data: DeptNode) {
   dialogVisible.value = true
 }
 
+/** 提交表单：新增或更新部门 */
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -205,6 +211,7 @@ function hasChildren(data: DeptNode): boolean {
   return !!(data.children && data.children.length > 0)
 }
 
+/** 删除确认：含子部门时给出额外提示 */
 function handleDelete(data: DeptNode) {
   const msg = hasChildren(data)
     ? `部门"${data.name}"下存在子部门，确认删除吗？`

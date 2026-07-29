@@ -5,17 +5,34 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 
+/**
+ * 图片类型探测器：通过文件魔数（Magic Number）识别真实图片格式，防止伪造 Content-Type 上传。
+ */
 public final class ImageTypeDetector {
 
     private ImageTypeDetector() {
     }
 
+    /**
+     * 检测上传文件的真实图片类型。
+     *
+     * @param file 上传文件
+     * @return MIME 类型，无法识别时返回 null
+     * @throws IOException 读取失败时抛出
+     */
     public static String detect(MultipartFile file) throws IOException {
         try (InputStream input = file.getInputStream()) {
             return detect(input);
         }
     }
 
+    /**
+     * 检测输入流的真实图片类型（读取前 12 字节魔数）。
+     *
+     * @param input 输入流
+     * @return MIME 类型，无法识别时返回 null
+     * @throws IOException 读取失败时抛出
+     */
     public static String detect(InputStream input) throws IOException {
         byte[] header = input.readNBytes(12);
         if (header.length >= 8
@@ -44,6 +61,12 @@ public final class ImageTypeDetector {
         return null;
     }
 
+    /**
+     * 判断 Content-Type 是否为可安全内联展示的图片类型。
+     *
+     * @param contentType Content-Type
+     * @return 是否为 PNG/JPEG/GIF/WebP
+     */
     public static boolean isSafeInlineType(String contentType) {
         return "image/png".equals(contentType)
                 || "image/jpeg".equals(contentType)

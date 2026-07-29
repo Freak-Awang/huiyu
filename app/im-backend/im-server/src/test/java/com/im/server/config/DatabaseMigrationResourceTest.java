@@ -6,8 +6,17 @@ import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * 数据库迁移 SQL 资源测试，验证 Flyway 迁移脚本的 classpath 可用性和关键内容。
+ *
+ * <p>测试范围：token_version 字段添加迁移、群头像状态迁移。</p>
+ */
 class DatabaseMigrationResourceTest {
 
+    /**
+     * 验证 token_version 迁移 SQL 存在且包含必要 DDL：information_schema.COLUMNS 检测、
+     * token_version 字段添加、PREPARE 动态 SQL。
+     */
     @Test
     void tokenVersionMigrationIsVersionedAndRepeatSafe() throws Exception {
         try (var input = getClass().getResourceAsStream(
@@ -20,6 +29,10 @@ class DatabaseMigrationResourceTest {
         }
     }
 
+    /**
+     * 验证群头像状态迁移 SQL 存在，包含 avatar_type/avatar_updated_by/avatar_updated_at 字段添加
+     * 和已有群聊头像类型的回填逻辑（type=2 且无自定义头像→default，有→custom）。
+     */
     @Test
     void groupAvatarMigrationAddsStateAndBackfillsExistingGroups() throws Exception {
         try (var input = getClass().getResourceAsStream(

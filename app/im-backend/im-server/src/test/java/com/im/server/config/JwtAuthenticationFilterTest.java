@@ -16,6 +16,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * JWT 认证过滤器测试，验证 token 鉴权、白名单放行、角色权限注入和 token 吊销处理。
+ *
+ * <p>测试范围：admin 角色自动获得 ROLE_ADMIN 权限、匿名下载白名单放行、保护端点拒绝无 token 请求、
+ * 吊销 token 返回 401。</p>
+ */
 class JwtAuthenticationFilterTest {
 
     @AfterEach
@@ -23,6 +29,10 @@ class JwtAuthenticationFilterTest {
         SecurityContextHolder.clearContext();
     }
 
+    /**
+     * 验证 admin 角色的 token 认证后，SecurityContext 中同时包含 "admin" 和 "ROLE_ADMIN" 权限，
+     * 且 FilterChain 正常继续执行。
+     */
     @Test
     void adminRoleUsesCurrentDatabaseAuthority() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
@@ -41,6 +51,9 @@ class JwtAuthenticationFilterTest {
         verify(chain).doFilter(request, response);
     }
 
+    /**
+     * 验证匿名用户访问文件下载接口（白名单路径）时放行，不设置 Authentication。
+     */
     @Test
     void anonymousDownloadContinuesWithoutAuthentication() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
@@ -55,6 +68,9 @@ class JwtAuthenticationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
+    /**
+     * 验证匿名请求访问非白名单的客户端更新事件接口时返回 401，不继续执行 FilterChain。
+     */
     @Test
     void anonymousUpdateEventIsRejected() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
@@ -69,6 +85,9 @@ class JwtAuthenticationFilterTest {
         verifyNoInteractions(chain);
     }
 
+    /**
+     * 验证受保护端点无 token 时返回 401，不继续执行 FilterChain。
+     */
     @Test
     void protectedEndpointWithoutTokenIsRejected() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
@@ -83,6 +102,10 @@ class JwtAuthenticationFilterTest {
         verifyNoInteractions(chain);
     }
 
+    /**
+     * 验证已被吊销的 token（authenticate 抛出 BusinessException）返回 401，
+     * 不继续执行 FilterChain。
+     */
     @Test
     void revokedTokenIsRejected() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);

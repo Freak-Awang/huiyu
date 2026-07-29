@@ -1,4 +1,7 @@
-// Intent: main wires Vue, routing, and state plugins before mounting the app.
+/**
+ * 应用入口：负责创建 Vue 实例、挂载路由与 Pinia 状态管理，
+ * 并根据 URL 参数决定是否进入截图模式（仅渲染截图浮层，不加载完整应用）。
+ */
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'

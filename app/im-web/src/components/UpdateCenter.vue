@@ -1,4 +1,6 @@
+<!-- 更新中心：显示版本更新横幅和强制更新弹窗，支持下载/安装/重试操作 -->
 <template>
+  <!-- 普通更新横幅 -->
   <div v-if="showBanner" class="update-banner" :class="{ force: update.state.forceUpdate }">
     <span>{{ bannerText }}</span>
     <button v-if="update.state.status === 'available'" type="button" @click="update.download()">下载更新</button>
@@ -8,6 +10,7 @@
     <button v-else-if="update.state.status === 'error'" type="button" @click="update.check()">重试</button>
   </div>
 
+  <!-- 强制更新全屏遮罩：阻止用户继续使用旧版本 -->
   <div v-if="update.state.forceUpdate" class="force-update-overlay">
     <div class="force-update-card">
       <h2>需要更新 ArtTalk</h2>
@@ -28,6 +31,7 @@
 </template>
 
 <script setup lang="ts">
+// 更新中心：管理版本更新横幅、强制更新遮罩，路由变化和登录态变化时重新检查更新
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUpdateStore } from '../stores/update'
@@ -37,7 +41,7 @@ const update = useUpdateStore()
 const auth = useAuthStore()
 const route = useRoute()
 
-const showBanner = computed(() => update.needsAttention && !update.state.forceUpdate)
+const showBanner = computed(() => update.needsAttention && !update.state.forceUpdate) // 非强更时显示横幅
 const bannerText = computed(() => {
   if (update.state.status === 'available') return `发现新版本 ${update.state.targetVersion || ''}`
   if (update.state.status === 'downloaded') return `新版本 ${update.state.targetVersion || ''} 已下载完成`

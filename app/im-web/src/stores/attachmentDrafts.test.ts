@@ -1,3 +1,6 @@
+/**
+ * 附件草稿 Store 单元测试：验证文件分类、大小校验、去重、会话隔离及资源释放逻辑。
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'

@@ -1,3 +1,4 @@
+<!-- 登录页：管理员账号密码登录，支持记住账号与回车快捷提交 -->
 <template>
   <div class="login-container">
     <el-card class="login-card">
@@ -47,8 +48,6 @@
 </template>
 
 <script setup lang="ts">
-// Intent: Login composes route-level UI behavior and data loading for this screen.
-
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -60,8 +59,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
-const loading = ref(false)
-const rememberAccount = ref(false)
+const loading = ref(false) // 登录按钮加载态
+const rememberAccount = ref(false) // 是否记住账号
 
 const form = reactive({
   username: '',
@@ -73,6 +72,7 @@ const rules: FormRules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+// 初始化时恢复已记住的账号，并清理历史遗留的密码缓存
 onMounted(() => {
   const savedUsername = localStorage.getItem('rememberedUsername')
   localStorage.removeItem('rememberedPassword')
@@ -82,6 +82,7 @@ onMounted(() => {
   }
 })
 
+/** 提交登录：校验表单后调用 authStore.login，成功则跳转首页 */
 async function handleLogin() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return

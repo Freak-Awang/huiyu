@@ -5,18 +5,18 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Intent: DeptVO carries API payload shape between client, controller, and service layers.
+ * 部门视图对象，以树形结构向客户端返回组织架构。
  */
 @Data
 public class DeptVO {
 
-    private Long id;
+    private Long id; // 部门ID
 
-    private String name;
+    private String name; // 部门名称
 
-    private Long parentId;
+    private Long parentId; // 父部门ID，顶级部门为空或0
 
-    private Integer sortOrder;
+    private Integer sortOrder; // 同级排序号
 
-    private List<DeptVO> children;
+    private List<DeptVO> children; // 子部门列表
 }

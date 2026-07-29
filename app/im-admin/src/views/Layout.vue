@@ -1,3 +1,4 @@
+<!-- 后台布局：左侧导航菜单 + 右侧内容区，底部显示当前登录管理员信息 -->
 <template>
   <el-container class="layout-container">
     <el-aside width="220px">
@@ -41,8 +42,6 @@
 </template>
 
 <script setup lang="ts">
-// Intent: Layout composes route-level UI behavior and data loading for this screen.
-
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { User, OfficeBuilding, UserFilled, Monitor } from '@element-plus/icons-vue'
@@ -52,8 +51,9 @@ import { useAuthStore } from '../stores/auth'
 const route = useRoute()
 const authStore = useAuthStore()
 
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => route.path) // 当前激活菜单项
 
+/** 退出登录：二次确认后调用 authStore.logout */
 async function handleLogout() {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {

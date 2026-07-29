@@ -1,3 +1,4 @@
+<!-- 聊天主界面：左侧导航栏 + 中间面板（会话列表/通讯录） + 右侧聊天区域（消息列表+输入框） -->
 <template>
   <div
     class="chat-layout"
@@ -6,7 +7,7 @@
       'dark-theme': settingsStore.general.theme === 'dark',
     }"
   >
-    <!-- Left Sidebar -->
+    <!-- 左侧导航栏：消息/通讯录切换、在线状态、设置、退出 -->
     <div class="left-sidebar">
       <div class="sidebar-nav">
         <div
@@ -75,7 +76,7 @@
       </div>
     </div>
 
-    <!-- Middle Panel -->
+    <!-- 中间面板：会话列表 或 通讯录 -->
     <div class="middle-panel">
       <!-- Chat List -->
       <template v-if="activeTab === 'chat'">
@@ -280,7 +281,7 @@
       </template>
     </div>
 
-    <!-- Right Panel -->
+    <!-- 右侧面板：聊天消息区 + 输入区 -->
     <div class="right-panel">
       <template v-if="chatStore.currentConversation">
         <div class="chat-header">
@@ -896,7 +897,7 @@
       </div>
     </div>
 
-    <!-- Create Conversation Dialog -->
+    <!-- 创建会话弹窗：单聊/群聊 -->
     <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
       <div class="dialog-box">
         <div class="dialog-header">
@@ -985,7 +986,7 @@
       </div>
     </div>
 
-    <!-- Image Preview -->
+    <!-- 图片预览全屏遮罩 -->
     <div v-if="previewImage" class="dialog-overlay preview-overlay" @click="previewImage = ''">
       <img :src="previewImage" class="preview-img" alt="预览" />
     </div>
@@ -1008,7 +1009,7 @@
 </template>
 
 <script setup lang="ts">
-// Intent: Chat composes route-level UI behavior and data loading for this screen.
+// 聊天主界面：管理会话列表、通讯录、消息收发、附件上传、表情/贴纸、@提及、WebSocket 通信、在线状态等核心功能
 
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
@@ -1105,28 +1106,28 @@ const updateStore = useUpdateStore()
 const userProfileStore = useUserProfileStore()
 const attachmentDraftStore = useAttachmentDraftStore()
 
-const activeTab = ref<'chat' | 'contacts'>('chat')
-const showSettingsDialog = ref(false)
-const showProfileDialog = ref(false)
+const activeTab = ref<'chat' | 'contacts'>('chat') // 左侧导航当前激活标签
+const showSettingsDialog = ref(false) // 设置弹窗可见性
+const showProfileDialog = ref(false) // 用户资料弹窗可见性
 const selectedProfileUserId = ref('')
 const selectedProfileFallback = ref<UserProfileSnapshot | null>(null)
 const selectedProfileUser = computed<any | null>(() => {
   if (!selectedProfileUserId.value) return null
   return userProfileStore.resolveProfile(selectedProfileFallback.value || selectedProfileUserId.value)
 })
-const searchKeyword = ref('')
-const contactSearchKeyword = ref('')
-const failedAvatars = ref(new Set<string>())
-const manualPresence = ref<PresenceStatus>('online')
-const presenceMenuOpen = ref(false)
-const wsConnected = ref(false)
+const searchKeyword = ref('') // 会话搜索关键词
+const contactSearchKeyword = ref('') // 通讯录搜索关键词
+const failedAvatars = ref(new Set<string>()) // 加载失败的头像 URL 集合
+const manualPresence = ref<PresenceStatus>('online') // 用户手动设置的在线状态
+const presenceMenuOpen = ref(false) // 在线状态菜单是否打开
+const wsConnected = ref(false) // WebSocket 连接状态
 
-let wsManager: WebSocketManager | null = null
-let removeNotificationOpenListener: (() => void) | null = null
-let idleTimer: ReturnType<typeof setTimeout> | null = null
-let autoAway = false
+let wsManager: WebSocketManager | null = null // WebSocket 管理器实例
+let removeNotificationOpenListener: (() => void) | null = null // 桌面通知点击回调清理函数
+let idleTimer: ReturnType<typeof setTimeout> | null = null // 空闲检测定时器（5分钟无操作自动离开）
+let autoAway = false // 是否因空闲自动设为离开状态
 
-// Filtered conversations
+// 根据搜索关键词过滤未置顶会话列表
 const filteredConversations = computed(() => {
   if (!searchKeyword.value) return chatStore.unpinnedConversations
   const kw = searchKeyword.value.toLowerCase()
@@ -1135,12 +1136,13 @@ const filteredConversations = computed(() => {
   )
 })
 
-// Dept tree
+// 部门树数据
 const deptTree = ref<DeptNode[]>([])
 const expandedDepts = ref(new Set<string>())
 const deptUsersMap = ref<Record<string, any[]>>({})
 const UNASSIGNED_DEPT_ID = '__unassigned__'
 
+// 加载部门树和未分配部门用户
 async function loadDeptTree() {
   const [deptRes, unassignedRes] = await Promise.all([
     getDeptTree(),
@@ -1163,6 +1165,7 @@ async function loadDeptTree() {
   deptUsersMap.value[UNASSIGNED_DEPT_ID] = unassignedUsers
 }
 
+// 初始化加载会话列表、通讯录和待处理消息
 async function loadInitialChatData() {
   const conversationTask = chatStore.fetchConversations().catch((err) => {
     console.warn('会话列表加载失败', err)
@@ -1179,6 +1182,7 @@ async function loadInitialChatData() {
   }
 }
 
+// 展开/折叠部门节点，首次展开时加载该部门用户
 async function toggleDept(deptId: string) {
   if (expandedDepts.value.has(deptId)) {
     expandedDepts.value.delete(deptId)
@@ -1196,7 +1200,7 @@ async function toggleDept(deptId: string) {
   }
 }
 
-// Contact search
+// 通讯录搜索（防抖 300ms）
 const searchedUsers = ref<any[]>([])
 let contactSearchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1218,6 +1222,7 @@ function onContactSearch() {
   }, 300)
 }
 
+// 创建或跳转单聊会话
 async function createSingleChat(user: any) {
   const userId = user.userId || user.id
   const myId = authStore.currentUser?.userId
@@ -1246,7 +1251,7 @@ async function createSingleChat(user: any) {
   }
 }
 
-// Select conversation
+// 消息区和输入框引用
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
@@ -1571,6 +1576,7 @@ function matchesAllMentionKeyword(keyword: string): boolean {
   return !keyword || '所有人'.includes(keyword) || 'all'.includes(keyword)
 }
 
+// 切换选中会话：加载消息、请求在线状态、关闭附属面板、滚动到底部
 async function handleSelectConv(conv: any) {
   if (isSendingMessage.value) {
     setAttachmentFeedback('附件发送完成后才能切换会话', true)
@@ -1590,6 +1596,7 @@ async function handleSelectConv(conv: any) {
   }
 }
 
+// 从剪贴板提取图片文件（支持 item 和 files 两种读取方式）
 function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
   const clipboardData = event.clipboardData
   if (!clipboardData) return []
@@ -1604,11 +1611,13 @@ function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
   return Array.from(clipboardData.files).filter((file) => file.type.startsWith('image/'))
 }
 
+// 设置附件操作反馈信息
 function setAttachmentFeedback(message: string, isError = false) {
   attachmentFeedback.value = message
   attachmentFeedbackIsError.value = isError
 }
 
+// 添加附件到当前会话的草稿列表，处理重复和错误
 function addAttachmentFiles(files: File[]) {
   const conversationId = chatStore.currentConversation?.conversationId
   if (!conversationId || !authStore.currentUser) {
@@ -1659,6 +1668,7 @@ function retryAttachmentDraft() {
   void handleSendMessage()
 }
 
+// 附件拖拽进入：检测文件拖拽，显示拖放提示
 function handleAttachmentDragEnter(event: DragEvent) {
   if (!hasFileDragPayload(event.dataTransfer)) return
   event.preventDefault()
@@ -1667,12 +1677,14 @@ function handleAttachmentDragEnter(event: DragEvent) {
   if (depth === 1) setAttachmentFeedback('松开以添加到当前会话')
 }
 
+// 附件拖拽悬停：允许 drop 操作
 function handleAttachmentDragOver(event: DragEvent) {
   if (!hasFileDragPayload(event.dataTransfer)) return
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
 
+// 附件拖拽离开：深度计数归零时隐藏拖放提示
 function handleAttachmentDragLeave(event: DragEvent) {
   if (!isAttachmentDragActive.value) return
   event.preventDefault()
@@ -1682,6 +1694,7 @@ function handleAttachmentDragLeave(event: DragEvent) {
   }
 }
 
+// 附件放置：提取文件添加到附件列表
 function handleAttachmentDrop(event: DragEvent) {
   if (!hasFileDragPayload(event.dataTransfer)) return
   event.preventDefault()
@@ -1711,6 +1724,7 @@ function handleWindowDragLeave(event: DragEvent) {
   if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
 }
 
+// 将 data URL 转换为 File 对象（用于截图场景）
 function dataUrlToFile(dataUrl: string, fileName: string): File {
   const [header, base64Data] = dataUrl.split(',')
   const mime = header.match(/^data:(.*?);base64$/)?.[1] || 'image/png'
@@ -1722,6 +1736,7 @@ function dataUrlToFile(dataUrl: string, fileName: string): File {
   return new File([bytes], fileName, { type: mime })
 }
 
+// 调用桌面截图 bridge，结果作为图片附件添加到当前会话
 async function takeScreenshot() {
   // 截图只在桌面 bridge 可用时进入 native flow，结果按图片草稿处理，沿用现有发送流程。
   if (!window.imDesktop?.startScreenshot || isTakingScreenshot.value) return
@@ -1758,6 +1773,7 @@ function handleMessagePaste(event: ClipboardEvent) {
   closeEmojiPanel()
 }
 
+// 切换会话置顶状态
 async function togglePin() {
   const conv = chatStore.currentConversation
   if (!conv) return
@@ -1770,6 +1786,7 @@ async function togglePin() {
   }
 }
 
+// 切换会话免打扰状态
 async function toggleMute() {
   const conv = chatStore.currentConversation
   if (!conv) return
@@ -1782,6 +1799,7 @@ async function toggleMute() {
   }
 }
 
+// 搜索聊天记录（优先本地搜索，回退服务端搜索）
 async function runChatSearch() {
   const conv = chatStore.currentConversation
   const keyword = chatSearchKeyword.value.trim()
@@ -1799,6 +1817,7 @@ async function runChatSearch() {
   }
 }
 
+// 打开群成员抽屉：刷新会话数据、加载群设置
 async function openMembersDrawer() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
@@ -1920,6 +1939,7 @@ function onGroupAnnouncementInput(event: Event) {
   groupSettingsStatus.value = ''
 }
 
+// 保存群设置（群名称、群公告）
 async function saveGroupSettings() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
@@ -1949,6 +1969,7 @@ async function saveGroupSettings() {
   }
 }
 
+// 获取成员显示名称（昵称 > 用户名 > 用户ID）
 function getMemberName(member: ConversationMember): string {
   const profile = getResolvedUser(member)
   return profile.nickname || profile.username || `用户${member.userId}`
@@ -1985,6 +2006,7 @@ function canTransferGroupOwner(member: ConversationMember): boolean {
     && member.role !== 'owner'
 }
 
+// 转让群主
 async function transferGroupOwner(member: ConversationMember) {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP' || !canTransferGroupOwner(member)) return
@@ -2048,6 +2070,7 @@ async function addGroupMember(user: any) {
   }
 }
 
+// 移除群成员或退出群聊
 async function removeGroupMember(member: ConversationMember) {
   const conv = chatStore.currentConversation
   if (!conv) return
@@ -2068,6 +2091,7 @@ async function removeGroupMember(member: ConversationMember) {
   }
 }
 
+// 消息输入事件：检测 @ 触发提及选择器
 function onMessageInput(event: Event) {
   pruneDraftMentions()
   const conv = chatStore.currentConversation
@@ -2089,6 +2113,7 @@ function onMessageInput(event: Event) {
   showEmojiPanel.value = false
 }
 
+// 消息输入键盘事件：Esc 关闭面板、方向键选择提及、Enter/Ctrl+Enter 发送
 function handleMessageKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && showEmojiPanel.value) {
     event.preventDefault()
@@ -2131,6 +2156,7 @@ function handleMessageKeydown(event: KeyboardEvent) {
   }
 }
 
+// 选中 @ 提及成员：替换输入框中的 @ 文本，记录提及信息
 function selectMention(member: ConversationMember) {
   const input = messageInputRef.value
   const cursor = input?.selectionStart ?? messageText.value.length
@@ -2165,6 +2191,7 @@ function closeMentionPicker() {
   mentionSelectedIndex.value = 0
 }
 
+// 清理草稿中的提及列表：移除文本中不再存在的 @ 提及
 function pruneDraftMentions(): MessageMention[] {
   const text = messageText.value
   const seen = new Set<string>()
@@ -2176,6 +2203,7 @@ function pruneDraftMentions(): MessageMention[] {
   return draftMentions.value
 }
 
+// 将消息文本拆分为普通文本和 @ 提及片段，用于高亮显示
 function renderTextSegments(msg: Message) {
   const text = msg.displayContent || msg.content
   const mentions = msg.mentions || []
@@ -2246,6 +2274,7 @@ function insertEmoji(emoji: string) {
   })
 }
 
+// 发送贴纸消息
 function sendSticker(sticker: Sticker) {
   const conv = chatStore.currentConversation
   if (!conv || !wsManager || !authStore.currentUser) {
@@ -2278,6 +2307,7 @@ function sendSticker(sticker: Sticker) {
   scrollToBottom(true)
 }
 
+// 从消息内容中解析贴纸信息（支持自定义和内置贴纸）
 function getStickerInfo(content: string): Sticker | null {
   const parsed = parseStickerContent(content)
   if (!parsed) return null
@@ -2287,6 +2317,7 @@ function getStickerInfo(content: string): Sticker | null {
   return parsed
 }
 
+// 获取图片 URL：通过认证下载后返回 Blob URL，支持缓存和加载中状态
 function getImageUrl(content: string): string {
   if (!content) return ''
   let fallback = content
@@ -2319,6 +2350,7 @@ function getImageUrl(content: string): string {
   return authenticatedImageUrls.value[fileId] || ''
 }
 
+// 解析消息内容中的文件信息
 function getFileInfo(content: string): { fileId: string; fileName: string; fileSize: number; url: string } {
   try {
     const parsed = JSON.parse(content)
@@ -2337,6 +2369,7 @@ function getFileInfo(content: string): { fileId: string; fileName: string; fileS
   return { fileId: '', fileName: '文件', fileSize: 0, url: '#' }
 }
 
+// 下载消息中的文件附件，支持进度显示和取消
 async function downloadMessageFile(content: string) {
   const file = getFileInfo(content)
   if (!file.fileId) return
@@ -2364,6 +2397,7 @@ async function downloadMessageFile(content: string) {
   }
 }
 
+// 获取文件下载按钮的显示文本（下载/百分比/取消）
 function getFileDownloadLabel(content: string) {
   const fileId = getFileInfo(content).fileId
   if (!fileId || !(fileId in fileDownloadProgress.value)) return '下载'
@@ -2371,6 +2405,7 @@ function getFileDownloadLabel(content: string) {
   return progress > 0 ? `${Math.round(progress * 100)}%` : '取消'
 }
 
+// 清理所有已认证图片的 Blob URL，切换会话时调用
 function clearAuthenticatedImages() {
   imageLoadGeneration += 1
   Object.values(authenticatedImageUrls.value).forEach((url) => URL.revokeObjectURL(url))
@@ -2378,16 +2413,19 @@ function clearAuthenticatedImages() {
   imageLoadsInProgress.clear()
 }
 
+// 记录最近使用的 Emoji
 function rememberEmoji(emoji: string) {
   recentEmojis.value = [emoji, ...recentEmojis.value.filter((item) => item !== emoji)].slice(0, 24)
   localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(recentEmojis.value))
 }
 
+// 记录最近使用的贴纸
 function rememberSticker(sticker: Sticker) {
   recentStickers.value = [sticker, ...recentStickers.value.filter((item) => item.id !== sticker.id)].slice(0, 12)
   localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => stickerStorageKey(item))))
 }
 
+// 从 localStorage 加载最近使用的 Emoji 和贴纸
 function loadRecentEmojiState() {
   try {
     const storedEmojis = JSON.parse(localStorage.getItem(RECENT_EMOJIS_KEY) || '[]')
@@ -2427,6 +2465,7 @@ function findStickerByStorageKey(key: string): Sticker | undefined {
     : STICKERS.find((sticker) => sticker.id === id)
 }
 
+// 将自定义贴纸记录转换为 Sticker 对象（生成 Blob URL）
 function toCustomSticker(record: CustomStickerRecord): Sticker {
   return {
     id: record.id,
@@ -2441,6 +2480,7 @@ function toCustomSticker(record: CustomStickerRecord): Sticker {
   }
 }
 
+// 释放所有自定义贴纸的 Blob URL
 function revokeCustomStickerUrls() {
   for (const sticker of customStickers.value) {
     if (sticker.url?.startsWith('blob:')) {
@@ -2449,6 +2489,7 @@ function revokeCustomStickerUrls() {
   }
 }
 
+// 加载自定义贴纸列表
 async function loadCustomStickerState() {
   customStickerError.value = ''
   try {
@@ -2509,6 +2550,7 @@ function handleLocalCacheCleared() {
   }
 }
 
+// 处理文档全局点击：关闭在线状态菜单和表情面板
 function handleDocumentMouseDown(event: MouseEvent) {
   const target = event.target as Node
   if (presenceMenuOpen.value && !(target instanceof Element && target.closest('.presence-menu, .presence-switch'))) {
@@ -2523,12 +2565,14 @@ function handleDocumentMouseDown(event: MouseEvent) {
 }
 
 // Scroll
+// 判断消息区是否接近底部（用于自动滚动和已读标记）
 function isMessageAreaNearBottom() {
   const el = messageAreaRef.value
   if (!el) return false
   return el.scrollHeight - el.scrollTop - el.clientHeight <= 24
 }
 
+// 获取当前会话最后一条有 messageId 的消息
 function getLastReadableMessageId() {
   const lastMessage = [...chatStore.currentMessages].reverse().find((msg) => !!msg.messageId)
   return lastMessage?.messageId || ''
@@ -2550,6 +2594,7 @@ function markCurrentConversationReadAtBottom() {
   }
 }
 
+// 滚动消息区到底部并标记已读
 function scrollToBottom(markRead = false) {
   nextTick(() => {
     const el = messageAreaRef.value
@@ -2562,6 +2607,7 @@ function scrollToBottom(markRead = false) {
   })
 }
 
+// 消息滚动事件：滚动到顶部加载历史消息，滚动到底部标记已读
 async function onMessageScroll() {
   // 顶部触发历史分页，底部触发已读；两者都依赖当前滚动位置而不是额外按钮。
   const el = messageAreaRef.value
@@ -2586,6 +2632,7 @@ async function onMessageScroll() {
 }
 
 // Send message
+// 通过 WebSocket 发送消息，发送失败标记 FAILED 状态
 function sendOutgoingMessage(msg: Message) {
   // Local optimistic messages enter the store first; this method only owns WebSocket delivery and failure marking.
   if (!wsManager || !wsConnected.value || !wsManager.isConnected()) {
@@ -2609,11 +2656,13 @@ function sendOutgoingMessage(msg: Message) {
   return sent
 }
 
+// 重试发送失败的消息
 function retryMessage(msg: Message) {
   if (!msg.clientMsgId) return
   sendOutgoingMessage(msg)
 }
 
+// 获取消息的回复预览文本
 function messageReplyText(msg: Message): string {
   if (msg.status === 'RECALLED') return '消息已撤回'
   if (msg.displayContent) return msg.displayContent
@@ -2623,6 +2672,7 @@ function messageReplyText(msg: Message): string {
   return msg.content || ''
 }
 
+// 开始回复某条消息
 function startReply(msg: Message) {
   if (!msg.messageId || msg.status === 'RECALLED') return
   replyTarget.value = {
@@ -2633,6 +2683,7 @@ function startReply(msg: Message) {
   messageInputRef.value?.focus()
 }
 
+// 判断当前用户是否可以在 2 分钟内撤回该消息
 function canRecallMessage(msg: Message): boolean {
   if (!msg.messageId || msg.status === 'RECALLED' || msg.status === 'FAILED') return false
   if (msg.senderId !== authStore.currentUser?.userId) return false
@@ -2640,6 +2691,7 @@ function canRecallMessage(msg: Message): boolean {
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 2 * 60 * 1000
 }
 
+// 获取消息已读回执文本（群聊显示已读人数，单聊显示已读/未读）
 function getReadReceiptText(msg: Message): string {
   const conv = chatStore.currentConversation
   if (!conv || msg.senderId !== authStore.currentUser?.userId) return ''
@@ -2653,6 +2705,7 @@ function getReadReceiptText(msg: Message): string {
   return msg.readStatus || readCount >= recipientCount ? '已读' : '未读'
 }
 
+// 撤回消息
 async function recallCurrentMessage(msg: Message) {
   if (!msg.messageId) return
   try {
@@ -2663,6 +2716,7 @@ async function recallCurrentMessage(msg: Message) {
   }
 }
 
+// 构建并发送文本消息（含 @ 提及和回复）
 function sendTextMessage(
   conv: Conversation | null = chatStore.currentConversation,
   user: UserInfo | null = authStore.currentUser,
@@ -2704,6 +2758,7 @@ function sendTextMessage(
   return true
 }
 
+// 主发送入口：先处理附件队列，再发送文本消息
 async function handleSendMessage() {
   if (isSendingMessage.value) return
   const hasText = !!messageText.value.trim()
@@ -2730,6 +2785,7 @@ async function handleSendMessage() {
   }
 }
 
+// 处理单个附件草稿的上传（图片直接上传，文件走分片传输）
 async function processAttachmentDraft(
   draft: AttachmentDraft,
   conversation: Conversation,
@@ -2822,6 +2878,7 @@ function onSendFile(e: Event) {
   input.value = ''
 }
 
+// 构建并发送图片/文件消息
 function sendMediaMessage(
   type: string,
   content: string,
@@ -2854,6 +2911,7 @@ function sendMediaMessage(
 }
 
 // WebSocket message handler
+// WebSocket 消息分发处理：接收消息、更新消息、会话变更、ACK、已读回执、在线状态、用户更新
 async function handleWsMessage(msg: WsMessage) {
   switch (msg.cmd) {
     case 'MESSAGE_RECEIVE': {
@@ -2988,6 +3046,7 @@ async function handleWsMessage(msg: WsMessage) {
   }
 }
 
+// 初始化 WebSocket 连接：登录后建立连接、上报在线状态、拉取会话和消息
 function initWebSocket() {
   // Reinitialization tears down stale managers first so login changes and reconnects cannot reuse old user state.
   if (!authStore.isLoggedIn) return
@@ -3016,6 +3075,7 @@ function initWebSocket() {
   wsManager.connect()
 }
 
+// 判断是否应该弹出桌面通知（免打扰、静音、仅 @ 我等条件判断）
 function shouldNotifyMessage(message: Message, conversation: Conversation) {
   const notification = settingsStore.notification
   if (selfPresence.value === 'dnd') return false
@@ -3031,6 +3091,7 @@ function messageMentionsCurrentUser(message: Message) {
   return message.mentions.some((mention) => mention.userId === currentUserId || isAllMention(mention))
 }
 
+// 显示桌面通知（优先使用桌面 bridge，回退到浏览器 Notification API）
 async function showDesktopNotification(title: string, body: string, conversationId: string) {
   if (window.imDesktop?.showMessageNotification) {
     await window.imDesktop.showMessageNotification({ title, body, conversationId }).catch(() => false)
@@ -3184,6 +3245,7 @@ function updateUnreadBadge() {
   })
 }
 
+// 通过通知点击跳转到指定会话
 async function openConversationFromNotification(conversationId: string) {
   if (!conversationId) return
   activeTab.value = 'chat'
@@ -3196,6 +3258,7 @@ async function openConversationFromNotification(conversationId: string) {
   }
 }
 
+// 退出登录：断开 WebSocket、清除未读标记、跳转到登录页
 async function handleLogout() {
   wsManager?.disconnect()
   if (window.imDesktop?.setUnreadBadge) {
@@ -3206,6 +3269,7 @@ async function handleLogout() {
   router.push('/login')
 }
 
+// 组件挂载：加载贴纸、注册全局事件、初始化认证、加载设置和数据、启动 WebSocket
 onMounted(async () => {
   await loadCustomStickerState()
   document.addEventListener('mousedown', handleDocumentMouseDown)
@@ -3235,6 +3299,7 @@ onMounted(async () => {
   }
 })
 
+// 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
   void updateStore.setTransferCount(0)
   document.removeEventListener('mousedown', handleDocumentMouseDown)
@@ -3258,8 +3323,8 @@ onUnmounted(() => {
   wsManager?.disconnect()
 })
 
+// 监听会话切换：重置相关状态、清理图片缓存、关闭面板
 watch(
-  () => chatStore.currentConversation?.conversationId,
   () => {
     lastMarkedReadMessageId = ''
     showMembersDrawer.value = false
@@ -3277,8 +3342,8 @@ watch(
   }
 )
 
+// 监听登录状态变化：登录时初始化数据，登出时清理
 watch(
-  () => authStore.isLoggedIn,
   (val) => {
     if (val) {
       applySelfPresence(manualPresence.value)
@@ -3295,12 +3360,13 @@ watch(
   }
 )
 
+// 监听未读消息总数变化，更新系统托盘角标
 watch(totalUnreadCount, () => {
   updateUnreadBadge()
 })
 
+// 监听关闭行为设置变化，同步到桌面 bridge
 watch(
-  () => settingsStore.general.closeBehavior,
   (behavior) => {
     if (window.imDesktop?.setCloseBehavior) {
       window.imDesktop.setCloseBehavior(behavior).catch(() => false)

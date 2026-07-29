@@ -10,11 +10,20 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * 本地文件存储客户端测试，验证 Range 读取和分片合并。
+ *
+ * <p>使用 @TempDir 在临时目录中测试，验证 LocalFileStorageClient 的 save/open/compose 方法。</p>
+ */
 class LocalFileStorageClientTest {
 
     @TempDir
     Path tempDir;
 
+    /**
+     * 验证 open 方法的 Range 读取：offset=2、length=4 时只返回 "2345"，
+     * StoredObject.size 为实际返回的字节数。
+     */
     @Test
     void rangeStreamStopsAtRequestedLength() throws Exception {
         LocalFileStorageClient client = client();
@@ -27,6 +36,9 @@ class LocalFileStorageClientTest {
         assertThat(object.getSize()).isEqualTo(4L);
     }
 
+    /**
+     * 验证 compose 按提供顺序合并分片："hello " + "world" = "hello world"。
+     */
     @Test
     void composeJoinsChunksInProvidedOrder() throws Exception {
         LocalFileStorageClient client = client();

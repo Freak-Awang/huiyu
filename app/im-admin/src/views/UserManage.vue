@@ -1,10 +1,12 @@
+<!-- 用户管理页：用户列表分页查询、新增/编辑、状态启停、重置密码与删除 -->
 <template>
   <div class="user-manage">
     <el-card>
+      <!-- 搜索栏：关键字 + 状态筛选 -->
       <div class="search-bar">
         <el-input
           v-model="searchKeyword"
-          placeholder="输入用户名/昵称/邮箱搜索"
+          placeholder="输入用户名/昵称"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
@@ -26,6 +28,7 @@
         </el-button>
       </div>
 
+      <!-- 用户列表表格 -->
       <el-table :data="tableData" v-loading="tableLoading" border stripe>
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="username" label="用户名" min-width="120" />
@@ -82,6 +85,7 @@
       </div>
     </el-card>
 
+    <!-- 新增/编辑用户弹窗 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑用户' : '新增用户'"
@@ -147,6 +151,7 @@
       </template>
     </el-dialog>
 
+    <!-- 重置密码弹窗 -->
     <el-dialog
       v-model="resetPasswordVisible"
       title="重置密码"
@@ -191,8 +196,6 @@
 </template>
 
 <script setup lang="ts">
-// Intent: UserManage composes route-level UI behavior and data loading for this screen.
-
 import { ref, reactive } from 'vue'
 import { Search, Plus, Edit, Delete, Key } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

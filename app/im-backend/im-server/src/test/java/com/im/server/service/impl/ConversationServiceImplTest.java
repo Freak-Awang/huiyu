@@ -40,6 +40,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 会话服务测试，验证 @所有人 未读计数、成员角色管理、群创建/头像/转让等核心业务逻辑。
+ *
+ * <p>测试范围：ConversationServiceImpl 的 getById（未读计数）、updateMemberRole（角色管理）、
+ * createConversation（默认头像状态）、updateAvatar/restoreDefaultAvatar（头像管理）、
+ * transferOwner（群主转让）。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ConversationServiceImplTest {
 
@@ -70,6 +77,9 @@ class ConversationServiceImplTest {
     @InjectMocks
     private ConversationServiceImpl conversationService;
 
+    /**
+     * 验证 @所有人 消息计入 mentionUnreadCount，且成员签名正确填充。
+     */
     @Test
     void allMentionCountsAsMentionUnreadForGroupMember() {
         ImConversationMember selfMember = member(11L, "member");
@@ -96,6 +106,9 @@ class ConversationServiceImplTest {
                 assertThat(member.getSignature()).isEqualTo("签名" + member.getUserId()));
     }
 
+    /**
+     * 验证群主可以将普通成员提升为管理员，更新后角色为 admin。
+     */
     @Test
     void ownerCanPromoteMemberToAdmin() {
         ImConversationMember owner = member(10L, "owner");
@@ -115,10 +128,13 @@ class ConversationServiceImplTest {
                 assertThat(member.getRole()).isEqualTo("admin"));
     }
 
+    /**
+     * 验证管理员无权修改成员角色，抛出 403。
+     */
     @Test
     void adminCannotUpdateMemberRoles() {
         when(conversationMapper.selectOne(any())).thenReturn(conversation());
-        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "admin"));
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "admin")); // 操作者是 admin
 
         assertThatThrownBy(() -> conversationService.updateMemberRole(1L, 11L, 10L, roleRequest("admin")))
                 .isInstanceOf(BusinessException.class)
@@ -127,10 +143,13 @@ class ConversationServiceImplTest {
                 .isEqualTo(403);
     }
 
+    /**
+     * 验证新建群聊时头像状态初始化为 default，canEditAvatar=true，ownerId 正确。
+     */
     @Test
     void newGroupStartsWithFixedDefaultAvatarState() {
         CreateConversationRequest request = new CreateConversationRequest();
-        request.setType(2);
+        request.setType(2); // 群聊
         request.setName("项目讨论群");
         request.setMemberIds(List.of(11L));
         ImConversationMember owner = member(10L, "owner");
@@ -153,6 +172,10 @@ class ConversationServiceImplTest {
         assertThat(vo.getCanEditAvatar()).isTrue();
     }
 
+    /**
+     * 验证群主上传群头像成功，返回 avatarType=custom、avatar 下载 URL、
+     * avatarUpdatedBy 为操作者 ID，且 conversation 被 updateById。
+     */
     @Test
     void ownerCanUploadGroupAvatar() {
         ImConversation conversation = conversation();
@@ -178,6 +201,9 @@ class ConversationServiceImplTest {
         verify(conversationMapper).updateById(conversation);
     }
 
+    /**
+     * 验证非群主上传群头像被拒绝，返回 403，且不会调用 uploadGroupAvatarFile。
+     */
     @Test
     void nonOwnerCannotUploadGroupAvatar() {
         ImConversation conversation = conversation();
@@ -193,10 +219,14 @@ class ConversationServiceImplTest {
         verify(fileUploadService, never()).uploadGroupAvatarFile(any(), anyLong(), anyLong());
     }
 
+    /**
+     * 验证对已是默认头像的群恢复默认头像为幂等操作：avatarUpdatedAt=null，
+     * 不调用 updateById 也不触发旧文件清理。
+     */
     @Test
     void restoringAnAlreadyDefaultAvatarIsIdempotent() {
         ImConversation conversation = conversation();
-        conversation.setAvatarType("default");
+        conversation.setAvatarType("default"); // 已是默认头像
         ImConversationMember owner = member(10L, "owner");
         when(conversationMapper.selectOne(any())).thenReturn(conversation);
         when(conversationMemberMapper.selectOne(any())).thenReturn(owner);
@@ -211,6 +241,10 @@ class ConversationServiceImplTest {
         verify(fileRetentionService, never()).retireFile(anyLong());
     }
 
+    /**
+     * 验证群主转让：ownerId 变更、旧群主降为 member、新群主升为 owner、
+     * 头像保留、旧群主 canEditAvatar=false。
+     */
     @Test
     void transferOwnerKeepsAvatarAndMovesEditPermission() {
         ImConversation conversation = conversation();
@@ -229,11 +263,11 @@ class ConversationServiceImplTest {
 
         ConversationVO oldOwnerView = conversationService.transferOwner(1L, 10L, request);
 
-        assertThat(conversation.getOwnerId()).isEqualTo(11L);
-        assertThat(conversation.getAvatar()).isEqualTo("/api/files/download/88");
-        assertThat(oldOwner.getRole()).isEqualTo("member");
-        assertThat(newOwner.getRole()).isEqualTo("owner");
-        assertThat(oldOwnerView.getCanEditAvatar()).isFalse();
+        assertThat(conversation.getOwnerId()).isEqualTo(11L); // 新群主
+        assertThat(conversation.getAvatar()).isEqualTo("/api/files/download/88"); // 头像保留
+        assertThat(oldOwner.getRole()).isEqualTo("member"); // 旧群主降级
+        assertThat(newOwner.getRole()).isEqualTo("owner"); // 新群主升级
+        assertThat(oldOwnerView.getCanEditAvatar()).isFalse(); // 旧群主失去编辑权限
         verify(conversationMemberMapper).updateById(eq(oldOwner));
         verify(conversationMemberMapper).updateById(eq(newOwner));
     }

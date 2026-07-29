@@ -3,18 +3,18 @@ package com.im.common.dto;
 import lombok.Data;
 
 /**
- * Intent: MemberVO carries API payload shape between client, controller, and service layers.
+ * 会话成员视图对象，向客户端返回成员的基本信息与群内角色。
  */
 @Data
 public class MemberVO {
 
-    private Long userId;
+    private Long userId; // 用户ID
 
-    private String nickname;
+    private String nickname; // 用户昵称
 
-    private String avatar;
+    private String avatar; // 用户头像地址
 
-    private String signature;
+    private String signature; // 用户个性签名
 
-    private String role;
+    private String role; // 群内角色（如群主/管理员/普通成员）
 }

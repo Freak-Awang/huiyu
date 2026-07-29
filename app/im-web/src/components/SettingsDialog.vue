@@ -1,3 +1,4 @@
+<!-- 设置弹窗：通用设置/消息通知/存储管理/关于页面，支持主题切换、快捷键、缓存清理、版本更新 -->
 <template>
   <div class="settings-overlay" @click.self="emit('close')">
     <div class="settings-dialog">
@@ -189,8 +190,7 @@
 </template>
 
 <script setup lang="ts">
-// Intent: SettingsDialog contains reusable UI behavior with local interaction state.
-
+// 设置弹窗：管理通用设置、消息通知、存储管理和版本信息四个面板
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
@@ -215,7 +215,7 @@ type SectionKey = 'general' | 'notification' | 'storage' | 'about'
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const updateStore = useUpdateStore()
-const activeSection = ref<SectionKey>('general')
+const activeSection = ref<SectionKey>('general') // 当前激活的设置面板
 const storageStats = ref<LocalMessageStats | null>(null)
 const statusText = ref('')
 
@@ -257,6 +257,7 @@ onMounted(() => {
 })
 
 async function saveGeneral(patch: Partial<GeneralSettings>) {
+  // 保存通用设置并显示状态提示
   try {
     await settingsStore.updateGeneral(patch)
     flashStatus('已保存')
@@ -266,6 +267,7 @@ async function saveGeneral(patch: Partial<GeneralSettings>) {
 }
 
 async function saveNotification(patch: Partial<NotificationSettings>) {
+  // 保存通知设置
   try {
     await settingsStore.updateNotification(patch)
     flashStatus('已保存')
@@ -275,10 +277,12 @@ async function saveNotification(patch: Partial<NotificationSettings>) {
 }
 
 async function loadStorageStats() {
+  // 加载本地消息存储统计
   storageStats.value = await getLocalMessageStats()
 }
 
 async function clearLocalCache() {
+  // 清理本地聊天缓存（仅本设备，不影响服务器数据）
   if (!confirm('仅清理当前设备的本地聊天缓存，不会删除服务器聊天记录。确定清理吗？')) return
   const ok = await clearLocalMessages()
   if (!ok) {
@@ -291,17 +295,20 @@ async function clearLocalCache() {
 }
 
 function clearRecentCache() {
+  // 清理最近使用的表情和贴纸记录
   clearRecentUsageCache()
   emit('recentCacheCleared')
   flashStatus('最近使用记录已清理')
 }
 
+// 格式化字节大小为可读字符串
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+// 短暂显示状态文本后自动清除
 function flashStatus(text: string) {
   statusText.value = text
   window.setTimeout(() => {

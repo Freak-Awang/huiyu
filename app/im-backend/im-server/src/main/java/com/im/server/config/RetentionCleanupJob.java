@@ -7,7 +7,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Intent: RetentionCleanupJob centralizes framework configuration so infrastructure behavior stays explicit.
+ * 文件保留策略清理定时任务。
+ * <p>
+ * 按 Cron 表达式定时执行，清理过期的临时文件和上传任务。
+ * 清理失败仅记录日志，不影响应用正常运行。
+ * </p>
  */
 @Component
 public class RetentionCleanupJob {
@@ -20,6 +24,13 @@ public class RetentionCleanupJob {
         this.fileRetentionService = fileRetentionService;
     }
 
+    /**
+     * 定时清理过期文件和上传任务。
+     * <p>
+     * 默认每天凌晨 3:15 执行，可通过 {@code retention.cleanup.cron} 配置。
+     * 清理失败仅记录日志，不影响应用正常运行。
+     * </p>
+     */
     @Scheduled(cron = "${retention.cleanup.cron:0 15 3 * * *}")
     public void cleanupExpiredContent() {
         try {

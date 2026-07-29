@@ -1,4 +1,9 @@
-// Intent: emoji groups static UI data that is reused across chat interactions.
+/**
+ * 表情分组常量
+ *
+ * 定义聊天交互中使用的内置表情分组数据，按"常用/表情/手势/符号"分类。
+ * 供表情选择器组件渲染，复用静态 UI 数据。
+ */
 export interface EmojiGroup {
   name: string
   emojis: string[]

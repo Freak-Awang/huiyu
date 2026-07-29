@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Intent: UserServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 用户服务实现：处理用户资料维护、密码管理、账号禁用及用户变更广播。
  */
 @Service
 public class UserServiceImpl implements UserService {
@@ -119,6 +119,12 @@ public class UserServiceImpl implements UserService {
         return user;
     }
 
+    /**
+     * 更新用户信息。
+     * <p>
+     * 递增 tokenVersion 使旧 Token 失效，并强制关闭该用户所有 WebSocket 会话，
+     * 确保资料变更后客户端重新认证。
+     */
     @Override
     public SysUser update(SysUser user) {
         SysUser current = getById(user.getId());
@@ -132,6 +138,11 @@ public class UserServiceImpl implements UserService {
         return saved;
     }
 
+    /**
+     * 删除用户（软删除）。
+     * <p>
+     * 将状态置为禁用并递增 tokenVersion，强制用户下线。
+     */
     @Override
     public void delete(Long id) {
         SysUser user = getById(id);

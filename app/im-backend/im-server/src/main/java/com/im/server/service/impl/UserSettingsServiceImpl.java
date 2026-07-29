@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
- * Intent: UserSettingsServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 用户设置服务实现：处理客户端个性化设置的读取、合并与持久化。
  */
 @Service
 public class UserSettingsServiceImpl implements UserSettingsService {

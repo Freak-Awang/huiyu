@@ -20,7 +20,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Intent: JwtAuthenticationFilter centralizes framework configuration so infrastructure behavior stays explicit.
+ * JWT 认证过滤器。
+ * <p>
+ * 在 Spring Security 过滤链中拦截请求，解析 Authorization 头中的 Bearer Token，
+ * 验证 Token 有效性（未过期、未撤销、用户状态正常、Token 版本匹配），
+ * 并将认证信息写入 SecurityContext。登录、WebSocket、文件下载等路径放行。
+ * </p>
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -33,6 +38,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.authenticationService = authenticationService;
     }
 
+    /**
+     * 判断当前请求是否跳过 JWT 过滤。
+     * <p>
+     * 放行 OPTIONS 预检请求、登录接口和 WebSocket 握手路径。
+     * 文件下载接口不过滤，由下游自行处理可选的 Bearer Token。
+     * </p>
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         // Downloads pass through this filter so a valid optional bearer token can authorize conversation files.
@@ -42,6 +54,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.startsWith("/ws/");
     }
 
+    /**
+     * 执行 JWT 认证过滤逻辑。
+     * <p>
+     * 解析 Bearer Token，验证有效性后构建 Authentication 写入 SecurityContext；
+     * 对公共更新策略接口和文件下载接口允许无 Token 访问；
+     * Token 缺失或无效时返回 401 JSON 响应。
+     * </p>
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -49,10 +69,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            // 公共客户端更新策略接口允许匿名访问
             if (isPublicClientUpdateEndpoint(request) && authHeader == null) {
                 filterChain.doFilter(request, response);
                 return;
             }
+            // 文件下载接口允许匿名访问（由下游鉴权）
             if (isFileDownload(request) && authHeader == null) {
                 filterChain.doFilter(request, response);
                 return;
@@ -74,6 +96,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        // 将认证用户信息写入 SecurityContext，同时设置角色和 ROLE_ 前缀权限
         String userId = authenticatedUser.userId() != null ? String.valueOf(authenticatedUser.userId()) : null;
         if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             List<SimpleGrantedAuthority> authorities = new ArrayList<>();
@@ -91,6 +114,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * 判断是否为文件下载请求（GET/HEAD）。
+     */
     private boolean isFileDownload(HttpServletRequest request) {
         String path = request.getRequestURI();
         String method = request.getMethod();
@@ -98,6 +124,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
     }
 
+    /**
+     * 判断是否为公共客户端更新策略查询接口。
+     */
     private boolean isPublicClientUpdateEndpoint(HttpServletRequest request) {
         String path = request.getRequestURI();
         return path.equals("/api/client/releases/policy");

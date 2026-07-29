@@ -29,6 +29,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 客户端版本发布服务实现：处理版本策略评估、灰度发布、定向规则及更新事件统计。
+ */
 @Service
 public class ClientReleaseServiceImpl implements ClientReleaseService {
     private static final Set<String> CHANNELS = Set.of("stable", "beta");
@@ -51,6 +54,12 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         this.userMapper = userMapper;
     }
 
+    /**
+     * 评估客户端更新策略。
+     * <p>
+     * 核心逻辑：先按渠道/平台/架构找到最新已发布版本，再依次检查 DENY 定向规则、
+     * 最低支持版本强制更新、ALLOW 定向规则及灰度百分比，最终决定是否放行更新。
+     */
     @Override
     public PolicyResponse evaluatePolicy(String platform, String arch, String channel, String currentVersion,
                                          String deviceId, Long userId) {
@@ -88,6 +97,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
                 release.getUpdateBaseUrl(), normalizedChannel);
     }
 
+    /**
+     * 记录客户端更新事件。
+     */
     @Override
     public void recordEvent(UpdateEventRequest request, Long userId) {
         if (request == null || !EVENT_TYPES.contains(normalize(request.eventType()))) {
@@ -110,6 +122,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         eventMapper.insert(event);
     }
 
+    /**
+     * 分页查询版本发布记录。
+     */
     @Override
     public ReleasePage page(String channel, String status, int page, int pageSize) {
         LambdaQueryWrapper<ImClientRelease> query = new LambdaQueryWrapper<>();
@@ -126,6 +141,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return new ReleasePage(result.getRecords(), result.getTotal(), safePage, safeSize);
     }
 
+    /**
+     * 查询版本发布详情。
+     */
     @Override
     public ReleaseDetail get(Long id) {
         ImClientRelease release = releaseMapper.selectById(id);
@@ -133,6 +151,11 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return new ReleaseDetail(release, targets(id));
     }
 
+    /**
+     * 保存版本发布草稿。
+     * <p>
+     * 已发布/暂停/被替换的版本不允许修改安装包信息，只能修改发布名称、说明等元数据。
+     */
     @Override
     @Transactional
     public ReleaseDetail save(ReleaseRequest request, Long operatorId) {
@@ -169,6 +192,11 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return get(release.getId());
     }
 
+    /**
+     * 发布版本。
+     * <p>
+     * 同渠道/平台/架构下只允许一个 PUBLISHED 版本，新版本发布会将旧版本置为 REPLACED。
+     */
     @Override
     @Transactional
     public ReleaseDetail publish(Long id, Long operatorId) {
@@ -197,6 +225,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return get(id);
     }
 
+    /**
+     * 暂停已发布版本。
+     */
     @Override
     public ReleaseDetail pause(Long id) {
         ImClientRelease release = get(id).release();
@@ -207,6 +238,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return get(id);
     }
 
+    /**
+     * 统计版本更新事件数据。
+     */
     @Override
     public Map<String, Object> statistics(Long id) {
         ImClientRelease release = get(id).release();
@@ -278,6 +312,12 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return false;
     }
 
+    /**
+     * 计算设备在指定版本下的灰度分桶值（0-99）。
+     * <p>
+     * 使用 SHA-256(deviceId:version) 的前 4 字节取模 100，保证同一设备在同一版本下
+     * 分桶结果稳定，且不同版本之间分桶独立。
+     */
     private int rolloutBucket(String deviceId, String version) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")

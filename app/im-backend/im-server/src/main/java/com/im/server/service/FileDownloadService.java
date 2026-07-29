@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
 /**
- * Intent: FileDownloadService owns download authorization, storage reads, and download counters.
+ * 文件下载服务：负责下载权限校验、存储读取及下载计数。
  */
 @Service
 public class FileDownloadService {
@@ -36,6 +36,14 @@ public class FileDownloadService {
         this.storageRouter = storageRouter;
     }
 
+    /**
+     * 获取可下载的文件元数据，校验文件存在、可用、未过期且用户有权限。
+     *
+     * @param userId 下载用户 ID，可为空（匿名下载公开文件）
+     * @param fileId 文件 ID
+     * @return 文件元数据
+     * @throws BusinessException 文件不存在、不可用、已过期或无权限时抛出
+     */
     public ImFile getDownloadableFile(Long userId, Long fileId) {
         ImFile imFile = metadataService.getById(fileId);
         if (imFile == null) {
@@ -53,11 +61,26 @@ public class FileDownloadService {
         return imFile;
     }
 
+    /**
+     * 获取文件大小。
+     *
+     * @param fileId 文件 ID
+     * @return 文件字节数，文件不存在时返回 0
+     */
     public long getFileSize(Long fileId) {
         ImFile file = metadataService.getById(fileId);
         return file != null && file.getFileSize() != null ? file.getFileSize() : 0L;
     }
 
+    /**
+     * 打开文件流，支持 Range 分片读取。
+     *
+     * @param file 文件元数据
+     * @param offset 起始偏移量
+     * @param length 读取长度，null 表示读到末尾
+     * @return 存储对象
+     * @throws BusinessException 存储读取失败时抛出
+     */
     public StoredObject openFile(ImFile file, long offset, Long length) {
         try {
             FileStorageClient storageClient = storageRouter.clientFor(file.getStorageType(), file.getBucket());
@@ -67,6 +90,11 @@ public class FileDownloadService {
         }
     }
 
+    /**
+     * 增加文件下载计数。
+     *
+     * @param fileId 文件 ID
+     */
     public void incrementDownloadCount(Long fileId) {
         metadataService.incrementDownloadCount(fileId);
     }

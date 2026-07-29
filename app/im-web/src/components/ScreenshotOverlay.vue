@@ -1,3 +1,4 @@
+<!-- 截图覆盖层：全屏截图预览，支持鼠标框选区域、确认/取消/重新框选 -->
 <template>
   <div
     ref="overlayRef"
@@ -28,8 +29,7 @@
 </template>
 
 <script setup lang="ts">
-// Intent: ScreenshotOverlay contains reusable UI behavior with local interaction state.
-
+// 截图覆盖层：管理截图预览、鼠标框选选区、工具栏定位、确认/取消操作
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 interface Rect {
@@ -41,12 +41,12 @@ interface Rect {
 
 const overlayRef = ref<HTMLElement | null>(null)
 const imageRef = ref<HTMLImageElement | null>(null)
-const screenshotDataUrl = ref('')
-const selection = ref<Rect | null>(null)
-const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
-const isSelectionMode = ref(false)
-const isDragging = ref(false)
-const dragStart = ref({ x: 0, y: 0 })
+const screenshotDataUrl = ref('') // 截图数据 URL
+const selection = ref<Rect | null>(null) // 当前选区矩形
+const viewport = ref({ width: window.innerWidth, height: window.innerHeight }) // 视口尺寸
+const isSelectionMode = ref(false) // 是否处于框选模式
+const isDragging = ref(false) // 是否正在拖拽框选
+const dragStart = ref({ x: 0, y: 0 }) // 框选起始坐标
 
 const TOOLBAR_WIDTH = 286
 const TOOLBAR_HEIGHT = 44
@@ -66,6 +66,7 @@ const selectionStyle = computed(() => {
   }
 })
 
+// 根据当前视口计算工具栏的定位位置
 const toolbarStyle = computed(() => {
   const rect = selection.value
   let left = viewport.value.width / 2 - TOOLBAR_WIDTH / 2
@@ -89,6 +90,7 @@ const toolbarStyle = computed(() => {
   }
 })
 
+// 值钳位工具函数
 function clamp(value: number, min: number, max: number) {
   if (max < min) return min
   return Math.min(Math.max(value, min), max)
@@ -194,6 +196,7 @@ async function ensureImageLoaded() {
   return image
 }
 
+// 确认截图：根据选区和原始图片分辨率裁剪并输出 PNG
 async function confirmCapture() {
   if (!window.imScreenshot || !screenshotDataUrl.value) return
 
@@ -223,6 +226,7 @@ async function cancelCapture() {
   await window.imScreenshot?.cancel()
 }
 
+// 键盘快捷键：Esc 取消、Enter 确认
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()

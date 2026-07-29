@@ -15,6 +15,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
+/**
+ * 文件配额服务测试，验证用户上传配额计算（已存储 + 上传中）和超限拒绝。
+ *
+ * <p>测试范围：FileQuotaService 的 assertCanStore 方法，覆盖锁用户→计算配额→超限校验流程。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class FileQuotaServiceTest {
 
@@ -37,6 +42,10 @@ class FileQuotaServiceTest {
         when(userMapper.lockById(7L)).thenReturn(7L);
     }
 
+    /**
+     * 验证配额检查先锁定用户行（防止并发），再依次查询已存储和上传中的字节数，
+     * 保证调用顺序正确。
+     */
     @Test
     void locksUserBeforeCalculatingReservedAndStoredBytes() {
         when(fileMapper.sumAvailableBytesByUploader(7L)).thenReturn(40L);
@@ -45,11 +54,15 @@ class FileQuotaServiceTest {
         quotaService.assertCanStore(7L, 40L);
 
         var order = inOrder(userMapper, fileMapper, uploadMapper);
-        order.verify(userMapper).lockById(7L);
-        order.verify(fileMapper).sumAvailableBytesByUploader(7L);
-        order.verify(uploadMapper).sumActiveBytesByUploader(7L);
+        order.verify(userMapper).lockById(7L); // 先锁行
+        order.verify(fileMapper).sumAvailableBytesByUploader(7L); // 再查已存储
+        order.verify(uploadMapper).sumActiveBytesByUploader(7L); // 最后查上传中
     }
 
+    /**
+     * 验证已存储(60) + 上传中(30) + 新上传(20) = 110 > 配额100 时，
+     * 抛出 BusinessException(413)。
+     */
     @Test
     void rejectsUploadThatWouldExceedCombinedQuota() {
         when(fileMapper.sumAvailableBytesByUploader(7L)).thenReturn(60L);

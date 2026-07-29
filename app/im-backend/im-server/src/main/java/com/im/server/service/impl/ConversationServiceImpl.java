@@ -43,7 +43,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Intent: ConversationServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 会话服务实现：处理单聊/群聊创建、成员管理、群资料维护、头像上传及群主转让，
+ * 并在数据变更后通过 WebSocket 向在线成员推送会话更新事件。
  */
 @Service
 public class ConversationServiceImpl implements ConversationService {
@@ -82,6 +83,12 @@ public class ConversationServiceImpl implements ConversationService {
     @Autowired
     private FileRetentionService fileRetentionService;
 
+    /**
+     * 查询用户会话列表。
+     * <p>
+     * 未读数计算规则：统计会话中创建时间晚于用户 lastReadTime（或 joinTime）的、
+     * 非本人发送且未撤回的消息数量。
+     */
     @Override
     public List<ConversationVO> listConversations(Long userId) {
         List<ImConversationMember> memberRecords = conversationMemberMapper.selectList(
@@ -281,6 +288,12 @@ public class ConversationServiceImpl implements ConversationService {
         return user;
     }
 
+    /**
+     * 移除会话成员。
+     * <p>
+     * 群聊场景使用行锁（FOR UPDATE）防止并发移除导致数据不一致；
+     * 当群成员被清空时自动删除群会话。
+     */
     @Override
     @Transactional
     public void removeMember(Long conversationId, Long userId, Long operatorId) {
@@ -409,6 +422,12 @@ public class ConversationServiceImpl implements ConversationService {
         return buildConversationVO(conversationMapper.selectById(conversationId), operatorId);
     }
 
+    /**
+     * 更新群头像。
+     * <p>
+     * 采用"先上传新头像、再更新会话、最后清理旧头像"的顺序；
+     * 通过事务同步器确保旧头像在事务提交后才删除，避免事务回滚导致头像丢失。
+     */
     @Override
     @Transactional
     public ConversationVO updateAvatar(Long conversationId, Long operatorId, MultipartFile file) {
@@ -640,6 +659,12 @@ public class ConversationServiceImpl implements ConversationService {
         return vo;
     }
 
+    /**
+     * 统计群聊中 @当前用户的未读消息数。
+     * <p>
+     * 仅统计 TEXT 类型消息，通过解析消息内容 JSON 中的 mentions 数组判断
+     * 是否包含 @all 或 @当前用户。
+     */
     private int countMentionUnread(Long conversationId, Long userId, LocalDateTime since) {
         LambdaQueryWrapper<ImMessage> wrapper = new LambdaQueryWrapper<ImMessage>()
                 .eq(ImMessage::getConversationId, conversationId)

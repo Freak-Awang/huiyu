@@ -20,7 +20,7 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Intent: AuthServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 认证服务实现：处理登录认证、Token 签发/吊销及 WebSocket 会话联动。
  */
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -43,6 +43,9 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private WebSocketSessionManager sessionManager;
 
+    /**
+     * 用户登录：校验用户名密码，签发 JWT Token。
+     */
     @Override
     public LoginResponse login(LoginRequest request) {
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
@@ -70,6 +73,9 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    /**
+     * 用户登出：吊销 Token 并关闭该用户的所有 WebSocket 会话。
+     */
     @Override
     public void logout(String token) {
         AuthenticatedUser currentUser = tokenAuthenticationService.authenticate(token);
@@ -77,6 +83,9 @@ public class AuthServiceImpl implements AuthService {
         sessionManager.closeSessionsForUser(currentUser.userId());
     }
 
+    /**
+     * 将 Token 写入 Redis 吊销列表，有效期 7 天。
+     */
     private void revoke(String token) {
         redisTemplate.opsForValue().set(
             tokenAuthenticationService.revocationKey(token),
@@ -86,6 +95,9 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+    /**
+     * 刷新 Token：验证旧 Token 后吊销并签发新 Token。
+     */
     @Override
     public LoginResponse refresh(String token) {
         AuthenticatedUser currentUser = tokenAuthenticationService.authenticate(token);

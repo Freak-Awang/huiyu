@@ -1,3 +1,4 @@
+<!-- 附件拖拽区：显示待发送的附件列表，支持图片预览、文件上传进度、暂停/重试/移除操作 -->
 <template>
   <div v-if="drafts.length" class="attachment-draft-list" aria-label="待发送附件">
     <article
@@ -46,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+// 附件草稿托盘：渲染待发送附件列表，格式化文件大小和上传状态文本
 import type { AttachmentDraft } from '../stores/attachmentDrafts'
 
 defineProps<{
@@ -60,6 +62,7 @@ defineEmits<{
   retry: [draft: AttachmentDraft]
 }>()
 
+// 格式化文件大小为可读字符串（B/KB/MB/GB）
 function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
@@ -67,6 +70,7 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
+// 根据草稿状态返回对应的状态文本（校验/上传进度、已暂停、失败原因）
 function statusText(draft: AttachmentDraft) {
   if (draft.status === 'hashing') return `校验 ${Math.round(draft.progress * 100)}%`
   if (draft.status === 'uploading') return `上传 ${Math.round(draft.progress * 100)}%`

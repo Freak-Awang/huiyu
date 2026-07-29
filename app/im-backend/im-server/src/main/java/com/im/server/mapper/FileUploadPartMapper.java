@@ -5,7 +5,7 @@ import com.im.common.entity.ImFileUploadPart;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * Intent: FileUploadPartMapper maps domain persistence operations to MyBatis-Plus data access.
+ * 分片上传分片 Mapper：对应 im_file_upload_part 表，记录每个上传任务的分片信息。
  */
 @Mapper
 public interface FileUploadPartMapper extends BaseMapper<ImFileUploadPart> {

@@ -1,4 +1,7 @@
-// Intent: index wraps backend API calls so views and stores do not depend on raw HTTP details.
+/**
+ * Axios 实例与全局拦截器
+ * 统一处理请求头注入、响应解包、错误提示及 401 跳转登录页。
+ */
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '../router'
@@ -9,6 +12,7 @@ const client = axios.create({
     headers: { 'Content-Type': 'application/json' },
 })
 
+// 请求拦截器：自动携带 token
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('token')
     if (token) {
@@ -17,6 +21,7 @@ client.interceptors.request.use((config) => {
     return config
 })
 
+// 响应拦截器：统一解包 code/data 结构，处理业务错误与 HTTP 错误
 client.interceptors.response.use(
     (response) => {
         const body = response.data

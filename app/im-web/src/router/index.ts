@@ -1,4 +1,8 @@
-// Intent: index defines route guards and view mapping for the application shell.
+/**
+ * 路由配置：定义应用页面路由与导航守卫。
+ * 桌面端（file:// 协议）使用 hash 模式，Web 端使用 history 模式；
+ * 未登录用户访问受保护页面时会被重定向到登录页。
+ */
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Login from '../views/Login.vue'

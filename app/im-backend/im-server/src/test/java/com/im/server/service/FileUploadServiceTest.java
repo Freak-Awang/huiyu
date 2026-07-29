@@ -19,6 +19,12 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 文件上传服务测试，验证会话图片/文件上传、头像上传、群头像上传及各种拒绝场景。
+ *
+ * <p>测试范围：FileUploadService 的 uploadConversationImage、uploadConversationFile、
+ * uploadAvatarFile、uploadGroupAvatarFile 方法。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class FileUploadServiceTest {
 
@@ -40,6 +46,9 @@ class FileUploadServiceTest {
     @InjectMocks
     private FileUploadService fileUploadService;
 
+    /**
+     * 验证会话图片上传：校验会话成员身份→存储到 MinIO→创建文件元数据（持久化、会话绑定）。
+     */
     @Test
     void conversationImageUploadIsPersistentAndConversationScoped() throws Exception {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
@@ -47,7 +56,7 @@ class FileUploadServiceTest {
 
         fileUploadService.uploadConversationImage(image("photo.png"), 10L, 20L);
 
-        verify(metadataService).assertConversationMember(10L, 20L);
+        verify(metadataService).assertConversationMember(10L, 20L); // 校验会话成员
         verify(storageClient).save(anyString(), any());
         verify(metadataService).createAvailableFile(
                 eq("photo.png"),
@@ -55,7 +64,7 @@ class FileUploadServiceTest {
                 eq(8L),
                 eq("image/png"),
                 eq(10L),
-                eq(20L),
+                eq(20L), // conversationId 不为空
                 anyString(),
                 eq("minio"),
                 eq("im-files"),
@@ -63,6 +72,9 @@ class FileUploadServiceTest {
                 isNull());
     }
 
+    /**
+     * 验证头像上传：独立文件（conversationId=null），持久化存储。
+     */
     @Test
     void avatarUploadIsPersistentStandaloneImage() throws Exception {
         mockImageUploadStorage();
@@ -76,7 +88,7 @@ class FileUploadServiceTest {
                 eq(8L),
                 eq("image/png"),
                 eq(10L),
-                isNull(),
+                isNull(), // avatar 无 conversationId
                 anyString(),
                 eq("minio"),
                 eq("im-files"),
@@ -84,6 +96,9 @@ class FileUploadServiceTest {
                 isNull());
     }
 
+    /**
+     * 验证群头像上传：绑定会话 ID，持久化存储。
+     */
     @Test
     void groupAvatarUploadIsPersistentAndConversationScoped() throws Exception {
         mockImageUploadStorage();
@@ -105,6 +120,9 @@ class FileUploadServiceTest {
                 isNull());
     }
 
+    /**
+     * 验证群头像超过 5MB 限制时抛出 BusinessException(413)。
+     */
     @Test
     void groupAvatarRejectsImagesLargerThanFiveMegabytes() {
         MockMultipartFile oversized = new MockMultipartFile(
@@ -117,6 +135,9 @@ class FileUploadServiceTest {
                 .isEqualTo(413);
     }
 
+    /**
+     * 验证会话文件上传接受非图片文件（如 PDF），正常存储并创建元数据。
+     */
     @Test
     void conversationFileUploadAcceptsNonImageFile() throws Exception {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
@@ -142,6 +163,9 @@ class FileUploadServiceTest {
                 isNull());
     }
 
+    /**
+     * 验证 uploadConversationImage 拒绝非图片文件（如 PDF），返回 415。
+     */
     @Test
     void conversationUploadRejectsNonImageFile() {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
@@ -153,6 +177,9 @@ class FileUploadServiceTest {
                 .isEqualTo(415);
     }
 
+    /**
+     * 验证上传空文件时抛出 BusinessException(400)。
+     */
     @Test
     void imageUploadRejectsEmptyFile() {
         when(properties.getSmallFileMaxSize()).thenReturn(104857600L);

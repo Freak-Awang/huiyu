@@ -1,6 +1,8 @@
+<!-- 用户资料弹窗：查看/编辑个人信息，支持头像上传、复制资料、发起聊天 -->
 <template>
   <div class="profile-overlay" @click.self="close">
     <div class="profile-dialog">
+      <!-- 头像区域：展示头像、在线状态 -->
       <header class="profile-cover">
         <button type="button" class="profile-close" title="关闭" @click="close">x</button>
         <div class="profile-avatar">
@@ -98,8 +100,7 @@
 </template>
 
 <script setup lang="ts">
-// Intent: ProfileDialog contains reusable UI behavior with local interaction state.
-
+// 用户资料弹窗：展示/编辑个人资料、上传头像、复制资料、发起单聊
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { uploadAvatar } from '../api/file'
 import { updateProfile, type UserProfile } from '../api/user'
@@ -123,27 +124,27 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const selectedAvatar = ref<File | null>(null)
-const selectedAvatarName = ref('')
-const avatarObjectUrl = ref('')
-const editing = ref(false)
-const saving = ref(false)
-const errorText = ref('')
-const statusText = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null) // 头像文件选择 input 引用
+const selectedAvatar = ref<File | null>(null) // 已选择的头像文件
+const selectedAvatarName = ref('') // 已选头像文件名
+const avatarObjectUrl = ref('') // 头像预览 Blob URL
+const editing = ref(false) // 是否处于编辑模式
+const saving = ref(false) // 是否正在保存
+const errorText = ref('') // 错误提示文本
+const statusText = ref('') // 状态提示文本
 
 const emptyUser: ProfileUser = {}
-const profileUser = computed<ProfileUser>(() => props.user || authStore.currentUser || emptyUser)
+const profileUser = computed<ProfileUser>(() => props.user || authStore.currentUser || emptyUser) // 当前展示的用户资料
 const profileUserId = computed(() => String(profileUser.value.userId || profileUser.value.id || ''))
-const isSelf = computed(() => profileUserId.value === String(authStore.currentUser?.userId || ''))
+const isSelf = computed(() => profileUserId.value === String(authStore.currentUser?.userId || '')) // 是否查看自己的资料
 const displayName = computed(() => profileUser.value.nickname || profileUser.value.username || '用户')
-const avatarInitial = computed(() => displayName.value[0] || 'U')
-const avatarLoadFailed = ref(false)
+const avatarInitial = computed(() => displayName.value[0] || 'U') // 头像文字回退（首字母）
+const avatarLoadFailed = ref(false) // 头像加载失败标记
 const avatarPreview = computed(() => {
   const url = avatarObjectUrl.value || profileUser.value.avatar || ''
   return url && !avatarLoadFailed.value ? url : ''
 })
-const presenceStatus = computed(() => normalizePresenceStatus(props.presence || (isSelf.value ? 'online' : 'offline')))
+const presenceStatus = computed(() => normalizePresenceStatus(props.presence || (isSelf.value ? 'online' : 'offline'))) // 在线状态
 const presenceLabel = computed(() => getPresenceLabel(presenceStatus.value))
 
 const form = reactive({
@@ -168,6 +169,7 @@ onBeforeUnmount(() => {
   revokeAvatarObjectUrl()
 })
 
+// 重置编辑表单为当前用户资料的值
 function resetForm() {
   form.nickname = profileUser.value.nickname || ''
   form.email = profileUser.value.email || ''
@@ -199,6 +201,7 @@ function pickAvatar() {
   fileInputRef.value?.click()
 }
 
+// 处理头像文件选择：校验类型和大小，生成预览 Blob URL
 function onAvatarSelected(event: Event) {
   errorText.value = ''
   const input = event.target as HTMLInputElement
@@ -219,6 +222,7 @@ function onAvatarSelected(event: Event) {
   avatarObjectUrl.value = URL.createObjectURL(file)
 }
 
+// 保存个人资料：上传头像（如有）、调用更新接口、同步 authStore
 async function saveProfile() {
   if (!isSelf.value) return
   const nickname = form.nickname.trim()
@@ -278,6 +282,7 @@ async function saveProfile() {
   }
 }
 
+// 复制用户资料到剪贴板
 async function copyProfile() {
   const text = [
     `昵称：${displayName.value}`,
@@ -295,6 +300,7 @@ async function copyProfile() {
   }
 }
 
+// 释放头像预览 Blob URL 以回收内存
 function revokeAvatarObjectUrl() {
   if (!avatarObjectUrl.value) return
   URL.revokeObjectURL(avatarObjectUrl.value)

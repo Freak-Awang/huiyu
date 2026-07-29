@@ -1,12 +1,11 @@
+<!-- 示例欢迎组件：展示 Vite + Vue 项目初始引导信息，含计数器演示响应式状态 -->
 <script setup lang="ts">
-// Intent: HelloWorld contains reusable UI behavior with local interaction state.
-
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
 import heroImg from '../assets/hero.png'
 import vueLogo from '../assets/vue.svg'
 
-const count = ref(0)
+const count = ref(0) // 计数器演示值
 </script>
 
 <template>

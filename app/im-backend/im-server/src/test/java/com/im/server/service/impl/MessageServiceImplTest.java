@@ -31,6 +31,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * 消息服务测试，验证消息发送权限（@所有人）、文件/图片消息校验、消息列表查询。
+ *
+ * <p>测试范围：MessageServiceImpl 的 sendMessage（@所有人权限、文件消息校验、图片消息校验）
+ * 和 getMessages（发送者签名填充）。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class MessageServiceImplTest {
 
@@ -58,9 +64,12 @@ class MessageServiceImplTest {
     @InjectMocks
     private MessageServiceImpl messageService;
 
+    /**
+     * 验证群主（owner）可以在群聊中发送 @所有人 消息，content 包含 "type":"all"。
+     */
     @Test
     void ownerCanSendAllMention() {
-        arrangeSend("owner", 2);
+        arrangeSend("owner", 2); // 群聊 type=2
 
         ImMessage message = messageService.sendMessage(10L, allMentionRequest());
 
@@ -69,6 +78,9 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    /**
+     * 验证管理员（admin）可以在群聊中发送 @所有人 消息。
+     */
     @Test
     void adminCanSendAllMention() {
         arrangeSend("admin", 2);
@@ -79,6 +91,9 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    /**
+     * 验证普通成员（member）发送 @所有人 被拒绝，返回 403。
+     */
     @Test
     void memberCannotSendAllMention() {
         arrangeSenderAndConversation("member", 2);
@@ -88,12 +103,15 @@ class MessageServiceImplTest {
                 .hasMessage("只有群主和群管理员可以@所有人")
                 .extracting("code")
                 .isEqualTo(403);
-        verifyNoInteractions(messageMapper);
+        verifyNoInteractions(messageMapper); // 未落库
     }
 
+    /**
+     * 验证在单聊（type=1）中发送 @所有人 被拒绝。
+     */
     @Test
     void allMentionIsRejectedInSingleConversation() {
-        arrangeSenderAndConversation("owner", 1);
+        arrangeSenderAndConversation("owner", 1); // 单聊
 
         assertThatThrownBy(() -> messageService.sendMessage(10L, allMentionRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -103,16 +121,22 @@ class MessageServiceImplTest {
         verifyNoInteractions(messageMapper);
     }
 
+    /**
+     * 验证普通成员仍可发送普通 @用户 消息（非 @所有人）。
+     */
     @Test
     void memberCanStillSendRegularMention() {
         arrangeSend("member", 2);
 
         ImMessage message = messageService.sendMessage(10L, regularMentionRequest());
 
-        assertThat(message.getContent()).contains("\"userId\":\"11\"");
+        assertThat(message.getContent()).contains("\"userId\":\"11\""); // 普通 mention
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    /**
+     * 验证格式错误的文件消息（缺少必要字段）被拒绝，返回 400。
+     */
     @Test
     void malformedFileMessageIsRejected() {
         when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
@@ -125,10 +149,13 @@ class MessageServiceImplTest {
         verifyNoInteractions(messageMapper);
     }
 
+    /**
+     * 验证合法的文件消息（含 fileId/fileName/fileSize/transferMode）发送成功。
+     */
     @Test
     void validFileMessageIsSent() {
         arrangeSend("member", 2);
-        when(fileMetadataService.getById(1L)).thenReturn(file(1L, 1L));
+        when(fileMetadataService.getById(1L)).thenReturn(file(1L, 1L)); // 文件存在
 
         ImMessage message = messageService.sendMessage(10L, validFileMessageRequest());
 
@@ -137,6 +164,9 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    /**
+     * 验证合法的图片消息（含 fileId/url/fileName/fileSize/contentType）发送成功。
+     */
     @Test
     void validImageMessageReferencesConversationImage() {
         arrangeSend("member", 2);
@@ -154,6 +184,9 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    /**
+     * 验证获取消息列表时 senderName 和 senderSignature 从用户表正确填充。
+     */
     @Test
     void getMessagesIncludesSenderSignature() {
         ImMessage message = new ImMessage();

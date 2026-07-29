@@ -3,16 +3,16 @@ package com.im.common.dto;
 import lombok.Data;
 
 /**
- * Intent: SendMessageRequest carries API payload shape between client, controller, and service layers.
+ * 发送消息请求，客户端向指定会话投递消息。
  */
 @Data
 public class SendMessageRequest {
 
-    private Long conversationId;
+    private Long conversationId; // 目标会话ID
 
-    private String messageType;
+    private String messageType; // 消息类型（文本/图片/文件等）
 
-    private String content;
+    private String content; // 消息内容
 
-    private String clientMsgId;
+    private String clientMsgId; // 客户端消息ID（去重与幂等用）
 }

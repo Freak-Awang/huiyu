@@ -1,4 +1,4 @@
-<!-- Intent: App hosts the root router outlet and global application frame. -->
+<!-- 根组件：通过 el-config-provider 注入 Element Plus 中文语言包，并承载全局路由出口 -->
 <template>
     <el-config-provider :locale="zhCn">
         <router-view />

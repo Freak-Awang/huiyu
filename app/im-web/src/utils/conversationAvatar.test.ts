@@ -1,3 +1,11 @@
+/**
+ * 会话头像测试
+ *
+ * 测试场景：
+ * - 群聊默认头像和文字回退
+ * - 自定义头像加载失败后的回退链
+ * - 单聊首字回退
+ */
 import { describe, expect, it } from 'vitest'
 import {
   defaultGroupAvatar,

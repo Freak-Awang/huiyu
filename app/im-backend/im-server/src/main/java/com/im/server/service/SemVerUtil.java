@@ -5,16 +5,33 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 语义化版本工具类：遵循 SemVer 2.0 规范校验和比较版本号。
+ */
 public final class SemVerUtil {
     private static final Pattern SEMVER = Pattern.compile(
             "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$");
 
     private SemVerUtil() {}
 
+    /**
+     * 校验字符串是否为合法语义化版本号。
+     *
+     * @param value 版本号字符串
+     * @return 是否合法
+     */
     public static boolean isValid(String value) {
         return value != null && SEMVER.matcher(value.trim()).matches();
     }
 
+    /**
+     * 比较两个语义化版本号。
+     *
+     * @param left 左操作数
+     * @param right 右操作数
+     * @return 负数表示 left 较小，0 表示相等，正数表示 left 较大
+     * @throws IllegalArgumentException 版本号不合法时抛出
+     */
     public static int compare(String left, String right) {
         Version a = parse(left);
         Version b = parse(right);

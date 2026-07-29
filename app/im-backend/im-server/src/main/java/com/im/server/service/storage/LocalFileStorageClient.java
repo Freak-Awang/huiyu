@@ -13,9 +13,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 /**
- * Intent: LocalFileStorageClient hides storage-provider details behind a stable file storage contract.
+ * 本地文件存储客户端：将文件对象存储在服务器本地磁盘。
  */
-
 public class LocalFileStorageClient implements FileStorageClient {
     private final Path root;
 
@@ -56,6 +55,12 @@ public class LocalFileStorageClient implements FileStorageClient {
         }
     }
 
+    /**
+     * 打开本地文件流，支持 Range 分片读取。
+     * <p>
+     * 使用 skip 实现偏移定位，通过 LimitedInputStream 限制读取长度，
+     * 避免一次性加载大文件到内存。
+     */
     @Override
     public StoredObject open(String objectKey, long offset, Long length) throws Exception {
         Path path = resolve(objectKey);
@@ -80,6 +85,9 @@ public class LocalFileStorageClient implements FileStorageClient {
         Files.deleteIfExists(resolve(objectKey));
     }
 
+    /**
+     * 解析对象 Key 为本地路径，并校验防止路径遍历攻击。
+     */
     private Path resolve(String objectKey) {
         Path resolved = root.resolve(objectKey).normalize();
         if (!resolved.startsWith(root.normalize())) {

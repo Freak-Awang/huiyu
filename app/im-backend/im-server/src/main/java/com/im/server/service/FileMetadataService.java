@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
 /**
- * Intent: FileMetadataService owns file metadata persistence, lookup, reuse, and file drawer queries.
+ * 文件元数据服务：负责文件元数据的持久化、查询、秒传复用及文件抽屉展示。
  */
 @Service
 public class FileMetadataService {
@@ -35,10 +35,32 @@ public class FileMetadataService {
         this.userMapper = userMapper;
     }
 
+    /**
+     * 按 ID 查询文件元数据。
+     *
+     * @param id 文件 ID
+     * @return 文件实体，不存在时返回 null
+     */
     public ImFile getById(Long id) {
         return fileMapper.selectById(id);
     }
 
+    /**
+     * 创建可用状态的文件元数据记录。
+     *
+     * @param originalName 原始文件名
+     * @param objectKey 对象存储 Key
+     * @param fileSize 文件大小
+     * @param contentType 内容类型
+     * @param uploaderId 上传者 ID
+     * @param conversationId 所属会话 ID，可为空
+     * @param sha256 文件 SHA-256 哈希
+     * @param storageType 存储类型
+     * @param bucket 存储桶
+     * @param temporary 是否临时文件
+     * @param expiresAt 过期时间，临时文件必填
+     * @return 创建后的文件实体
+     */
     public ImFile createAvailableFile(
             String originalName,
             String objectKey,
@@ -72,11 +94,21 @@ public class FileMetadataService {
         return imFile;
     }
 
+    /**
+     * 将文件标记为已过期。
+     *
+     * @param imFile 文件实体
+     */
     public void markExpired(ImFile imFile) {
         imFile.setStatus(STATUS_EXPIRED);
         fileMapper.updateById(imFile);
     }
 
+    /**
+     * 增加文件下载计数。
+     *
+     * @param fileId 文件 ID
+     */
     public void incrementDownloadCount(Long fileId) {
         ImFile imFile = fileMapper.selectById(fileId);
         if (imFile == null) {
@@ -86,6 +118,13 @@ public class FileMetadataService {
         fileMapper.updateById(imFile);
     }
 
+    /**
+     * 断言用户是会话成员，否则抛出 403 异常。
+     *
+     * @param userId 用户 ID
+     * @param conversationId 会话 ID
+     * @throws BusinessException 用户不是会话成员时抛出
+     */
     public void assertConversationMember(Long userId, Long conversationId) {
         ImConversationMember member = conversationMemberMapper.selectOne(new LambdaQueryWrapper<ImConversationMember>()
                 .eq(ImConversationMember::getConversationId, conversationId)
@@ -95,6 +134,12 @@ public class FileMetadataService {
         }
     }
 
+    /**
+     * 将文件实体转换为视图对象，补充展示字段。
+     *
+     * @param file 文件实体
+     * @return 文件视图对象，file 为 null 时返回 null
+     */
     public FileVO toFileVO(ImFile file) {
         if (file == null) {
             return null;

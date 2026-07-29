@@ -5,7 +5,7 @@ import com.im.common.entity.ImConversation;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * Intent: ConversationMapper maps domain persistence operations to MyBatis-Plus data access.
+ * 会话 Mapper：对应 im_conversation 表，提供会话基础 CRUD。
  */
 @Mapper
 public interface ConversationMapper extends BaseMapper<ImConversation> {

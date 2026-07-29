@@ -1,4 +1,7 @@
-// Intent: index wraps backend API calls so views and stores do not depend on raw HTTP details.
+/**
+ * Axios HTTP 客户端实例：统一配置 baseURL、超时、请求/响应拦截器。
+ * 请求拦截器自动注入 Bearer Token；响应拦截器处理统一返回格式与 401 未授权跳转。
+ */
 import axios from 'axios'
 import router from '../router'
 import { getApiBaseUrl } from '../config/runtime'

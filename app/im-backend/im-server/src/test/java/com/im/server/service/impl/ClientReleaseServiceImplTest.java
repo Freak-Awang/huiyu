@@ -17,6 +17,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * 客户端发布策略测试，验证最小版本强制更新和 DENY 目标设备排除逻辑。
+ *
+ * <p>测试范围：ClientReleaseServiceImpl.evaluatePolicy 的更新策略评估。</p>
+ */
 class ClientReleaseServiceImplTest {
     private ClientReleaseMapper releaseMapper;
     private ClientReleaseTargetMapper targetMapper;
@@ -29,9 +34,12 @@ class ClientReleaseServiceImplTest {
         service = new ClientReleaseServiceImpl(releaseMapper, targetMapper, mock(ClientUpdateEventMapper.class), mock(UserMapper.class));
     }
 
+    /**
+     * 验证当前版本(0.0.2)低于 minimumVersion(0.0.3)时，即使 rollout=0 也强制更新。
+     */
     @Test
     void minimumVersionForcesUpdateEvenWithZeroRollout() {
-        ImClientRelease release = release("0.0.4", 0);
+        ImClientRelease release = release("0.0.4", 0); // rollout=0
         release.setMinimumVersion("0.0.3");
         when(releaseMapper.selectList(any())).thenReturn(List.of(release));
         when(targetMapper.selectList(any())).thenReturn(List.of());
@@ -39,24 +47,28 @@ class ClientReleaseServiceImplTest {
         ClientReleaseService.PolicyResponse result = service.evaluatePolicy("win32", "x64", "stable", "0.0.2", "device-1", null);
 
         assertTrue(result.hasUpdate());
-        assertTrue(result.forceUpdate());
+        assertTrue(result.forceUpdate()); // minimumVersion 触发强制更新
     }
 
+    /**
+     * 验证 DENY 目标优先于强制更新：即使发布是 forceUpdate=true + rollout=100，
+     * 被 DENY 的设备不会收到更新。
+     */
     @Test
     void denyTargetWinsOverForcedUpdate() {
         ImClientRelease release = release("0.0.4", 100);
         release.setForceUpdate(true);
         ImClientReleaseTarget deny = new ImClientReleaseTarget();
         deny.setReleaseId(1L);
-        deny.setMode("DENY");
+        deny.setMode("DENY"); // 拒绝模式
         deny.setTargetType("DEVICE");
-        deny.setTargetValue("device-1");
+        deny.setTargetValue("device-1"); // 拒绝该设备
         when(releaseMapper.selectList(any())).thenReturn(List.of(release));
         when(targetMapper.selectList(any())).thenReturn(List.of(deny));
 
         ClientReleaseService.PolicyResponse result = service.evaluatePolicy("win32", "x64", "stable", "0.0.3", "device-1", null);
 
-        assertFalse(result.hasUpdate());
+        assertFalse(result.hasUpdate()); // DENY 生效
     }
 
     private ImClientRelease release(String version, int rollout) {

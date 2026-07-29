@@ -26,6 +26,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * 文件下载控制器测试，验证 HTTP Range 请求的断点续传和 416 响应。
+ *
+ * <p>测试范围：FileController 的文件下载端点，覆盖精确 Range、后缀 Range、越界 Range 三种场景。</p>
+ */
 class FileControllerTest {
 
     private FileDownloadService downloadService;
@@ -48,6 +53,10 @@ class FileControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    /**
+     * 验证精确 Range（bytes=2-5）返回 206 Partial Content，
+     * Content-Range 和 Content-Length 正确，下载计数递增。
+     */
     @Test
     void returnsExactPartialContent() throws Exception {
         ImFile file = downloadableFile();
@@ -63,6 +72,9 @@ class FileControllerTest {
         verify(downloadService).incrementDownloadCount(1L);
     }
 
+    /**
+     * 验证后缀 Range（bytes=-3，取最后 3 字节）返回 206，Content-Range 计算正确。
+     */
     @Test
     void supportsSuffixRange() throws Exception {
         ImFile file = downloadableFile();
@@ -76,6 +88,10 @@ class FileControllerTest {
                 .andExpect(content().bytes("789".getBytes()));
     }
 
+    /**
+     * 验证越界 Range（bytes=20-30，超出文件大小）返回 416 Range Not Satisfiable，
+     * 且 Content-Range 为 "bytes */10"。
+     */
     @Test
     void rejectsUnsatisfiableRangeWith416() throws Exception {
         ImFile file = downloadableFile();

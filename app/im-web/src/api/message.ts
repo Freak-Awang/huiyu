@@ -1,64 +1,126 @@
-// Intent: message wraps backend API calls so views and stores do not depend on raw HTTP details.
+/**
+ * 消息管理 API：封装消息分页查询、待收消息拉取、已读回执、消息撤回与搜索等接口。
+ * 同时提供后端原始消息到前端标准 Message 类型的规范化转换，以及文本消息内容的构建与解析。
+ */
 import http from './index'
 import { toServerUrl } from '../config/runtime'
 
+/**
+ * 聊天消息实体。
+ */
 export interface Message {
+  /** 消息唯一标识（服务端生成） */
   messageId: string
+  /** 所属会话 ID */
   conversationId: string
+  /** 发送者 ID */
   senderId: string
+  /** 发送者昵称 */
   senderName: string
+  /** 发送者头像 URL */
   senderAvatar: string
+  /** 发送者个性签名 */
   senderSignature: string
+  /** 消息类型：文本、图片、文件或表情 */
   messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
+  /** 原始消息内容（JSON 字符串或纯文本） */
   content: string
+  /** 格式化后的展示内容 */
   displayContent: string
+  /** 被 @ 的用户列表 */
   mentions: MessageMention[]
+  /** 客户端消息 ID（用于乐观更新与去重） */
   clientMsgId?: string
+  /** 消息发送时间 */
   createdAt: string
+  /** 消息状态 */
   status?: MessageStatus
+  /** 回复/引用的原消息 */
   replyTo?: MessageReply | null
+  /** 已读人数 */
   readCount: number
+  /** 接收总人数 */
   recipientCount: number
+  /** 已读状态（0 未读 / 1 已读） */
   readStatus: number
+  /** 已读时间 */
   readTime?: string
 }
 
+/** 消息状态：已发送 / 发送中 / 发送失败 / 已撤回 */
 export type MessageStatus = 'SENT' | 'SENDING' | 'FAILED' | 'RECALLED' | string
+/** @ 提及类型：指定用户或所有人 */
 export type MessageMentionType = 'user' | 'all'
 
+/** @ 所有人的特殊用户 ID */
 export const MESSAGE_MENTION_ALL_ID = '__ALL__'
 
+/**
+ * 消息中的 @ 提及信息。
+ */
 export interface MessageMention {
+  /** 提及类型：用户或所有人 */
   type?: MessageMentionType
+  /** 被提及用户 ID（@所有人时为 __ALL__） */
   userId: string
+  /** 被提及用户昵称 */
   nickname: string
 }
 
+/**
+ * 判断该提及是否为 @所有人。
+ * @param mention 提及对象
+ * @returns 是 @所有人返回 true
+ */
 export function isAllMention(mention: MessageMention): boolean {
   return mention.type === 'all' || mention.userId === MESSAGE_MENTION_ALL_ID
 }
 
+/**
+ * 消息回复/引用信息。
+ */
 export interface MessageReply {
+  /** 原消息 ID */
   messageId: string
+  /** 原消息发送者昵称 */
   senderName: string
+  /** 原消息内容摘要 */
   text: string
 }
 
+/**
+ * 消息已读回执。
+ */
 export interface MessageReadReceipt {
+  /** 消息 ID */
   messageId: string
+  /** 已读人数 */
   readCount: number
+  /** 接收总人数 */
   recipientCount: number
+  /** 已读状态 */
   readStatus: number
+  /** 已读时间 */
   readTime?: string
 }
 
+/**
+ * 消息分页查询结果。
+ */
 export interface MessagePage {
+  /** 当前页消息列表 */
   records: Message[]
+  /** 总消息数 */
   total: number
+  /** 当前页码 */
   page: number
+  /** 每页大小 */
   pageSize: number
 }
 
+/**
+ * 后端返回的原始消息数据结构，字段命名与类型可能不统一，需经 normalizeMessage 转换。
+ */
 export interface RawMessage {
   id?: number | string
   messageId?: number | string
@@ -88,6 +150,12 @@ interface RawMessagePage {
   pageSize?: number
 }
 
+/**
+ * 将后端原始消息数据规范化为前端统一的 Message 类型。
+ * 处理时间格式转换、头像 URL 补全、消息内容解析（文本/表情/文件）及已读状态标准化。
+ * @param raw 后端原始消息数据
+ * @returns 规范化后的 Message 对象
+ */
 export function normalizeMessage(raw: RawMessage): Message {
   const timestamp = normalizeMessageTime(raw.createdAt || raw.createTime || raw.timestamp)
   const content = raw.content || ''
@@ -159,6 +227,13 @@ function parseFileDisplayName(content: string): string {
   return '[文件]'
 }
 
+/**
+ * 构建文本消息的 JSON 内容字符串，包含 @ 提及与回复引用。
+ * @param text 消息文本
+ * @param mentions 被 @ 的用户列表
+ * @param replyTo 回复/引用的原消息
+ * @returns JSON 格式的消息内容字符串
+ */
 export function buildTextMessageContent(
   text: string,
   mentions: MessageMention[] = [],
@@ -223,6 +298,14 @@ function normalizeMentions(raw: unknown): MessageMention[] {
   return result
 }
 
+/**
+ * 分页获取会话历史消息。
+ * 调用 GET /api/messages/:convId
+ * @param convId 会话 ID
+ * @param beforeMessageId 分页锚点：获取该消息之前的历史消息
+ * @param pageSize 每页数量，默认 50
+ * @returns 规范化后的消息分页结果
+ */
 export function getMessages(convId: string, beforeMessageId?: string, pageSize?: number) {
   return http.get<RawMessagePage>(`/api/messages/${convId}`, {
     params: { beforeMessageId, pageSize: pageSize || 50 },
@@ -248,16 +331,35 @@ export function getPendingMessages(limit = 100) {
   }))
 }
 
+/**
+ * 确认消息已接收（ACK）。
+ * 调用 POST /api/messages/ack/:messageId
+ * @param messageId 消息 ID
+ * @returns 确认结果
+ */
 export function acknowledgeMessage(messageId: string) {
   return http.post(`/api/messages/ack/${messageId}`)
 }
 
+/**
+ * 标记会话消息为已读。
+ * 调用 POST /api/messages/read/:convId
+ * @param convId 会话 ID
+ * @param lastReadMessageId 已读到的最后一条消息 ID（可选，为空则标记全部已读）
+ * @returns 标记结果
+ */
 export function markRead(convId: string, lastReadMessageId?: string) {
   return http.post(`/api/messages/read/${convId}`, null, {
     params: { lastReadMessageId: lastReadMessageId || undefined },
   })
 }
 
+/**
+ * 撤回消息。
+ * 调用 POST /api/messages/recall/:messageId
+ * @param messageId 待撤回的消息 ID
+ * @returns 撤回后的消息对象
+ */
 export function recallMessage(messageId: string) {
   return http.post<RawMessage>(`/api/messages/recall/${messageId}`).then((res) => ({
     ...res,
@@ -265,6 +367,14 @@ export function recallMessage(messageId: string) {
   }))
 }
 
+/**
+ * 在会话中搜索消息。
+ * 调用 GET /api/messages/:convId/search
+ * @param convId 会话 ID
+ * @param keyword 搜索关键词
+ * @param pageSize 每页数量，默认 20
+ * @returns 匹配的消息分页结果
+ */
 export function searchMessages(convId: string, keyword: string, pageSize = 20) {
   return http.get<RawMessagePage>(`/api/messages/${convId}/search`, {
     params: { keyword, pageSize },

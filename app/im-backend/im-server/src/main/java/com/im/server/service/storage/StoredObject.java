@@ -2,9 +2,8 @@ package com.im.server.service.storage;
 
 import java.io.InputStream;
 /**
- * Intent: StoredObject hides storage-provider details behind a stable file storage contract.
+ * 存储对象：封装从存储后端读取的文件流、大小及内容类型。
  */
-
 public class StoredObject {
     private final InputStream inputStream;
     private final long size;

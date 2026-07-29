@@ -36,7 +36,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Intent: FileController exposes HTTP endpoints and keeps request validation close to the API boundary.
+ * 文件控制器。
+ * <p>
+ * 提供文件上传（单文件/分片）、下载、头像上传等接口，
+ * URL 前缀为 {@code /api/files}。下载接口支持 Range 断点续传。
+ * </p>
  */
 @RestController
 @RequestMapping("/api/files")
@@ -61,6 +65,14 @@ public class FileController {
         this.userService = userService;
     }
 
+    /**
+     * 上传文件（单文件）。
+     *
+     * @param file           上传的文件
+     * @param conversationId 关联会话 ID（可选）
+     * @param category       文件分类，默认为 file，可选 image
+     * @return 文件信息
+     */
     @PostMapping("/upload")
     public Result<FileVO> upload(
             @RequestParam("file") MultipartFile file,
@@ -78,6 +90,12 @@ public class FileController {
         return Result.success(toFileVO(result));
     }
 
+    /**
+     * 上传用户头像。
+     *
+     * @param file 头像文件
+     * @return 文件信息
+     */
     @PostMapping("/upload/avatar")
     public Result<FileVO> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long userId = getCurrentUserId();
@@ -88,11 +106,25 @@ public class FileController {
         return Result.success(toFileVO(result));
     }
 
+    /**
+     * 创建分片上传任务。
+     *
+     * @param request 上传任务创建请求
+     * @return 上传任务信息
+     */
     @PostMapping("/upload/tasks")
     public Result<FileUploadTaskVO> createUploadTask(@RequestBody FileUploadTaskCreateRequest request) {
         return Result.success(fileUploadTaskService.createTask(request, getCurrentUserId()));
     }
 
+    /**
+     * 上传分片。
+     *
+     * @param uploadId   上传任务 ID
+     * @param partNumber 分片序号
+     * @param file       分片文件
+     * @return 上传任务信息
+     */
     @PostMapping("/upload/tasks/{uploadId}/parts/{partNumber}")
     public Result<FileUploadTaskVO> uploadPart(
             @PathVariable String uploadId,
@@ -101,11 +133,24 @@ public class FileController {
         return Result.success(fileUploadTaskService.uploadPart(uploadId, partNumber, file, getCurrentUserId()));
     }
 
+    /**
+     * 查询已上传的分片列表。
+     *
+     * @param uploadId 上传任务 ID
+     * @return 上传任务信息
+     */
     @GetMapping("/upload/tasks/{uploadId}/parts")
     public Result<FileUploadTaskVO> getUploadParts(@PathVariable String uploadId) {
         return Result.success(fileUploadTaskService.getTaskParts(uploadId, getCurrentUserId()));
     }
 
+    /**
+     * 完成分片上传任务。
+     *
+     * @param uploadId 上传任务 ID
+     * @param request  完成请求（可选）
+     * @return 文件信息
+     */
     @PostMapping("/upload/tasks/{uploadId}/complete")
     public Result<FileVO> completeUploadTask(
             @PathVariable String uploadId,
@@ -114,12 +159,25 @@ public class FileController {
         return Result.success(toFileVO(result));
     }
 
+    /**
+     * 取消分片上传任务。
+     *
+     * @param uploadId 上传任务 ID
+     * @return 操作结果
+     */
     @DeleteMapping("/upload/tasks/{uploadId}")
     public Result<Void> cancelUploadTask(@PathVariable String uploadId) {
         fileUploadTaskService.cancelTask(uploadId, getCurrentUserId());
         return Result.success(null);
     }
 
+    /**
+     * 下载文件，支持 Range 断点续传。
+     *
+     * @param fileId      文件 ID
+     * @param rangeHeader Range 请求头（可选）
+     * @return 文件流响应
+     */
     @GetMapping("/download/{fileId}")
     public ResponseEntity<?> download(
             @PathVariable Long fileId,

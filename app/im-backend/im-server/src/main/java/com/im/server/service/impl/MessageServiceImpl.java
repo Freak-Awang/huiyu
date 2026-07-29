@@ -38,7 +38,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Intent: MessageServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 消息服务实现：处理消息发送落库、撤回、已读回执、离线消息同步及消息清理。
+ * <p>
+ * 核心流程：发送消息时先写 im_message，再为每个会话成员写 im_message_delivery，
+ * 最后更新会话最后消息预览；撤回和已读通过 WebSocket 实时推送状态变更。
  */
 @Service
 public class MessageServiceImpl implements MessageService {
@@ -130,6 +133,13 @@ public class MessageServiceImpl implements MessageService {
         return PageResult.success(voList, voList.size(), 1, pageSize);
     }
 
+    /**
+     * 发送消息。
+     * <p>
+     * 核心流程：校验成员身份与消息权限 → 通过 clientMsgId 实现幂等去重 →
+     * 写入 im_message → 同步创建所有成员的 delivery 记录 → 更新会话最后消息预览。
+     * 使用 clientMsgId 防止网络重试或客户端恢复导致的消息重复。
+     */
     @Override
     @Transactional
     public ImMessage sendMessage(Long senderId, SendMessageRequest request) {
@@ -265,6 +275,12 @@ public class MessageServiceImpl implements MessageService {
         messageDeliveryMapper.updateById(delivery);
     }
 
+    /**
+     * 标记会话已读至指定消息。
+     * <p>
+     * 通过边界消息时间 + 消息 ID 双重条件确定已读范围，批量更新 delivery 表 read_status，
+     * 并向同会话其他在线成员推送已读回执，实现多端已读状态同步。
+     */
     @Override
     @Transactional
     public void markConversationRead(Long userId, Long conversationId, Long lastReadMessageId) {

@@ -14,9 +14,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.stream.Collectors;
 /**
- * Intent: MinioFileStorageClient hides storage-provider details behind a stable file storage contract.
+ * MinIO 文件存储客户端：将文件对象存储在 MinIO 对象存储服务中。
  */
-
 public class MinioFileStorageClient implements FileStorageClient {
     private final MinioClient minioClient;
     private final String bucket;
@@ -85,6 +84,9 @@ public class MinioFileStorageClient implements FileStorageClient {
         minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(objectKey).build());
     }
 
+    /**
+     * 确保 MinIO 存储桶存在（懒加载双重检查锁）。
+     */
     private void ensureBucket() throws Exception {
         if (bucketVerified) {
             return;

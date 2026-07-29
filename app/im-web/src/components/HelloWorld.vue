@@ -1,6 +1,6 @@
+<!-- Vite + Vue 项目模板欢迎页，展示入门引导和计数器示例 -->
 <script setup lang="ts">
-// Intent: HelloWorld contains reusable UI behavior with local interaction state.
-
+// 项目模板示例组件：展示 Vite/Vue 欢迎页和计数器
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
 import heroImg from '../assets/hero.png'

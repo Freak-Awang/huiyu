@@ -1,3 +1,10 @@
+/**
+ * 附件发送队列测试
+ *
+ * 测试场景：
+ * - 按顺序处理附件
+ * - 遇到失败后停止后续处理
+ */
 import { describe, expect, it, vi } from 'vitest'
 import { runAttachmentQueue } from './attachmentQueue'
 

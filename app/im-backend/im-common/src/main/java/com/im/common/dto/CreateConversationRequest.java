@@ -5,16 +5,16 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Intent: CreateConversationRequest carries API payload shape between client, controller, and service layers.
+ * 创建会话请求，用于发起单聊或创建群聊。
  */
 @Data
 public class CreateConversationRequest {
 
-    private Integer type;
+    private Integer type; // 会话类型：1-单聊，2-群聊
 
-    private Long targetUserId;
+    private Long targetUserId; // 单聊时的目标用户ID
 
-    private String name;
+    private String name; // 群聊名称（单聊可为空）
 
-    private List<Long> memberIds;
+    private List<Long> memberIds; // 群聊初始成员ID列表
 }

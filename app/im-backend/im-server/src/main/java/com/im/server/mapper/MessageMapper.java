@@ -5,7 +5,7 @@ import com.im.common.entity.ImMessage;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * Intent: MessageMapper maps domain persistence operations to MyBatis-Plus data access.
+ * 消息 Mapper：对应 im_message 表，提供聊天消息的基础 CRUD。
  */
 @Mapper
 public interface MessageMapper extends BaseMapper<ImMessage> {

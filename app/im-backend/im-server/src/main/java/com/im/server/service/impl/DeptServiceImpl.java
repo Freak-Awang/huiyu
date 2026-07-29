@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Intent: DeptServiceImpl coordinates domain rules, persistence updates, and cross-service side effects.
+ * 部门服务实现：处理组织架构树的构建与部门 CRUD。
  */
 @Service
 public class DeptServiceImpl implements DeptService {

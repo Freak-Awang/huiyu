@@ -1,3 +1,6 @@
+/**
+ * 会话 API 单元测试：验证会话数据规范化逻辑与群头像/群主转让接口调用。
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const httpMock = vi.hoisted(() => ({

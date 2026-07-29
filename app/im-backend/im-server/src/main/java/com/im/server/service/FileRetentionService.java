@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Intent: FileRetentionService owns cleanup of expired temporary files and unfinished uploads.
+ * 文件保留策略服务：负责清理过期临时文件和未完成的上传任务。
  */
 @Service
 public class FileRetentionService {
@@ -41,6 +41,9 @@ public class FileRetentionService {
         this.uploadPartMapper = uploadPartMapper;
     }
 
+    /**
+     * 清理已过期的临时文件（每次最多 200 条）。
+     */
     @Transactional
     public void cleanupExpiredTemporaryFiles() {
         List<ImFile> expiredFiles = fileMapper.selectList(new LambdaQueryWrapper<ImFile>()
@@ -56,6 +59,9 @@ public class FileRetentionService {
         }
     }
 
+    /**
+     * 清理已过期的分片上传任务（每次最多 100 条），删除已上传分片并标记任务为已中止。
+     */
     @Transactional
     public void cleanupExpiredUploadTasks() {
         List<ImFileUpload> expiredUploads = uploadMapper.selectList(
@@ -79,6 +85,13 @@ public class FileRetentionService {
         }
     }
 
+    /**
+     * 退役指定文件：标记过期并删除存储对象。
+     * <p>
+     * 使用 REQUIRES_NEW 传播级别，确保在调用方事务回滚时文件清理仍然生效。
+     *
+     * @param fileId 文件 ID
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void retireFile(Long fileId) {
         ImFile imFile = fileId != null ? fileMapper.selectById(fileId) : null;

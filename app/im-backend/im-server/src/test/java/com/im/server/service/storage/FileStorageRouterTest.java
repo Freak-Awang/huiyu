@@ -10,8 +10,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * 文件存储路由测试，验证默认客户端选择和按 storageType/bucket 路由。
+ *
+ * <p>测试范围：FileStorageRouter 的 defaultClient 和 clientFor 路由逻辑。</p>
+ */
 class FileStorageRouterTest {
 
+    /**
+     * 验证默认写客户端为配置的 storage（minio），按 storageType+bucket 路由到对应客户端，
+     * null/null 回退到 local（兼容旧数据）。
+     */
     @Test
     void defaultsWritesToConfiguredStorageAndRoutesLegacyReads() {
         FileStorageProperties properties = new FileStorageProperties();
@@ -21,11 +30,14 @@ class FileStorageRouterTest {
 
         FileStorageRouter router = new FileStorageRouter(properties, List.of(local, minio));
 
-        assertThat(router.defaultClient()).isSameAs(minio);
-        assertThat(router.clientFor("local", "local")).isSameAs(local);
-        assertThat(router.clientFor(null, null)).isSameAs(local);
+        assertThat(router.defaultClient()).isSameAs(minio); // 默认写入 minio
+        assertThat(router.clientFor("local", "local")).isSameAs(local); // 精确匹配
+        assertThat(router.clientFor(null, null)).isSameAs(local); // null 回退到 local
     }
 
+    /**
+     * 验证未知 storageType 抛出 IllegalArgumentException，bucket 不匹配也抛出异常。
+     */
     @Test
     void rejectsUnknownStorageTypeAndBucketMismatch() {
         FileStorageProperties properties = new FileStorageProperties();
@@ -36,7 +48,7 @@ class FileStorageRouterTest {
         assertThatThrownBy(() -> router.clientFor("missing"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Unsupported file storage type: missing");
-        assertThatThrownBy(() -> router.clientFor("local", "im-files"))
+        assertThatThrownBy(() -> router.clientFor("local", "im-files")) // storageType 匹配但 bucket 不匹配
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Storage bucket mismatch");
     }

@@ -12,13 +12,20 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.UUID;
 
 /**
- * Intent: GlobalExceptionHandler normalizes failures without leaking internal exception details.
+ * 全局异常处理器，统一拦截并转换各类异常为标准错误响应，避免向客户端泄露内部异常细节。
+ * 5xx错误会生成errorId便于日志追踪。
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * 处理业务异常，按业务错误码映射HTTP状态码；5xx错误隐藏内部信息并记录errorId。
+     *
+     * @param e 业务异常
+     * @return 标准错误响应
+     */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<?>> handleBusinessException(BusinessException e) {
         HttpStatus status = resolveStatus(e.getCode());
@@ -31,6 +38,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(Result.error(e.getCode(), message));
     }
 
+    /**
+     * 处理参数校验异常，聚合所有字段校验失败信息返回400响应。
+     *
+     * @param e 参数校验异常
+     * @return 包含字段错误明细的400响应
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<?>> handleValidationException(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()
@@ -40,6 +53,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(Result.error(400, message));
     }
 
+    /**
+     * 兜底处理未捕获异常，记录完整堆栈并返回带errorId的500响应。
+     *
+     * @param e 未捕获异常
+     * @return 500错误响应
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<?>> handleException(Exception e) {
         String errorId = UUID.randomUUID().toString();
@@ -48,6 +67,12 @@ public class GlobalExceptionHandler {
                 .body(Result.error(500, "Internal server error (errorId=" + errorId + ")"));
     }
 
+    /**
+     * 将业务错误码解析为HTTP状态码，无法识别时按500处理。
+     *
+     * @param code 业务错误码
+     * @return 对应的HTTP状态码
+     */
     private HttpStatus resolveStatus(int code) {
         HttpStatus status = HttpStatus.resolve(code);
         return status != null ? status : HttpStatus.INTERNAL_SERVER_ERROR;

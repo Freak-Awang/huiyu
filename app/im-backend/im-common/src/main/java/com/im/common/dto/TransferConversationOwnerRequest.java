@@ -3,9 +3,9 @@ package com.im.common.dto;
 import lombok.Data;
 
 /**
- * Intent: TransferConversationOwnerRequest identifies the member who will become the new group owner.
+ * 转让群主请求，指定接任群主角色的成员。
  */
 @Data
 public class TransferConversationOwnerRequest {
-    private Long newOwnerId;
+    private Long newOwnerId; // 新群主的用户ID
 }

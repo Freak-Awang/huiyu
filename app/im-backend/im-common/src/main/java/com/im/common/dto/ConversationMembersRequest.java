@@ -5,9 +5,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Intent: ConversationMembersRequest carries API payload shape between client, controller, and service layers.
+ * 会话成员批量操作请求，用于群聊中添加或移除成员。
  */
 @Data
 public class ConversationMembersRequest {
-    private List<Long> userIds;
+    private List<Long> userIds; // 目标用户ID列表
 }

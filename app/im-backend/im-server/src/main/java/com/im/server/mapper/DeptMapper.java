@@ -5,7 +5,7 @@ import com.im.common.entity.SysDept;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * Intent: DeptMapper maps domain persistence operations to MyBatis-Plus data access.
+ * 部门 Mapper：对应 sys_dept 表，提供组织架构部门的基础 CRUD。
  */
 @Mapper
 public interface DeptMapper extends BaseMapper<SysDept> {

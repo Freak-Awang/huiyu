@@ -17,7 +17,7 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 /**
- * Intent: FileUploadService owns direct uploads for chat attachments, images, and avatars.
+ * 文件上传服务：处理聊天附件、图片、头像等小文件的直接上传。
  */
 @Service
 public class FileUploadService {
@@ -40,11 +40,26 @@ public class FileUploadService {
         this.quotaService = quotaService;
     }
 
+    /**
+     * 上传独立图片（不关联会话）。
+     *
+     * @param file 图片文件
+     * @param uploaderId 上传者 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile uploadStandaloneImage(MultipartFile file, Long uploaderId) {
         return uploadImage(file, uploaderId, null, false);
     }
 
+    /**
+     * 上传会话文件附件。
+     *
+     * @param file 文件
+     * @param uploaderId 上传者 ID
+     * @param conversationId 会话 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile uploadConversationFile(MultipartFile file, Long uploaderId, Long conversationId) {
         if (conversationId == null) {
@@ -54,6 +69,14 @@ public class FileUploadService {
         return uploadFile(file, uploaderId, conversationId, false);
     }
 
+    /**
+     * 上传会话图片。
+     *
+     * @param file 图片文件
+     * @param uploaderId 上传者 ID
+     * @param conversationId 会话 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile uploadConversationImage(MultipartFile file, Long uploaderId, Long conversationId) {
         if (conversationId == null) {
@@ -63,11 +86,26 @@ public class FileUploadService {
         return uploadImage(file, uploaderId, conversationId, false);
     }
 
+    /**
+     * 上传用户头像。
+     *
+     * @param file 头像文件
+     * @param uploaderId 上传者 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile uploadAvatarFile(MultipartFile file, Long uploaderId) {
         return uploadImage(file, uploaderId, null, false, AVATAR_MAX_SIZE);
     }
 
+    /**
+     * 上传群头像。
+     *
+     * @param file 头像文件
+     * @param uploaderId 上传者 ID
+     * @param conversationId 会话 ID
+     * @return 文件元数据
+     */
     @Transactional
     public ImFile uploadGroupAvatarFile(MultipartFile file, Long uploaderId, Long conversationId) {
         if (conversationId == null) {
@@ -76,6 +114,11 @@ public class FileUploadService {
         return uploadImage(file, uploaderId, conversationId, false, AVATAR_MAX_SIZE);
     }
 
+    /**
+     * 静默删除已存储的文件对象（用于事务回滚后的清理）。
+     *
+     * @param file 文件元数据
+     */
     public void discardStoredFileQuietly(ImFile file) {
         if (file == null || !StringUtils.hasText(file.getObjectKey())) {
             return;
@@ -105,6 +148,11 @@ public class FileUploadService {
         return storeFile(file, uploaderId, conversationId, temporary, false, file.getContentType());
     }
 
+    /**
+     * 存储文件到对象存储并写入元数据。
+     * <p>
+     * 先写存储再写数据库；若数据库写入失败则删除已存储对象，避免产生孤儿文件。
+     */
     private ImFile storeFile(
             MultipartFile file,
             Long uploaderId,

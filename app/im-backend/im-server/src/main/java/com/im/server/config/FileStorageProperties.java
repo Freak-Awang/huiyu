@@ -4,7 +4,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Intent: FileStorageProperties centralizes framework configuration so infrastructure behavior stays explicit.
+ * 文件存储属性配置。
+ * <p>
+ * 绑定 {@code file.*} 前缀的配置项，涵盖存储策略（local/minio）、
+ * 文件大小限制、用户配额、分片大小、保留策略、上传路径及 MinIO 连接参数。
+ * </p>
  */
 @Component
 @ConfigurationProperties(prefix = "file")

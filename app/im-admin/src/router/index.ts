@@ -1,4 +1,9 @@
-// Intent: index defines route guards and view mapping for the application shell.
+/**
+ * 路由配置与全局守卫
+ * 定义后台管理端页面路由，并在导航前校验管理员登录态：
+ * - 未登录访问受保护页面时重定向到 /login
+ * - 已登录访问 /login 时重定向到首页
+ */
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { isAuthorizedAdmin } from '../utils/authorization'
@@ -42,6 +47,7 @@ const router = createRouter({
     ],
 })
 
+// 全局前置守卫：校验 token 与 admin 角色
 router.beforeEach((to, _from, next) => {
     const authStore = useAuthStore()
     authStore.init()

@@ -31,6 +31,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 分片上传任务服务测试，验证创建任务、秒传、分片上传、完成、取消全流程。
+ *
+ * <p>测试范围：FileUploadTaskService 的 createTask（含秒传）、uploadPart、completeTask、cancelTask。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class FileUploadTaskServiceTest {
 
@@ -45,6 +50,10 @@ class FileUploadTaskServiceTest {
 
     @InjectMocks private FileUploadTaskService service;
 
+    /**
+     * 验证创建分片上传任务：10 字节文件、chunkSize=4 → chunkCount=3，
+     * 状态为 UPLOADING，uploaderId 正确。
+     */
     @Test
     void createsMultipartTaskWithServerChunkParameters() {
         when(properties.getMaxSize()).thenReturn(50L);
@@ -56,7 +65,7 @@ class FileUploadTaskServiceTest {
 
         FileUploadTaskVO result = service.createTask(request(10L, null), 7L);
 
-        assertThat(result.getChunkCount()).isEqualTo(3);
+        assertThat(result.getChunkCount()).isEqualTo(3); // ceil(10/4)=3
         assertThat(result.getChunkSize()).isEqualTo(4L);
         assertThat(result.getStatus()).isEqualTo("UPLOADING");
         assertThat(result.getExpiresAt()).isNotNull();
@@ -65,6 +74,10 @@ class FileUploadTaskServiceTest {
         assertThat(captor.getValue().getUploaderId()).isEqualTo(7L);
     }
 
+    /**
+     * 验证秒传（second_transfer）：同一会话中 SHA256 相同的文件已存在，
+     * 返回 fileExists=true、uploadMode=second_transfer、status=COMPLETED。
+     */
     @Test
     void sameConversationHashUsesSecondTransfer() {
         when(properties.getMaxSize()).thenReturn(50L);
@@ -72,7 +85,7 @@ class FileUploadTaskServiceTest {
         ImFile existing = new ImFile();
         existing.setId(88L);
         existing.setStorageType("local");
-        when(fileMapper.selectOne(any())).thenReturn(existing);
+        when(fileMapper.selectOne(any())).thenReturn(existing); // 已存在相同 hash 的文件
 
         FileUploadTaskVO result = service.createTask(request(10L, "abc"), 7L);
 
@@ -82,6 +95,9 @@ class FileUploadTaskServiceTest {
         assertThat(result.getStatus()).isEqualTo("COMPLETED");
     }
 
+    /**
+     * 验证分片大小不匹配时上传被拒绝：期望 4 字节，实际上传 3 字节。
+     */
     @Test
     void rejectsChunkWhoseSizeIsNotExact() {
         ImFileUpload upload = activeUpload(6L, 4L, 2);
@@ -93,12 +109,15 @@ class FileUploadTaskServiceTest {
                 .hasMessage("Chunk size does not match expected size");
     }
 
+    /**
+     * 验证分片大小正确时上传成功：存储到 storageClient，插入分片记录。
+     */
     @Test
     void uploadsExactChunkAndReturnsPartState() throws Exception {
         ImFileUpload upload = activeUpload(6L, 4L, 2);
         when(uploadMapper.selectOwnedForUpdate(any(), any())).thenReturn(upload);
         when(storageRouter.clientFor("local", "local")).thenReturn(storageClient);
-        when(uploadPartMapper.selectOne(any())).thenReturn(null);
+        when(uploadPartMapper.selectOne(any())).thenReturn(null); // 该分片号未上传过
         when(uploadPartMapper.selectList(any())).thenReturn(List.of());
         MockMultipartFile part = new MockMultipartFile("file", "part", "application/octet-stream", new byte[4]);
 
@@ -108,6 +127,9 @@ class FileUploadTaskServiceTest {
         verify(uploadPartMapper).insert(any(ImFileUploadPart.class));
     }
 
+    /**
+     * 验证已完成任务可以幂等地再次调用 completeTask，直接返回已有文件。
+     */
     @Test
     void completedTaskCanBeCompletedAgain() {
         ImFileUpload upload = activeUpload(6L, 4L, 2);
@@ -121,6 +143,9 @@ class FileUploadTaskServiceTest {
         assertThat(service.completeTask(upload.getUploadId(), null, 7L)).isSameAs(file);
     }
 
+    /**
+     * 验证完成分片上传：合并所有分片→创建文件元数据→删除分片临时对象→更新任务状态为 COMPLETED。
+     */
     @Test
     void completesAllChunksAndDeletesParts() throws Exception {
         ImFileUpload upload = activeUpload(6L, 4L, 2);
@@ -137,12 +162,15 @@ class FileUploadTaskServiceTest {
         ImFile result = service.completeTask(upload.getUploadId(), null, 7L);
 
         assertThat(result).isSameAs(completed);
-        verify(storageClient).compose(eq(upload.getObjectKey()), anyList(), eq(6L), eq(upload.getContentType()));
-        verify(storageClient).deleteQuietly(first.getObjectKey());
-        verify(storageClient).deleteQuietly(second.getObjectKey());
+        verify(storageClient).compose(eq(upload.getObjectKey()), anyList(), eq(6L), eq(upload.getContentType())); // 合并分片
+        verify(storageClient).deleteQuietly(first.getObjectKey()); // 清理分片1
+        verify(storageClient).deleteQuietly(second.getObjectKey()); // 清理分片2
         assertThat(upload.getStatus()).isEqualTo("COMPLETED");
     }
 
+    /**
+     * 验证取消上传任务：删除已上传分片→清理分片记录→更新任务状态为 ABORTED。
+     */
     @Test
     void cancelDeletesChunksAndMarksTaskAborted() {
         ImFileUpload upload = activeUpload(6L, 4L, 2);

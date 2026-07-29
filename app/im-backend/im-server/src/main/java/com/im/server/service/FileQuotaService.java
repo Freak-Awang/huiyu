@@ -7,6 +7,9 @@ import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 
+/**
+ * 文件存储配额服务：校验用户剩余存储空间是否足够存放新文件。
+ */
 @Service
 public class FileQuotaService {
 
@@ -26,6 +29,16 @@ public class FileQuotaService {
         this.properties = properties;
     }
 
+    /**
+     * 断言用户有足够配额存放指定大小的文件。
+     * <p>
+     * 通过 SELECT ... FOR UPDATE 锁定用户行，防止并发上传导致配额超卖。
+     * 已用空间 = 已可用文件总大小 + 进行中上传任务总大小。
+     *
+     * @param userId 用户 ID
+     * @param incomingBytes 待存入文件字节数
+     * @throws BusinessException 用户不可用或配额不足时抛出
+     */
     public void assertCanStore(Long userId, long incomingBytes) {
         if (userMapper.lockById(userId) == null) {
             throw new BusinessException(401, "User is not available");

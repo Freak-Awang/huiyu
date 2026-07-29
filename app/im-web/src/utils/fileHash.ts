@@ -1,3 +1,19 @@
+/**
+ * 文件哈希计算工具
+ *
+ * 通过 Web Worker 在后台线程计算文件的 SHA-256 哈希值，避免阻塞主线程 UI。
+ * 支持进度回传和取消操作。
+ * 用于大文件上传的秒传判断和分片校验。
+ */
+
+/**
+ * 计算文件 SHA-256 哈希
+ * 创建 Worker 线程异步计算，通过 Promise 返回结果
+ * @param file - 目标文件
+ * @param onProgress - 进度回调（0-1）
+ * @param signal - 取消信号
+ * @returns SHA-256 十六进制哈希字符串
+ */
 export function hashFile(
   file: File,
   onProgress?: (progress: number) => void,
@@ -8,7 +24,7 @@ export function hashFile(
     const stop = () => worker.terminate()
     const abort = () => {
       stop()
-      reject(new DOMException('Hashing was cancelled', 'AbortError'))
+      reject(new DOMException('哈希计算已取消', 'AbortError'))
     }
     if (signal?.aborted) {
       abort()
@@ -24,12 +40,12 @@ export function hashFile(
       signal?.removeEventListener('abort', abort)
       stop()
       if (message.type === 'complete' && message.sha256) resolve(message.sha256)
-      else reject(new Error(message.message || 'Failed to calculate file checksum'))
+      else reject(new Error(message.message || '文件哈希计算失败'))
     }
     worker.onerror = (event) => {
       signal?.removeEventListener('abort', abort)
       stop()
-      reject(new Error(event.message || 'Failed to calculate file checksum'))
+      reject(new Error(event.message || '文件哈希计算失败'))
     }
     worker.postMessage({ file })
   })

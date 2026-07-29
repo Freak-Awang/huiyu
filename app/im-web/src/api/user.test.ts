@@ -1,3 +1,6 @@
+/**
+ * 用户 API 单元测试：验证用户数据规范化逻辑（如头像路径转换）。
+ */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./index', () => ({ default: {} }))
