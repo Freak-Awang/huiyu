@@ -149,7 +149,6 @@ export function uploadFile(
   if (conversationId) formData.append('conversationId', conversationId)
   formData.append('category', category)
   return http.post('/api/files/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,
     signal,
     onUploadProgress: (event) => onProgress?.(event.total ? event.loaded / event.total : 0),
@@ -219,7 +218,6 @@ export function uploadFilePart(
   const formData = new FormData()
   formData.append('file', blob, `part-${partNumber}`)
   return http.post<RawFileUploadTask>(`/api/files/upload/tasks/${uploadId}/parts/${partNumber}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,
     signal,
     onUploadProgress: onProgress,
@@ -258,7 +256,6 @@ export function uploadAvatar(file: File) {
   const formData = new FormData()
   formData.append('file', file)
   return http.post('/api/files/upload/avatar', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,
   }).then((res) => ({
     ...res,

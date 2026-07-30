@@ -17,13 +17,16 @@
           v-for="item in sections"
           :key="item.key"
           type="button"
-          class="settings-nav-item"
+          class="settings-nav-item settings-section-nav-item"
           :class="{ active: activeSection === item.key }"
           @click="activeSection = item.key"
         >
-          <img v-if="item.iconSrc" :src="item.iconSrc" alt="" />
-          <span v-else>{{ item.icon }}</span>
           <span>{{ item.label }}</span>
+        </button>
+        <div class="settings-nav-divider"></div>
+        <button type="button" class="settings-nav-item logout-nav-item" @click="emit('logout')">
+          <img :src="powerIcon" alt="" />
+          <span>退出登录</span>
         </button>
       </aside>
 
@@ -202,10 +205,11 @@ import {
 } from '../utils/localMessageStore'
 import { clearRecentUsageCache } from '../utils/recentUsage'
 import type { GeneralSettings, NotificationSettings } from '../api/settings'
-import settingsIcon from '../assets/icons/settings.svg'
+import powerIcon from '../assets/icons/power.svg'
 
 const emit = defineEmits<{
   close: []
+  logout: []
   recentCacheCleared: []
   localCacheCleared: []
 }>()
@@ -219,11 +223,11 @@ const activeSection = ref<SectionKey>('general') // 当前激活的设置面板
 const storageStats = ref<LocalMessageStats | null>(null)
 const statusText = ref('')
 
-const sections: Array<{ key: SectionKey; label: string; icon: string; iconSrc?: string; hint: string }> = [
-  { key: 'general', label: '通用设置', icon: '', iconSrc: settingsIcon, hint: '界面、快捷键和窗口偏好' },
-  { key: 'notification', label: '消息通知', icon: '🔔', hint: '桌面通知和消息提醒策略' },
-  { key: 'storage', label: '存储管理', icon: '🗄', hint: '查看和清理本机缓存' },
-  { key: 'about', label: '关于 ArtTalk', icon: 'i', hint: '版本信息、更新日志和更新通道' },
+const sections: Array<{ key: SectionKey; label: string; hint: string }> = [
+  { key: 'general', label: '通用设置', hint: '界面、快捷键和窗口偏好' },
+  { key: 'notification', label: '消息通知', hint: '桌面通知和消息提醒策略' },
+  { key: 'storage', label: '存储管理', hint: '查看和清理本机缓存' },
+  { key: 'about', label: '关于 ArtTalk', hint: '版本信息、更新日志和更新通道' },
 ]
 
 const notificationRows: Array<{
@@ -342,7 +346,7 @@ function flashStatus(text: string) {
   width: 210px;
   padding: 18px 12px;
   background: #eceef4;
-  border-right: 1px solid #dde0e8;
+  border-right: 1px solid var(--border);
 }
 
 .settings-profile {
@@ -424,6 +428,24 @@ function flashStatus(text: string) {
   height: 18px;
 }
 
+.settings-section-nav-item {
+  padding-left: 40px;
+}
+
+.settings-nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 4px;
+}
+
+.logout-nav-item {
+  color: #ef4444 !important;
+}
+
+.logout-nav-item:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
 .settings-panel {
   flex: 1;
   display: flex;
@@ -474,7 +496,7 @@ function flashStatus(text: string) {
 }
 
 .settings-group {
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -487,7 +509,7 @@ function flashStatus(text: string) {
   gap: 20px;
   padding: 14px 16px;
   background: var(--bg-surface);
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid var(--border);
 }
 
 .setting-row:last-child {
@@ -536,7 +558,7 @@ function flashStatus(text: string) {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #f8f9fc;
   padding: 14px;
@@ -565,7 +587,7 @@ function flashStatus(text: string) {
 .about-card {
   margin-bottom: 16px;
   padding: 18px;
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: #f8f9fc;
 }

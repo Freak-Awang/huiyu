@@ -87,7 +87,6 @@ describe('conversation API normalization', () => {
     expect(httpMock.post).toHaveBeenCalledWith(
       '/api/conversations/1/avatar',
       expect.any(FormData),
-      expect.objectContaining({ headers: { 'Content-Type': 'multipart/form-data' } }),
     )
     expect(httpMock.delete).toHaveBeenCalledWith('/api/conversations/1/avatar')
     expect(httpMock.put).toHaveBeenCalledWith('/api/conversations/1/owner', { newOwnerId: 11 })

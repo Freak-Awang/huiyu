@@ -18,7 +18,7 @@ html, body, #app {
 :root {
   /* Background layers */
   --bg-app:              #f5f5f5;
-  --bg-sidebar:          #2e2e2e;
+  --bg-sidebar:          #ebebeb;
   --bg-panel:            #ebebeb;
   --bg-chat:             #f8f8f8;
   --bg-header:           #f0f0f0;
@@ -46,10 +46,10 @@ html, body, #app {
   --accent-text-on:      #ffffff;
 
   /* Borders */
-  --border:              #e0e0e0;
-  --border-light:        #dddddd;
-  --border-subtle:       #eeeeee;
-  --border-input:        #d8dce6;
+  --border:              #cccccc;
+  --border-light:        #cccccc;
+  --border-subtle:       #cccccc;
+  --border-input:        #cccccc;
 
   /* Semantic */
   --danger:              #e74c3c;
@@ -62,7 +62,6 @@ html, body, #app {
   --presence-online:     #22c55e;
   --presence-busy:       #ef4444;
   --presence-away:       #f59e0b;
-  --presence-dnd:        #8b5cf6;
   --presence-offline:    #9ca3af;
 
   /* Shadows */
@@ -96,7 +95,7 @@ html, body, #app {
 /* ===== Design Tokens: Dark Theme ===== */
 .dark-theme {
   --bg-app:              #1f232b;
-  --bg-sidebar:          #1a1d24;
+  --bg-sidebar:          #252932;
   --bg-panel:            #252932;
   --bg-chat:             #1f232b;
   --bg-header:           #2d323c;
@@ -122,9 +121,9 @@ html, body, #app {
   --accent-text-on:      #edf0f5;
 
   --border:              #3b414f;
-  --border-light:        #363b48;
-  --border-subtle:       #333844;
-  --border-input:        #4c5362;
+  --border-light:        #3b414f;
+  --border-subtle:       #3b414f;
+  --border-input:        #3b414f;
 
   --danger:              #f08b84;
   --danger-strong:       #ffaaa4;

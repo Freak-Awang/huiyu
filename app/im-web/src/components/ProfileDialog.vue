@@ -358,7 +358,6 @@ function revokeAvatarObjectUrl() {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   border: 3px solid rgba(255, 255, 255, 0.75);
   border-radius: 50%;
   background: #667eea;
@@ -370,6 +369,7 @@ function revokeAvatarObjectUrl() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .presence-dot {
@@ -386,8 +386,6 @@ function revokeAvatarObjectUrl() {
 .presence-online { background: #22c55e; }
 .presence-busy { background: #ef4444; }
 .presence-away { background: #f59e0b; }
-.presence-dnd { background: #8b5cf6; }
-.presence-invisible,
 .presence-offline { background: #9ca3af; }
 
 .profile-title h2 {

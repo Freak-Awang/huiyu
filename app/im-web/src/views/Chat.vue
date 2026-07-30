@@ -10,9 +10,43 @@
   >
     <DesktopWindowControls />
 
-    <!-- 左侧导航栏：消息/通讯录切换、在线状态、设置、退出 -->
+    <!-- 左侧导航栏：消息/通讯录切换、在线状态、更多、退出 -->
     <div class="left-sidebar">
       <div class="sidebar-nav">
+        <div
+          class="user-avatar-sidebar"
+          :title="authStore.currentUser?.nickname"
+          @click="openOwnProfile"
+        >
+          <img
+            v-if="authStore.currentUser?.avatar && !failedAvatars.has(authStore.currentUser.avatar)"
+            :src="authStore.currentUser.avatar"
+            class="avatar-img"
+            @error="failedAvatars.add(authStore.currentUser.avatar)"
+            alt=""
+          />
+          <span v-else class="avatar-placeholder">
+            {{ (authStore.currentUser?.nickname || 'U')[0] }}
+          </span>
+          <span
+            class="sidebar-presence-dot"
+            :class="`presence-${selfPresence}`"
+            :title="selfPresenceLabel"
+            @click.stop="presenceMenuOpen = !presenceMenuOpen"
+          ></span>
+          <div v-if="presenceMenuOpen" class="presence-menu" @click.stop>
+            <button
+              v-for="option in PRESENCE_OPTIONS"
+              :key="option.value"
+              type="button"
+              :class="{ active: manualPresence === option.value }"
+              @click="setManualPresence(option.value)"
+            >
+              <span class="presence-dot-inline" :class="`presence-${option.value}`"></span>
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+        </div>
         <div
           class="nav-item"
           :class="{ active: activeTab === 'chat' }"
@@ -33,48 +67,8 @@
         </div>
       </div>
       <div class="sidebar-footer">
-        <div
-          class="user-avatar-small"
-          :title="authStore.currentUser?.nickname"
-          @click="openOwnProfile"
-        >
-          <img
-            v-if="authStore.currentUser?.avatar && !failedAvatars.has(authStore.currentUser.avatar)"
-            :src="authStore.currentUser.avatar"
-            class="avatar-img"
-            @error="failedAvatars.add(authStore.currentUser.avatar)"
-            alt=""
-          />
-          <span v-else class="avatar-placeholder">
-            {{ (authStore.currentUser?.nickname || 'U')[0] }}
-          </span>
-          <span class="sidebar-presence-dot" :class="`presence-${selfPresence}`"></span>
-        </div>
-        <button
-          class="presence-switch"
-          type="button"
-          :title="selfPresenceLabel"
-          @click="presenceMenuOpen = !presenceMenuOpen"
-        >
-          {{ selfPresenceLabel.slice(0, 2) }}
-        </button>
-        <div v-if="presenceMenuOpen" class="presence-menu">
-          <button
-            v-for="option in PRESENCE_OPTIONS"
-            :key="option.value"
-            type="button"
-            :class="{ active: manualPresence === option.value }"
-            @click="setManualPresence(option.value)"
-          >
-            <span class="presence-dot-inline" :class="`presence-${option.value}`"></span>
-            <span>{{ option.label }}</span>
-          </button>
-        </div>
-        <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="设置">
-          <img :src="settingsIcon" alt="设置" />
-        </button>
-        <button class="logout-btn" @click="handleLogout" title="退出登录">
-          <img :src="powerIcon" alt="退出登录" />
+        <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
+          <img :src="moreIcon" alt="更多" />
         </button>
       </div>
     </div>
@@ -85,7 +79,9 @@
       <template v-if="activeTab === 'chat'">
         <div class="panel-header">
           <span class="panel-title">消息</span>
-          <button class="new-chat-btn" @click="showCreateDialog = true">+</button>
+          <button class="new-chat-btn" @click="showCreateDialog = true" title="新建聊天">
+            <img :src="newChatIcon" alt="新建聊天" />
+          </button>
         </div>
         <div class="search-bar">
           <input
@@ -136,7 +132,7 @@
                   >{{ chatStore.getUnreadCount(conv.conversationId) }}</span>
                 </div>
               </div>
-              <span class="pin-icon">📌</span>
+              <img :src="pinIcon" class="pin-icon" alt="置顶" />
             </div>
           </template>
           <!-- Unpinned -->
@@ -306,7 +302,9 @@
             <span v-else class="chat-header-meta"></span>
           </div>
           <div class="chat-header-actions">
-            <button class="action-btn chat-search-toggle" title="搜索聊天记录" @click="openSearchDrawer">🔍</button>
+            <button class="action-btn chat-search-toggle" title="搜索聊天记录" @click="openSearchDrawer">
+              <img :src="searchIcon" alt="搜索" />
+            </button>
             <button
               v-if="chatStore.currentConversation.type === 'GROUP'"
               class="members-action-btn"
@@ -320,12 +318,16 @@
               class="action-btn"
               :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
               @click="togglePin"
-            >📌</button>
+            >
+              <img :src="pinIcon" alt="置顶" />
+            </button>
             <button
               class="action-btn"
               :title="chatStore.currentConversation.muted ? '取消免打扰' : '免打扰'"
               @click="toggleMute"
-            >{{ chatStore.currentConversation.muted ? '🔕' : '🔔' }}</button>
+            >
+              <img :src="chatStore.currentConversation.muted ? bellOffIcon : bellOnIcon" alt="免打扰" />
+            </button>
           </div>
         </div>
 
@@ -1013,6 +1015,7 @@
     <SettingsDialog
       v-if="showSettingsDialog"
       @close="showSettingsDialog = false"
+      @logout="handleLogout"
       @recent-cache-cleared="clearRecentEmojiState"
       @local-cache-cleared="handleLocalCacheCleared"
     />
@@ -1111,8 +1114,12 @@ import {
 } from '../utils/presence'
 import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
-import settingsIcon from '../assets/icons/settings.svg'
-import powerIcon from '../assets/icons/power.svg'
+import moreIcon from '../assets/icons/more.svg'
+import newChatIcon from '../assets/icons/new chat.svg'
+import searchIcon from '../assets/icons/search.svg'
+import pinIcon from '../assets/icons/置顶.svg'
+import bellOnIcon from '../assets/icons/开启铃声.svg'
+import bellOffIcon from '../assets/icons/关闭铃声.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
 import screenshotIcon from '../assets/icons/screenshot.svg'
 import fileIcon from '../assets/icons/file.svg'
@@ -2638,7 +2645,7 @@ function handleLocalCacheCleared() {
 // 处理文档全局点击：关闭在线状态菜单和表情面板
 function handleDocumentMouseDown(event: MouseEvent) {
   const target = event.target as Node
-  if (presenceMenuOpen.value && !(target instanceof Element && target.closest('.presence-menu, .presence-switch'))) {
+  if (presenceMenuOpen.value && !(target instanceof Element && target.closest('.presence-menu, .sidebar-presence-dot'))) {
     presenceMenuOpen.value = false
   }
   if (showEmojiPanel.value) {
@@ -3163,7 +3170,6 @@ function initWebSocket() {
 // 判断是否应该弹出桌面通知（免打扰、静音、仅 @ 我等条件判断）
 function shouldNotifyMessage(message: Message, conversation: Conversation) {
   const notification = settingsStore.notification
-  if (selfPresence.value === 'dnd') return false
   if (conversation.muted || notification.doNotDisturb || !notification.desktop) return false
   if (chatStore.currentConversation?.conversationId === message.conversationId) return false
   if (notification.mentionOnly && !messageMentionsCurrentUser(message)) return false
@@ -3480,13 +3486,14 @@ watch(
 
 /* Left Sidebar */
 .left-sidebar {
-  width: 60px;
-  min-width: 60px;
+  width: 55px;
+  min-width: 55px;
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 12px 0;
+  border-right: 1px solid var(--border);
 }
 
 .sidebar-nav {
@@ -3509,13 +3516,11 @@ watch(
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(128, 128, 128, 0.15);
 }
 
 .nav-item.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: rgba(128, 128, 128, 0.25);
 }
 
 .nav-icon {
@@ -3536,10 +3541,10 @@ watch(
   padding: 0 6px;
 }
 
-.user-avatar-small {
+.user-avatar-sidebar {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--accent-avatar);
   display: flex;
@@ -3548,16 +3553,17 @@ watch(
   color: #fff;
   font-size: var(--font-md);
   cursor: pointer;
-  overflow: hidden;
+  margin: 0 auto 8px;
 }
 
-.user-avatar-small img {
+.user-avatar-sidebar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
-.user-avatar-small:hover {
+.user-avatar-sidebar:hover {
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.28);
 }
 
@@ -3565,31 +3571,22 @@ watch(
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border: 2px solid var(--bg-sidebar);
   border-radius: 50%;
-}
-
-.presence-switch {
-  width: 34px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--bg-app);
   cursor: pointer;
-  font-size: var(--font-xs);
+  z-index: 1;
 }
 
-.presence-switch:hover {
-  background: rgba(255, 255, 255, 0.18);
+.sidebar-presence-dot:hover {
+  transform: scale(1.2);
 }
 
 .presence-menu {
   position: absolute;
-  left: 54px;
-  bottom: 74px;
+  left: 46px;
+  top: 0;
   z-index: 50;
   width: 132px;
   padding: 6px;
@@ -3625,24 +3622,6 @@ watch(
   border-radius: 50%;
 }
 
-.logout-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-lg);
-}
-
-.logout-btn img {
-  width: 18px;
-  height: 18px;
-}
-
 .settings-btn {
   width: 34px;
   height: 34px;
@@ -3660,20 +3639,20 @@ watch(
   height: 18px;
 }
 
-.logout-btn:hover,
 .settings-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(128, 128, 128, 0.15);
 }
 
 /* Middle Panel */
 .middle-panel {
-  width: 280px;
-  min-width: 280px;
+  width: 180px;
+  min-width: 180px;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-light);
+  border-radius: 3px;
+  overflow: hidden;
 }
 
 .panel-header {
@@ -3696,12 +3675,16 @@ watch(
   border-radius: var(--radius-md);
   background: var(--bg-hover-light);
   border: none;
-  font-size: var(--font-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
+}
+
+.new-chat-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .new-chat-btn:hover {
@@ -3763,7 +3746,9 @@ watch(
 }
 
 .pin-icon {
-  font-size: var(--font-2xs);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .conv-avatar {
@@ -3801,8 +3786,6 @@ watch(
 .presence-online { background: var(--presence-online); }
 .presence-busy { background: var(--presence-busy); }
 .presence-away { background: var(--presence-away); }
-.presence-dnd { background: var(--presence-dnd); }
-.presence-invisible,
 .presence-offline { background: var(--presence-offline); }
 
 .conv-info {
@@ -3874,10 +3857,6 @@ watch(
 }
 
 /* Contacts */
-.dept-group {
-  /* nested */
-}
-
 .dept-header {
   display: flex;
   align-items: center;
@@ -3977,7 +3956,7 @@ watch(
   padding: 12px 20px;
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
-  min-height: 56px;
+  min-height: 40px;
 }
 
 .chat-header-info {
@@ -4053,11 +4032,18 @@ watch(
 .action-btn {
   background: none;
   border: none;
-  font-size: var(--font-lg);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn img {
+  width: 18px;
+  height: 18px;
 }
 
 .action-btn:hover {
@@ -4194,7 +4180,7 @@ watch(
 .file-bubble {
   align-items: center;
   background: var(--bg-surface);
-  border: 1px solid #e4e7f0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);
@@ -4358,7 +4344,7 @@ watch(
 .reply-target {
   align-items: center;
   background: #fff;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 6px;
   color: #666;
   display: flex;

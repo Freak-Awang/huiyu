@@ -332,7 +332,6 @@ export function uploadGroupAvatar(
   const formData = new FormData()
   formData.append('file', file)
   return http.post<RawConversation>(`/api/conversations/${convId}/avatar`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 10 * 60 * 1000,
     onUploadProgress: (event: AxiosProgressEvent) =>
       onProgress?.(event.total ? event.loaded / event.total : 0),

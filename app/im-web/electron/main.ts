@@ -131,10 +131,10 @@ function assertMainWindowSender(event: IpcMainInvokeEvent) {
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 960,
-    minHeight: 640,
+    width: 820,
+    height: 720,
+    minWidth: 640,
+    minHeight: 580,
     title: 'ArtTalk',
     backgroundColor: '#f5f5f5',
     frame: false,
