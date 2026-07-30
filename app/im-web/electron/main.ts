@@ -139,7 +139,7 @@ function createMainWindow() {
     backgroundColor: '#f5f5f5',
     frame: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -361,7 +361,7 @@ async function startScreenshot(): Promise<ScreenshotResult> {
       show: false,
       backgroundColor: '#000000',
       webPreferences: {
-        preload: join(__dirname, 'preload.js'),
+        preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,

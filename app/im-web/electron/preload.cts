@@ -1,5 +1,5 @@
 /**
- * Preload 脚本（Electron 预加载层）
+ * Preload 脚本（Electron 预加载层，编译为 CommonJS）
  *
  * 在渲染进程沙箱隔离的前提下，通过 contextBridge 向 window 注入类型化的桌面桥接 API。
  * 所有 native 能力通过 ipcRenderer.invoke 调用主进程的 IPC handler，保持安全边界。

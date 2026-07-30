@@ -1,7 +1,7 @@
 /**
  * desktop.d.ts - Electron桌面桥接层类型声明
  * 
- * 为渲染进程提供 preload.ts 通过 contextBridge 暴露的 imDesktop 和 imScreenshot 
+ * 为渲染进程提供 preload.cts 通过 contextBridge 暴露的 imDesktop 和 imScreenshot
  * API 的类型定义。涵盖窗口管理、消息本地存储、文件下载、截图、自动更新等功能。
  */
 export {}
