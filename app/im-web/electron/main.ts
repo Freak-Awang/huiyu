@@ -127,7 +127,7 @@ function assertMainWindowSender(event: IpcMainInvokeEvent) {
 /**
  * 创建主窗口
  * 开启 contextIsolation + sandbox，所有 native 能力仅通过 preload IPC 白名单暴露
- * 启用 frame: false 与 transparent 背景，让渲染端自行绘制无边框窗口外观（含自定义标题栏控制按钮）
+ * 启用 frame: false，让渲染端自行绘制无边框窗口外观（含自定义标题栏控制按钮）
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -136,7 +136,7 @@ function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'ArtTalk',
-    backgroundColor: '#00000000',
+    backgroundColor: '#f5f5f5',
     frame: false,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),

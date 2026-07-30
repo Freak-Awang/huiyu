@@ -318,6 +318,29 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * 将搜索命中的历史消息合入缓存，但不更新会话的最后消息预览。
+   * 搜索结果可能不在当前分页中，因此需要按时间插入后才能在消息列表中定位。
+   */
+  function mergeHistoricalMessage(msg: Message) {
+    seedMessageProfile(msg)
+    const convMessagesRaw = messages.value.get(msg.conversationId)
+    const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
+    const existingIndex = convMessages.findIndex((item) =>
+      (msg.messageId && item.messageId === msg.messageId) ||
+      (msg.clientMsgId && item.clientMsgId === msg.clientMsgId)
+    )
+    const nextMessages = [...convMessages]
+    if (existingIndex >= 0) {
+      nextMessages[existingIndex] = { ...nextMessages[existingIndex], ...msg }
+    } else {
+      nextMessages.push(msg)
+    }
+    nextMessages.sort((left, right) => messageSortValue(left) - messageSortValue(right))
+    messages.value.set(msg.conversationId, nextMessages)
+    void upsertLocalMessage(msg)
+  }
+
+  /**
    * 处理接收到的实时消息。
    * 确保会话存在、插入消息、更新未读数与 @ 未读数。
    * @param msg 接收到的消息
@@ -533,6 +556,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchPendingMessages,
     addMessage,
     upsertMessage,
+    mergeHistoricalMessage,
     receiveMessage,
     markAsRead,
     clearUnread,

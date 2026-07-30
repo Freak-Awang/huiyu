@@ -5,29 +5,10 @@
     :class="{
       'compact-mode': settingsStore.general.compactMode,
       'dark-theme': settingsStore.general.theme === 'dark',
+      'desktop-window': hasDesktopWindowControls,
     }"
   >
-    <!-- 桌面端自定义窗口控制：无边框窗口下提供最小化 / 最大化 / 关闭 -->
-    <div class="window-controls">
-      <button
-        class="window-control-btn"
-        aria-label="最小化"
-        type="button"
-        @click="minimizeWindow"
-      >─</button>
-      <button
-        class="window-control-btn"
-        :aria-label="isWindowMaximized ? '还原' : '最大化'"
-        type="button"
-        @click="toggleMaximizeWindow"
-      >{{ isWindowMaximized ? '❐' : '□' }}</button>
-      <button
-        class="window-control-btn window-control-close"
-        aria-label="关闭"
-        type="button"
-        @click="closeWindow"
-      >✕</button>
-    </div>
+    <DesktopWindowControls />
 
     <!-- 左侧导航栏：消息/通讯录切换、在线状态、设置、退出 -->
     <div class="left-sidebar">
@@ -353,8 +334,12 @@
             <div
               v-for="msg in chatStore.currentMessages"
               :key="msg.messageId || msg.clientMsgId"
+              :id="messageElementId(msg.messageId || msg.clientMsgId || '')"
               class="message-item"
-              :class="{ 'message-self': msg.senderId === authStore.currentUser?.userId }"
+              :class="{
+                'message-self': msg.senderId === authStore.currentUser?.userId,
+                'message-highlighted': highlightedMessageId === msg.messageId,
+              }"
             >
               <div
                 class="message-avatar"
@@ -1057,6 +1042,7 @@ import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
 import ConversationAvatar from '../components/ConversationAvatar.vue'
+import DesktopWindowControls from '../components/DesktopWindowControls.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { createWebSocketTicket } from '../api/auth'
 import { getDeptTree, type DeptNode } from '../api/dept'
@@ -1305,35 +1291,7 @@ const attachmentFeedback = ref('')
 const attachmentFeedbackIsError = ref(false)
 const attachmentDragDepth = new DragDepthTracker()
 const isTakingScreenshot = ref(false)
-const isWindowMaximized = ref(false) // 桌面窗口是否处于最大化状态（用于同步右上角窗口控制按钮图标）
-
-type WindowControls = {
-  minimize: () => Promise<boolean>
-  toggleMaximize: () => Promise<boolean>
-  close: () => Promise<boolean>
-  isMaximized: () => Promise<boolean>
-  onMaximizeChanged?: (handler: (maximized: boolean) => void) => () => void
-}
-const desktopWindowControls = (() => {
-  if (typeof window === 'undefined') return undefined
-  const bridge = (window as unknown as { imDesktop?: { window?: WindowControls } }).imDesktop
-  return bridge?.window
-})()
-
-async function minimizeWindow() {
-  await desktopWindowControls?.minimize()
-}
-
-async function toggleMaximizeWindow() {
-  if (!desktopWindowControls) return
-  isWindowMaximized.value = await desktopWindowControls.toggleMaximize()
-}
-
-async function closeWindow() {
-  await desktopWindowControls?.close()
-}
-
-let unsubscribeMaximize: (() => void) | null = null
+const hasDesktopWindowControls = !!window.imDesktop?.window
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
 const showMentionPicker = ref(false)
@@ -1367,6 +1325,8 @@ const chatSearchResults = ref<Message[]>([])
 const showSearchDrawer = ref(false)
 const hasSearched = ref(false)
 const searchDrawerInputRef = ref<HTMLInputElement | null>(null)
+const highlightedMessageId = ref('')
+let highlightMessageTimer: ReturnType<typeof setTimeout> | null = null
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
@@ -1653,6 +1613,7 @@ async function handleSelectConv(conv: any) {
     closeMentionPicker()
     closeEmojiPanel()
     showMembersDrawer.value = false
+    resetChatSearch()
     lastMarkedReadMessageId = ''
     scrollToBottom(true)
     updateUnreadBadge()
@@ -1885,6 +1846,7 @@ async function runChatSearch() {
 
 // 打开搜索抽屉
 function openSearchDrawer() {
+  showMembersDrawer.value = false
   showSearchDrawer.value = true
   hasSearched.value = false
   chatSearchKeyword.value = ''
@@ -1897,15 +1859,53 @@ function closeSearchDrawer() {
   showSearchDrawer.value = false
 }
 
-// 点击搜索结果跳转
-function jumpToSearchResult(_msg: Message) {
+function messageElementId(messageId: string): string {
+  return `chat-message-${encodeURIComponent(messageId)}`
+}
+
+function clearMessageHighlight() {
+  highlightedMessageId.value = ''
+  if (highlightMessageTimer) {
+    clearTimeout(highlightMessageTimer)
+    highlightMessageTimer = null
+  }
+}
+
+function resetChatSearch() {
   showSearchDrawer.value = false
+  chatSearchKeyword.value = ''
+  chatSearchResults.value = []
+  hasSearched.value = false
+  clearMessageHighlight()
+}
+
+// 将搜索命中的历史消息合入当前列表，滚动到目标并短暂高亮。
+async function jumpToSearchResult(msg: Message) {
+  const currentConversationId = chatStore.currentConversation?.conversationId
+  if (!msg.messageId || msg.conversationId !== currentConversationId) {
+    resetChatSearch()
+    return
+  }
+  chatStore.mergeHistoricalMessage(msg)
+  showSearchDrawer.value = false
+  highlightedMessageId.value = msg.messageId
+  await nextTick()
+  document.getElementById(messageElementId(msg.messageId))?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+  if (highlightMessageTimer) clearTimeout(highlightMessageTimer)
+  highlightMessageTimer = setTimeout(() => {
+    highlightedMessageId.value = ''
+    highlightMessageTimer = null
+  }, 2400)
 }
 
 // 打开群成员抽屉：刷新会话数据、加载群设置
 async function openMembersDrawer() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
+  resetChatSearch()
   showMembersDrawer.value = true
   memberSearch.value = ''
   memberAddKeyword.value = ''
@@ -3383,22 +3383,12 @@ onMounted(async () => {
     initWebSocket()
   }
 
-  // 同步桌面端窗口最大化状态（用于右上角自定义窗口控制按钮）
-  if (desktopWindowControls) {
-    isWindowMaximized.value = await desktopWindowControls.isMaximized()
-    if (desktopWindowControls.onMaximizeChanged) {
-      unsubscribeMaximize = desktopWindowControls.onMaximizeChanged((maximized) => {
-        isWindowMaximized.value = maximized
-      })
-    }
-  }
 })
 
 // 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
   void updateStore.setTransferCount(0)
-  unsubscribeMaximize?.()
-  unsubscribeMaximize = null
+  clearMessageHighlight()
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)
   window.removeEventListener('keydown', handleUserActivity)
@@ -3422,6 +3412,7 @@ onUnmounted(() => {
 
 // 监听会话切换：重置相关状态、清理图片缓存、关闭面板
 watch(
+  () => chatStore.currentConversation?.conversationId,
   () => {
     lastMarkedReadMessageId = ''
     showMembersDrawer.value = false
@@ -3436,11 +3427,13 @@ watch(
     clearAuthenticatedImages()
     closeMentionPicker()
     closeEmojiPanel()
+    resetChatSearch()
   }
 )
 
 // 监听登录状态变化：登录时初始化数据，登出时清理
 watch(
+  () => authStore.isLoggedIn,
   (val) => {
     if (val) {
       applySelfPresence(manualPresence.value)
@@ -3464,6 +3457,7 @@ watch(totalUnreadCount, () => {
 
 // 监听关闭行为设置变化，同步到桌面 bridge
 watch(
+  () => settingsStore.general.closeBehavior,
   (behavior) => {
     if (window.imDesktop?.setCloseBehavior) {
       window.imDesktop.setCloseBehavior(behavior).catch(() => false)
@@ -3478,6 +3472,10 @@ watch(
   height: 100%;
   width: 100%;
   background: var(--bg-app);
+}
+
+.chat-layout.desktop-window {
+  padding-top: 36px;
 }
 
 /* Left Sidebar */
@@ -4011,39 +4009,6 @@ watch(
   gap: 6px;
 }
 
-/* 桌面端无边框窗口下的自定义最小化 / 最大化 / 关闭按钮，固定在右上角 */
-.window-controls {
-  position: fixed;
-  top: 0;
-  right: 0;
-  display: flex;
-  z-index: 1000;
-}
-
-.window-control-btn {
-  width: 46px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition-normal), color var(--transition-normal);
-}
-
-.window-control-btn:hover {
-  background: var(--bg-hover-light);
-  color: var(--text-primary);
-}
-
-.window-control-close:hover {
-  background: #e81123;
-  color: #fff;
-}
-
 .members-action-btn {
   background: none;
   border: none;
@@ -4117,6 +4082,13 @@ watch(
   display: flex;
   gap: 10px;
   max-width: 70%;
+  border-radius: var(--radius-lg);
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.message-item.message-highlighted {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .message-item.message-self {

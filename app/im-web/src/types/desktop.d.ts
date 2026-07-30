@@ -102,6 +102,13 @@ declare global {
       installUpdate?: () => Promise<boolean>
       setUpdateTransferCount?: (count: number) => Promise<boolean>
       onUpdateStateChanged?: (handler: (state: DesktopUpdateState) => void) => () => void
+      window?: {
+        minimize: () => Promise<boolean>
+        toggleMaximize: () => Promise<boolean>
+        close: () => Promise<boolean>
+        isMaximized: () => Promise<boolean>
+        onMaximizeChanged?: (handler: (maximized: boolean) => void) => () => void
+      }
     }
     imScreenshot?: {
       getInitialData: () => Promise<{ dataUrl: string; scaleFactor: number } | null>

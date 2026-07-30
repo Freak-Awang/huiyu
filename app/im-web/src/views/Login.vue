@@ -1,23 +1,8 @@
 <!-- 登录页面：用户认证入口，支持记住账号、自动登录、自定义服务器地址 -->
 <template>
   <div class="login-page">
+    <DesktopWindowControls transparent />
     <div class="login-card">
-      <!-- 自定义窗口控制：最小化 / 最大化 / 关闭，镶嵌在登录卡右上角 -->
-      <div class="window-controls">
-        <button
-          class="window-control-btn"
-          aria-label="最小化"
-          type="button"
-          @click="minimize"
-        >─</button>
-        <button
-          class="window-control-btn window-control-close"
-          aria-label="关闭"
-          type="button"
-          @click="closeWindow"
-        >✕</button>
-      </div>
-
       <div class="login-logo">
         <h1>绘语</h1>
       </div>
@@ -68,9 +53,10 @@
 </template>
 
 <script setup lang="ts">
-// 登录页：处理用户认证、记住账号/自动登录、自定义服务器地址配置、桌面端自定义窗口控制
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+// 登录页：处理用户认证、记住账号/自动登录、自定义服务器地址配置
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import DesktopWindowControls from '../components/DesktopWindowControls.vue'
 import { useAuthStore } from '../stores/auth'
 import { getServerOrigin, isDesktopRuntime, setServerOrigin } from '../config/runtime'
 
@@ -85,39 +71,11 @@ const rememberMe = ref(false) // 是否记住账号
 const autoLogin = ref(false) // 是否自动登录
 const loading = ref(false) // 登录加载状态
 const errorMsg = ref('') // 错误提示信息
-const isMaximized = ref(false) // 桌面窗口是否处于最大化状态
 const hasExplicitServerOrigin =
   !!localStorage.getItem('imServerOrigin') ||
   !!import.meta.env.VITE_IM_SERVER_ORIGIN ||
   !!import.meta.env.VITE_API_BASE_URL
 const showServerConfig = isDesktopRuntime() || hasExplicitServerOrigin // 桌面端或已配置地址时显示服务器地址输入框
-
-const desktopApi =
-  typeof window !== 'undefined' && (window as unknown as { imDesktop?: any }).imDesktop
-    ? (window as unknown as { imDesktop?: any }).imDesktop
-    : null
-
-type WindowControls = {
-  minimize: () => Promise<boolean>
-  toggleMaximize: () => Promise<boolean>
-  close: () => Promise<boolean>
-  isMaximized: () => Promise<boolean>
-  onMaximizeChanged?: (handler: (maximized: boolean) => void) => () => void
-}
-const windowControls = desktopApi?.window as WindowControls | undefined
-
-async function minimize() {
-  await windowControls?.minimize()
-}
-
-async function toggleMaximize() {
-  if (!windowControls) return
-  isMaximized.value = await windowControls.toggleMaximize()
-}
-
-async function closeWindow() {
-  await windowControls?.close()
-}
 
 // 处理登录：校验输入、设置服务器地址、调用认证接口
 function handleLogin() {
@@ -163,8 +121,6 @@ function handleLogin() {
   })
 }
 
-let unsubscribeMaximize: (() => void) | null = null
-
 // 挂载时恢复保存的账号信息和自动登录状态
 onMounted(async () => {
   const savedUsername = localStorage.getItem('savedUsername')
@@ -188,20 +144,6 @@ onMounted(async () => {
     }
   }
 
-  // 同步桌面端窗口状态
-  if (windowControls) {
-    isMaximized.value = await windowControls.isMaximized()
-    if (windowControls.onMaximizeChanged) {
-      unsubscribeMaximize = windowControls.onMaximizeChanged((maximized) => {
-        isMaximized.value = maximized
-      })
-    }
-  }
-})
-
-onBeforeUnmount(() => {
-  unsubscribeMaximize?.()
-  unsubscribeMaximize = null
 })
 </script>
 
@@ -212,7 +154,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: var(--bg-app);
 }
 
 .login-card {
@@ -220,42 +162,8 @@ onBeforeUnmount(() => {
   width: 400px;
   background: var(--bg-surface);
   border-radius: var(--radius-2xl);
-  padding: 56px 36px 40px;
+  padding: 40px 36px;
   box-shadow: var(--shadow-dialog);
-  /* 卡片整体作为可拖拽区域，按钮单独声明为不可拖拽以保留点击 */
-  -webkit-app-region: drag;
-}
-
-.window-controls {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: flex;
-  -webkit-app-region: no-drag;
-}
-
-.window-control-btn {
-  width: 46px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition-normal), color var(--transition-normal);
-}
-
-.window-control-btn:hover {
-  background: var(--bg-hover-light);
-  color: var(--text-primary);
-}
-
-.window-control-close:hover {
-  background: #e81123;
-  color: #fff;
 }
 
 .login-logo {
