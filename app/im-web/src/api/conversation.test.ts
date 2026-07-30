@@ -87,6 +87,10 @@ describe('conversation API normalization', () => {
     expect(httpMock.post).toHaveBeenCalledWith(
       '/api/conversations/1/avatar',
       expect.any(FormData),
+      expect.objectContaining({
+        timeout: 10 * 60 * 1000,
+        onUploadProgress: expect.any(Function),
+      }),
     )
     expect(httpMock.delete).toHaveBeenCalledWith('/api/conversations/1/avatar')
     expect(httpMock.put).toHaveBeenCalledWith('/api/conversations/1/owner', { newOwnerId: 11 })

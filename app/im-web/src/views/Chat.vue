@@ -104,6 +104,7 @@
             >
               <ConversationAvatar
                 class="conv-avatar"
+                :class="{ offline: isConversationOffline(conv) }"
                 :type="conv.type"
                 :src="getConversationAvatar(conv)"
                 :name="getConversationName(conv)"
@@ -145,6 +146,7 @@
           >
             <ConversationAvatar
               class="conv-avatar"
+              :class="{ offline: isConversationOffline(conv) }"
               :type="conv.type"
               :src="getConversationAvatar(conv)"
               :name="getConversationName(conv)"
@@ -202,10 +204,10 @@
               class="contact-item"
               @dblclick="createSingleChat(user)"
             >
-              <div class="contact-avatar" @click.stop="openUserProfile(user)">
+              <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                 <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                 <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
-                <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
+                <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
               </div>
               <div class="contact-info">
                 <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
@@ -232,10 +234,10 @@
                   class="contact-item"
                   @dblclick="createSingleChat(user)"
                 >
-                  <div class="contact-avatar" @click.stop="openUserProfile(user)">
+                  <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                     <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                     <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
-                    <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
+                    <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                   </div>
                   <div class="contact-info">
                     <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
@@ -261,10 +263,10 @@
                       class="contact-item"
                       @dblclick="createSingleChat(user)"
                     >
-                      <div class="contact-avatar" @click.stop="openUserProfile(user)">
+                      <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                         <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                         <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
-                        <span class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
+                        <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
                       </div>
                       <div class="contact-info">
                         <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
@@ -702,7 +704,7 @@
           <div class="group-avatar-setting">
             <ConversationAvatar
               :type="'GROUP'"
-              :src="chatStore.currentConversation.avatar"
+              :src="getConversationAvatar(chatStore.currentConversation)"
               :name="chatStore.currentConversation.name"
               alt="群头像"
               :size="72"
@@ -806,10 +808,9 @@
             :key="member.userId"
             class="member-row"
           >
-            <div class="member-avatar" @click="openUserProfile(member)">
+            <div class="member-avatar" :class="{ offline: isUserOffline(member) }" @click="openUserProfile(member)">
               <img v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))" :src="getUserAvatar(member)" @error="failedAvatars.add(getUserAvatar(member))" alt="" />
               <span v-else>{{ getMemberName(member)[0] }}</span>
-              <span class="online-dot" :class="`presence-${getUserPresence(member)}`"></span>
             </div>
             <div class="member-info">
               <span class="member-name">{{ getMemberName(member) }}</span>
@@ -1097,6 +1098,7 @@ import {
   type Sticker,
 } from '../constants/stickers'
 import { RECENT_EMOJIS_KEY, RECENT_STICKERS_KEY } from '../utils/recentUsage'
+import { extractFileDownloadId } from '../utils/fileUrl'
 import {
   CUSTOM_STICKER_LIMITS,
   addCustomStickerRecord,
@@ -1289,6 +1291,9 @@ const previewImage = ref('')
 const authenticatedImageUrls = ref<Record<string, string>>({})
 const imageLoadsInProgress = new Set<string>()
 let imageLoadGeneration = 0
+const authenticatedAvatarUrls = ref<Record<string, string>>({})
+const avatarLoadPromises = new Map<string, Promise<string>>()
+let avatarLoadGeneration = 0
 const fileDownloadProgress = ref<Record<string, number>>({})
 const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
@@ -1437,7 +1442,7 @@ function getConversationName(conv: Conversation): string {
 }
 
 function getConversationAvatar(conv: Conversation): string {
-  if (conv.type === 'GROUP') return conv.avatar
+  if (conv.type === 'GROUP') return getAuthenticatedAvatarUrl(conv.avatar)
   return userProfileStore.getProfile(getConversationPeerId(conv))?.avatar || conv.avatar
 }
 
@@ -1468,6 +1473,10 @@ function getUserPresence(user: any): PresenceStatus {
   return userProfileStore.getPresence(userId)
 }
 
+function isUserOffline(user: any): boolean {
+  return getUserPresence(user) === 'offline'
+}
+
 function getProfilePresence(user: any): PresenceStatus {
   if (!user) return selfPresence.value
   return getUserPresence(user)
@@ -1476,6 +1485,10 @@ function getProfilePresence(user: any): PresenceStatus {
 function getConversationPresence(conv: Conversation): PresenceStatus {
   if (conv.type === 'GROUP') return 'offline'
   return userProfileStore.getPresence(getConversationPeerId(conv))
+}
+
+function isConversationOffline(conv: Conversation): boolean {
+  return conv.type === 'SINGLE' && getConversationPresence(conv) === 'offline'
 }
 
 function showConversationPresence(conv: Conversation): boolean {
@@ -1978,6 +1991,7 @@ async function confirmGroupAvatarUpload() {
   const conv = chatStore.currentConversation
   const file = selectedGroupAvatar.value
   if (!conv || conv.type !== 'GROUP' || !file || !canEditCurrentGroupAvatar.value) return
+  let avatarSaved = false
   groupAvatarSaving.value = true
   groupAvatarProgress.value = 0
   groupAvatarStatus.value = ''
@@ -1991,11 +2005,18 @@ async function confirmGroupAvatarUpload() {
       },
     )
     chatStore.upsertConversation(res.data)
-    groupAvatarStatus.value = '群头像已更新'
+    avatarSaved = true
     showGroupAvatarPreview.value = false
     clearGroupAvatarSelection()
+    const avatarFileId = extractFileDownloadId(res.data.avatar)
+    if (avatarFileId) {
+      await loadAuthenticatedAvatar(avatarFileId)
+    }
+    groupAvatarStatus.value = '群头像已更新'
   } catch (err: any) {
-    groupAvatarStatus.value = err?.response?.data?.message || err?.message || '群头像上传失败'
+    groupAvatarStatus.value = avatarSaved
+      ? '群头像已保存，但新头像加载失败，请稍后刷新重试'
+      : err?.response?.data?.message || err?.message || '群头像上传失败'
     groupAvatarStatusIsError.value = true
   } finally {
     groupAvatarSaving.value = false
@@ -2424,7 +2445,7 @@ function getImageUrl(content: string): string {
     // Existing IMAGE messages are stored as raw URLs.
   }
   if (!fileId) {
-    fileId = fallback.match(/\/api\/files\/download\/(\d+)/)?.[1] || ''
+    fileId = extractFileDownloadId(fallback)
   }
   if (!fileId) return fallback
   if (!authenticatedImageUrls.value[fileId] && !imageLoadsInProgress.has(fileId)) {
@@ -2440,6 +2461,38 @@ function getImageUrl(content: string): string {
       .finally(() => imageLoadsInProgress.delete(fileId))
   }
   return authenticatedImageUrls.value[fileId] || ''
+}
+
+// 群头像属于受保护的会话文件，普通 <img> 请求不会携带 Bearer Token。
+// 先通过 Axios 认证下载，再使用 Blob URL 展示，并按文件 ID 复用结果。
+function getAuthenticatedAvatarUrl(source: string): string {
+  const fileId = extractFileDownloadId(source)
+  if (!fileId) return source
+  if (!authenticatedAvatarUrls.value[fileId]) {
+    void loadAuthenticatedAvatar(fileId).catch(() => undefined)
+  }
+  return authenticatedAvatarUrls.value[fileId] || ''
+}
+
+function loadAuthenticatedAvatar(fileId: string): Promise<string> {
+  const cached = authenticatedAvatarUrls.value[fileId]
+  if (cached) return Promise.resolve(cached)
+
+  const pending = avatarLoadPromises.get(fileId)
+  if (pending) return pending
+
+  const generation = avatarLoadGeneration
+  const promise = downloadFileBlob(fileId)
+    .then((response) => {
+      if (generation !== avatarLoadGeneration) return ''
+      const blobUrl = URL.createObjectURL(response.data)
+      authenticatedAvatarUrls.value[fileId] = blobUrl
+      return blobUrl
+    })
+    .finally(() => avatarLoadPromises.delete(fileId))
+
+  avatarLoadPromises.set(fileId, promise)
+  return promise
 }
 
 // 解析消息内容中的文件信息
@@ -2503,6 +2556,13 @@ function clearAuthenticatedImages() {
   Object.values(authenticatedImageUrls.value).forEach((url) => URL.revokeObjectURL(url))
   authenticatedImageUrls.value = {}
   imageLoadsInProgress.clear()
+}
+
+function clearAuthenticatedAvatars() {
+  avatarLoadGeneration += 1
+  Object.values(authenticatedAvatarUrls.value).forEach((url) => URL.revokeObjectURL(url))
+  authenticatedAvatarUrls.value = {}
+  avatarLoadPromises.clear()
 }
 
 // 记录最近使用的 Emoji
@@ -3409,6 +3469,7 @@ onUnmounted(() => {
   removeNotificationOpenListener = null
   attachmentDraftStore.clearAll()
   clearAuthenticatedImages()
+  clearAuthenticatedAvatars()
   fileDownloadControllers.forEach((controller) => controller.abort())
   fileDownloadControllers.clear()
   revokeCustomStickerUrls()
@@ -4670,6 +4731,12 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.contact-avatar.offline,
+.conv-avatar.offline,
+.member-avatar.offline {
+  filter: grayscale(100%);
 }
 
 /* No conversation */
