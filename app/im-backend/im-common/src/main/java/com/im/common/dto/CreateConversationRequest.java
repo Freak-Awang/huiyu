@@ -14,7 +14,9 @@ public class CreateConversationRequest {
 
     private Long targetUserId; // 单聊时的目标用户ID
 
-    private String name; // 群聊名称（单聊可为空）
+    private String name; // 兼容旧客户端；新建群聊名称由服务端统一生成
+
+    private String requestId; // 群聊创建请求幂等标识，同一创建人下唯一
 
     private List<Long> memberIds; // 群聊初始成员ID列表
 }

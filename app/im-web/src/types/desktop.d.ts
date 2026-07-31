@@ -1,8 +1,8 @@
 /**
  * desktop.d.ts - Electron桌面桥接层类型声明
  * 
- * 为渲染进程提供 preload.cts 通过 contextBridge 暴露的 imDesktop 和 imScreenshot
- * API 的类型定义。涵盖窗口管理、消息本地存储、文件下载、截图、自动更新等功能。
+ * 为渲染进程提供 preload.cts 通过 contextBridge 暴露的 imDesktop
+ * API 类型定义。涵盖窗口管理、消息本地存储、文件下载、自动更新等功能。
  */
 export {}
 
@@ -40,7 +40,6 @@ export interface DesktopUpdateState {
 /** 
  * 扩展全局 Window 接口，声明 preload 桥接层暴露的 Electron 主进程能力
  * - imDesktop: 主进程通用API（窗口、通知、消息存储、文件下载、更新等）
- * - imScreenshot: 截图专用API（全屏透明窗口通信）
  */
 declare global {
   interface Window {
@@ -59,7 +58,6 @@ declare global {
       }) => Promise<boolean>
       setUnreadBadge?: (count: number) => Promise<boolean>
       onNotificationOpenConversation?: (handler: (conversationId: string) => void) => () => void
-      startScreenshot?: () => Promise<{ canceled: boolean; dataUrl?: string }>
       upsertMessage: (userId: string, message: unknown) => Promise<boolean>
       listMessages: (
         userId: string,
@@ -112,11 +110,6 @@ declare global {
         isMaximized: () => Promise<boolean>
         onMaximizeChanged?: (handler: (maximized: boolean) => void) => () => void
       }
-    }
-    imScreenshot?: {
-      getInitialData: () => Promise<{ dataUrl: string; scaleFactor: number } | null>
-      confirm: (dataUrl: string) => Promise<boolean>
-      cancel: () => Promise<boolean>
     }
   }
 }

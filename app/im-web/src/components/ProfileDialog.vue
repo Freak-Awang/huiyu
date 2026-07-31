@@ -1,4 +1,4 @@
-<!-- 用户资料弹窗：查看/编辑个人信息，支持头像上传、复制资料、发起聊天 -->
+<!-- 用户资料弹窗：查看/编辑个人信息，支持头像上传与复制资料 -->
 <template>
   <div class="profile-overlay" @click.self="close">
     <div class="profile-dialog">
@@ -92,7 +92,6 @@
         <template v-else>
           <button type="button" class="cancel-btn" @click="copyProfile">复制资料</button>
           <button v-if="isSelf" type="button" class="save-btn" @click="startEdit">编辑资料</button>
-          <button v-else type="button" class="save-btn" @click="$emit('start-chat', profileUser)">发消息</button>
         </template>
       </footer>
     </div>
@@ -100,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-// 用户资料弹窗：展示/编辑个人资料、上传头像、复制资料、发起单聊
+// 用户资料弹窗：展示/编辑个人资料、上传头像与复制资料
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { uploadAvatar } from '../api/file'
 import { updateProfile, type UserProfile } from '../api/user'
@@ -120,7 +119,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   saved: [user: UserInfo]
-  'start-chat': [user: ProfileUser]
 }>()
 
 const authStore = useAuthStore()

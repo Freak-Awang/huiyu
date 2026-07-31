@@ -150,10 +150,11 @@ class ConversationServiceImplTest {
     void newGroupStartsWithFixedDefaultAvatarState() {
         CreateConversationRequest request = new CreateConversationRequest();
         request.setType(2); // 群聊
-        request.setName("项目讨论群");
-        request.setMemberIds(List.of(11L));
+        request.setRequestId("group-create-1");
+        request.setMemberIds(List.of(11L, 12L));
         ImConversationMember owner = member(10L, "owner");
-        ImConversationMember groupMember = member(11L, "member");
+        ImConversationMember groupMember1 = member(11L, "member");
+        ImConversationMember groupMember2 = member(12L, "member");
 
         doAnswer(invocation -> {
             ImConversation value = invocation.getArgument(0);
@@ -161,7 +162,7 @@ class ConversationServiceImplTest {
             return 1;
         }).when(conversationMapper).insert(any(ImConversation.class));
         when(conversationMemberMapper.selectOne(any())).thenReturn(owner);
-        when(conversationMemberMapper.selectList(any())).thenReturn(List.of(owner, groupMember));
+        when(conversationMemberMapper.selectList(any())).thenReturn(List.of(owner, groupMember1, groupMember2));
         when(userMapper.selectById(anyLong())).thenAnswer(invocation -> user(invocation.getArgument(0)));
 
         ConversationVO vo = conversationService.createConversation(10L, request);
@@ -170,6 +171,54 @@ class ConversationServiceImplTest {
         assertThat(vo.getAvatarType()).isEqualTo("default");
         assertThat(vo.getOwnerId()).isEqualTo(10L);
         assertThat(vo.getCanEditAvatar()).isTrue();
+        assertThat(vo.getName()).isEqualTo("用户10、用户11、用户12");
+
+        ArgumentCaptor<ImConversation> captor = ArgumentCaptor.forClass(ImConversation.class);
+        verify(conversationMapper).insert(captor.capture());
+        assertThat(captor.getValue().getCreateRequestId()).isEqualTo("group-create-1");
+    }
+
+    /**
+     * 验证一步建群至少需要两名其他联系人。
+     */
+    @Test
+    void newGroupRequiresAtLeastTwoSelectedMembers() {
+        CreateConversationRequest request = new CreateConversationRequest();
+        request.setType(2);
+        request.setRequestId("group-create-too-small");
+        request.setMemberIds(List.of(11L));
+
+        assertThatThrownBy(() -> conversationService.createConversation(10L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("At least two group members are required");
+        verify(conversationMapper, never()).insert(any(ImConversation.class));
+    }
+
+    /**
+     * 验证同一用户重复提交同一个 requestId 时返回原群聊，不再写入新记录。
+     */
+    @Test
+    void repeatedGroupRequestReturnsExistingConversation() {
+        CreateConversationRequest request = new CreateConversationRequest();
+        request.setType(2);
+        request.setRequestId("group-create-retry");
+        request.setMemberIds(List.of(11L, 12L));
+        ImConversation existing = conversation();
+        existing.setCreateRequestId("group-create-retry");
+        ImConversationMember owner = member(10L, "owner");
+
+        when(conversationMapper.selectOne(any())).thenReturn(existing);
+        when(conversationMemberMapper.selectOne(any())).thenReturn(owner);
+        when(conversationMemberMapper.selectList(any())).thenReturn(List.of(
+                owner,
+                member(11L, "member"),
+                member(12L, "member")));
+        when(userMapper.selectById(anyLong())).thenAnswer(invocation -> user(invocation.getArgument(0)));
+
+        ConversationVO vo = conversationService.createConversation(10L, request);
+
+        assertThat(vo.getConversationId()).isEqualTo(existing.getId());
+        verify(conversationMapper, never()).insert(any(ImConversation.class));
     }
 
     /**

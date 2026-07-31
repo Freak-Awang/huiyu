@@ -12,6 +12,7 @@ const httpMock = vi.hoisted(() => ({
 vi.mock('./index', () => ({ default: httpMock }))
 
 import {
+  createConversation,
   normalizeConversation,
   restoreDefaultGroupAvatar,
   transferConversationOwner,
@@ -65,6 +66,26 @@ describe('conversation API normalization', () => {
       canEditAvatar: true,
       avatarUpdatedBy: '10',
       avatarUpdatedAt: '2026-07-29T12:00:00',
+    })
+  })
+
+  it('sends one-step group creation with a legacy-compatible generated name', async () => {
+    httpMock.post.mockResolvedValue({
+      data: { conversationId: 8, type: 2, name: '用户1、用户2、用户3' },
+    })
+
+    await createConversation({
+      type: 'GROUP',
+      name: '用户1、用户2、用户3',
+      requestId: 'group-create-request',
+      memberIds: ['2', 3],
+    })
+
+    expect(httpMock.post).toHaveBeenCalledWith('/api/conversations', {
+      type: 2,
+      name: '用户1、用户2、用户3',
+      requestId: 'group-create-request',
+      memberIds: [2, 3],
     })
   })
 

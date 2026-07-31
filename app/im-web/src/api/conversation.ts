@@ -122,11 +122,17 @@ export interface RawConversation {
 }
 
 /**
- * 创建会话参数：单聊需指定目标用户，群聊需指定群名与成员列表。
+ * 创建会话参数：单聊需指定目标用户；群聊携带自动生成的兼容群名、成员列表与幂等 requestId。
+ * 新版服务端仍会按成员资料统一生成最终群名。
  */
 export type CreateConversationParams =
   | { type: 'SINGLE'; targetUserId: string | number }
-  | { type: 'GROUP'; name: string; memberIds: Array<string | number> }
+  | {
+      type: 'GROUP'
+      name: string
+      requestId: string
+      memberIds: Array<string | number>
+    }
 
 /**
  * 将后端原始会话数据规范化为前端统一的 Conversation 类型。
@@ -229,6 +235,7 @@ export function createConversation(data: CreateConversationParams) {
       : {
           type: 2,
           name: data.name,
+          requestId: data.requestId,
           memberIds: data.memberIds.map((id) => Number(id)),
         }
 

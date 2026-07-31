@@ -22,6 +22,7 @@ public class ImConversation {
     private Long avatarUpdatedBy; // 最近修改头像的用户ID
     private LocalDateTime avatarUpdatedAt; // 头像最近修改时间
     private Long ownerId; // 群主/会话创建者ID
+    private String createRequestId; // 群聊创建幂等请求ID
     private String announcement; // 群公告内容
     private Long announcementUpdatedBy; // 最近修改公告的用户ID
     private LocalDateTime announcementUpdatedAt; // 公告最近修改时间

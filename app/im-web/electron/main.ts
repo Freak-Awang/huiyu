@@ -1,11 +1,11 @@
 /**
  * Electron 主进程入口
  *
- * 管理原生窗口生命周期、系统托盘、桌面通知、截图、文件下载、自动更新及 IPC 通信。
+ * 管理原生窗口生命周期、系统托盘、桌面通知、文件下载、自动更新及 IPC 通信。
  * 所有 native 能力通过 preload 脚本的白名单 IPC 暴露给渲染进程，保持 sandbox 隔离。
  * 支持单实例锁，点击关闭按钮最小化到托盘（macOS 除外）。
  */
-import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -42,29 +42,6 @@ let unreadCount = 0
 
 /** 活跃的文件下载任务映射，用于取消下载和更新器传输状态统计 */
 const activeFileDownloads = new Map<string, AbortController>()
-
-/** 截图操作结果 */
-interface ScreenshotResult {
-  canceled: boolean
-  dataUrl?: string
-}
-
-/** 截图窗口初始化数据载荷 */
-interface ScreenshotPayload {
-  dataUrl: string
-  scaleFactor: number
-}
-
-/** 活跃截图会话状态 */
-interface ActiveScreenshot {
-  window: BrowserWindow
-  payload: ScreenshotPayload
-  resolve: (result: ScreenshotResult) => void
-  /** 截图前主窗口是否可见，截图完成后决定是否恢复 */
-  shouldRestoreMainWindow: boolean
-  /** 防止多次 resolve */
-  settled: boolean
-}
 
 /** 文件下载 IPC 请求载荷 */
 interface FileDownloadPayload {
@@ -114,13 +91,6 @@ async function saveStorageLocation(location: string) {
   await rename(temporary, preferencesFile)
   storageLocation = normalized
   return normalized
-}
-
-/** 当前活跃的截图会话（同时只能有一个） */
-let activeScreenshot: ActiveScreenshot | null = null
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -296,151 +266,6 @@ function createMenu() {
       },
     ])
   )
-}
-
-/**
- * 截取指定屏幕的画面
- * 使用屏幕的物理缩放因子捕获，确保截图标注坐标精确映射
- */
-async function captureDisplay(display: Electron.Display): Promise<string> {
-  const thumbnailSize = {
-    width: Math.round(display.size.width * display.scaleFactor),
-    height: Math.round(display.size.height * display.scaleFactor),
-  }
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize,
-  })
-  const source =
-    sources.find((item) => item.display_id === String(display.id)) ||
-    sources.find((item) => !item.thumbnail.isEmpty()) ||
-    sources[0]
-
-  if (!source || source.thumbnail.isEmpty()) {
-    throw new Error('无法获取屏幕截图源')
-  }
-  return source.thumbnail.toDataURL()
-}
-
-/** 加载截图入口页面，开发模式追加 mode=screenshot 参数 */
-function loadScreenshotEntry(window: BrowserWindow) {
-  if (process.env.VITE_DEV_SERVER_URL) {
-    const url = new URL(process.env.VITE_DEV_SERVER_URL)
-    url.searchParams.set('mode', 'screenshot')
-    window.loadURL(url.toString())
-    return
-  }
-  window.loadFile(join(__dirname, '../dist/index.html'), {
-    query: { mode: 'screenshot' },
-  })
-}
-
-/**
- * 完成截图流程：resolve Promise、关闭截图窗口、按需恢复主窗口
- * @returns 是否成功完成（防止重复 resolve）
- */
-function finishScreenshot(result: ScreenshotResult): boolean {
-  const active = activeScreenshot
-  if (!active || active.settled) return false
-
-  active.settled = true
-  activeScreenshot = null
-  active.resolve(result)
-
-  if (!active.window.isDestroyed()) {
-    active.window.close()
-  }
-  if (active.shouldRestoreMainWindow && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show()
-    mainWindow.focus()
-  }
-  return true
-}
-
-/** 判断 IPC 请求是否来自当前截图窗口 */
-function isScreenshotSender(event: Electron.IpcMainInvokeEvent): boolean {
-  return !!activeScreenshot && event.sender === activeScreenshot.window.webContents
-}
-
-/**
- * 启动截图流程
- * 1. 隐藏主窗口（避免遮挡截图区域）
- * 2. 捕获屏幕画面
- * 3. 创建全屏透明截图窗口供用户框选区域
- * 4. 用户确认/取消后恢复主窗口
- */
-async function startScreenshot(): Promise<ScreenshotResult> {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return { canceled: true }
-  }
-  if (activeScreenshot) {
-    return { canceled: true }
-  }
-
-  const display = screen.getDisplayMatching(mainWindow.getBounds())
-  const bounds = display.bounds
-  const shouldRestoreMainWindow = mainWindow.isVisible()
-  if (shouldRestoreMainWindow) {
-    mainWindow.hide()
-    await delay(150) // 等待窗口完全隐藏后再截图，避免窗口残影
-  }
-
-  try {
-    const dataUrl = await captureDisplay(display)
-    const screenshotWindow = new BrowserWindow({
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-      frame: false,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      show: false,
-      backgroundColor: '#000000',
-      webPreferences: {
-        preload: join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    })
-
-    screenshotWindow.setAlwaysOnTop(true, 'screen-saver')
-    hardenRendererWindow(screenshotWindow)
-
-    return await new Promise<ScreenshotResult>((resolve) => {
-      activeScreenshot = {
-        window: screenshotWindow,
-        payload: { dataUrl, scaleFactor: display.scaleFactor },
-        resolve,
-        shouldRestoreMainWindow,
-        settled: false,
-      }
-
-      screenshotWindow.once('closed', () => {
-        finishScreenshot({ canceled: true })
-      })
-      screenshotWindow.webContents.once('did-finish-load', () => {
-        screenshotWindow.show()
-        screenshotWindow.focus()
-      })
-      screenshotWindow.webContents.once('did-fail-load', () => {
-        finishScreenshot({ canceled: true })
-      })
-      loadScreenshotEntry(screenshotWindow)
-    })
-  } catch (err) {
-    if (shouldRestoreMainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
-    console.error('截图启动失败:', err)
-    return { canceled: true }
-  }
 }
 
 // ==================== IPC 处理器 ====================
@@ -691,32 +516,6 @@ ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
   const controller = activeFileDownloads.get(String(downloadId || ''))
   controller?.abort()
   return !!controller
-})
-
-/** 启动截图流程 */
-ipcMain.handle('screenshot:start', (event) => {
-  assertMainWindowSender(event)
-  return startScreenshot()
-})
-
-/** 截图窗口获取初始数据（屏幕截图 + 缩放因子） */
-ipcMain.handle('screenshot:getInitialData', (event) => {
-  if (!isScreenshotSender(event)) return null
-  return activeScreenshot?.payload ?? null
-})
-
-/** 截图确认：渲染进程传回框选区域的 PNG DataURL */
-ipcMain.handle('screenshot:confirm', (event, dataUrl: string) => {
-  if (!isScreenshotSender(event) || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png')) {
-    return false
-  }
-  return finishScreenshot({ canceled: false, dataUrl })
-})
-
-/** 截图取消 */
-ipcMain.handle('screenshot:cancel', (event) => {
-  if (!isScreenshotSender(event)) return false
-  return finishScreenshot({ canceled: true })
 })
 
 // ==================== 应用生命周期 ====================

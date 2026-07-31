@@ -4,8 +4,7 @@
  * 在渲染进程沙箱隔离的前提下，通过 contextBridge 向 window 注入类型化的桌面桥接 API。
  * 所有 native 能力通过 ipcRenderer.invoke 调用主进程的 IPC handler，保持安全边界。
  * 暴露两个全局对象：
- * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载、截图、自动更新）
- * - imScreenshot：截图窗口专用 API（获取截图数据、确认/取消）
+ * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载、自动更新）
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -47,10 +46,6 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.on('notification:open-conversation', listener)
     return () => ipcRenderer.removeListener('notification:open-conversation', listener)
   },
-
-  /** 启动截图流程 */
-  startScreenshot: () =>
-    ipcRenderer.invoke('screenshot:start') as Promise<{ canceled: boolean; dataUrl?: string }>,
 
   /** 保存消息到本地加密缓存 */
   upsertMessage: (userId: string, message: unknown) =>
@@ -146,17 +141,4 @@ contextBridge.exposeInMainWorld('imDesktop', {
       return () => ipcRenderer.removeListener('window:maximize-changed', listener)
     },
   },
-})
-
-/** 截图窗口专用 API */
-contextBridge.exposeInMainWorld('imScreenshot', {
-  /** 获取截图初始数据（屏幕截图 DataURL + 缩放因子） */
-  getInitialData: () =>
-    ipcRenderer.invoke('screenshot:getInitialData') as Promise<{ dataUrl: string; scaleFactor: number } | null>,
-
-  /** 确认截图，传入框选区域的 PNG DataURL */
-  confirm: (dataUrl: string) => ipcRenderer.invoke('screenshot:confirm', dataUrl) as Promise<boolean>,
-
-  /** 取消截图 */
-  cancel: () => ipcRenderer.invoke('screenshot:cancel') as Promise<boolean>,
 })

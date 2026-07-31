@@ -183,9 +183,23 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         if (request.getType() == 2) {
-            if (!StringUtils.hasText(request.getName())) {
-                throw new BusinessException("Group name is required");
+            if (!StringUtils.hasText(request.getRequestId())) {
+                throw new BusinessException("Group creation requestId is required");
             }
+            String createRequestId = request.getRequestId().trim();
+            if (createRequestId.length() > 64) {
+                throw new BusinessException("Group creation requestId is too long");
+            }
+
+            ImConversation existingGroup = conversationMapper.selectOne(
+                    new LambdaQueryWrapper<ImConversation>()
+                            .eq(ImConversation::getType, 2)
+                            .eq(ImConversation::getOwnerId, userId)
+                            .eq(ImConversation::getCreateRequestId, createRequestId));
+            if (existingGroup != null) {
+                return buildConversationVO(existingGroup, userId);
+            }
+
             Set<Long> memberIds = new LinkedHashSet<>();
             if (request.getMemberIds() != null) {
                 for (Long memberId : request.getMemberIds()) {
@@ -194,16 +208,23 @@ public class ConversationServiceImpl implements ConversationService {
                     }
                 }
             }
-            if (memberIds.isEmpty()) {
-                throw new BusinessException("Group members are required");
+            if (memberIds.size() < 2) {
+                throw new BusinessException("At least two group members are required");
+            }
+
+            SysUser owner = requireActiveUser(userId);
+            List<SysUser> selectedUsers = new ArrayList<>();
+            for (Long memberId : memberIds) {
+                selectedUsers.add(requireActiveUser(memberId));
             }
 
             ImConversation conversation = new ImConversation();
             conversation.setType(2);
-            conversation.setName(request.getName());
+            conversation.setName(buildDefaultGroupName(owner, selectedUsers));
             conversation.setAvatar(null);
             conversation.setAvatarType(AVATAR_TYPE_DEFAULT);
             conversation.setOwnerId(userId);
+            conversation.setCreateRequestId(createRequestId);
             conversation.setCreateTime(LocalDateTime.now());
             conversation.setUpdateTime(LocalDateTime.now());
             conversationMapper.insert(conversation);
@@ -218,7 +239,6 @@ public class ConversationServiceImpl implements ConversationService {
             conversationMemberMapper.insert(ownerMember);
 
             for (Long memberId : memberIds) {
-                requireActiveUser(memberId);
                 ImConversationMember member = new ImConversationMember();
                 member.setConversationId(conversation.getId());
                 member.setUserId(memberId);
@@ -235,6 +255,39 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         throw new BusinessException("Invalid conversation type: " + request.getType());
+    }
+
+    private String buildDefaultGroupName(SysUser owner, List<SysUser> selectedUsers) {
+        List<String> names = new ArrayList<>();
+        names.add(resolveGroupNamePart(owner));
+        for (SysUser user : selectedUsers) {
+            names.add(resolveGroupNamePart(user));
+        }
+
+        String name;
+        if (names.size() <= 3) {
+            name = String.join("、", names);
+        } else {
+            name = names.get(0) + "、" + names.get(1) + "等 " + names.size() + " 人的群聊";
+        }
+        return truncateByCodePoints(name, 30);
+    }
+
+    private String resolveGroupNamePart(SysUser user) {
+        if (user != null && StringUtils.hasText(user.getNickname())) {
+            return user.getNickname().trim();
+        }
+        if (user != null && StringUtils.hasText(user.getUsername())) {
+            return user.getUsername().trim();
+        }
+        return "成员";
+    }
+
+    private String truncateByCodePoints(String value, int maxCodePoints) {
+        if (value == null || value.codePointCount(0, value.length()) <= maxCodePoints) {
+            return value;
+        }
+        return value.substring(0, value.offsetByCodePoints(0, maxCodePoints));
     }
 
     @Override

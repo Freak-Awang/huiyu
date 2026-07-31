@@ -491,7 +491,6 @@ const shortcutRows = computed(() => [
   },
   { title: '打开设置', hint: '从主界面快速进入设置中心', keys: ['Ctrl', ','] },
   { title: '关闭当前弹窗', hint: '关闭设置、图片预览等浮层', keys: ['Esc'] },
-  { title: '屏幕截图', hint: '也可以使用聊天输入区上方的截图按钮', keys: ['Ctrl', 'Shift', 'A'] },
 ])
 
 const activeMeta = computed(() => sections.find((item) => item.key === activeSection.value) || sections[0])

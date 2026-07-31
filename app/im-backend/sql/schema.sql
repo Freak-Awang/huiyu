@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS im_conversation (
     avatar_updated_by BIGINT DEFAULT NULL COMMENT 'last group avatar updater user id',
     avatar_updated_at DATETIME DEFAULT NULL COMMENT 'last group avatar update time',
     owner_id BIGINT DEFAULT NULL COMMENT 'group owner id',
+    create_request_id VARCHAR(64) DEFAULT NULL COMMENT 'idempotency key for group creation',
     announcement TEXT DEFAULT NULL COMMENT 'group announcement',
     announcement_updated_by BIGINT DEFAULT NULL COMMENT 'announcement updater user id',
     announcement_updated_at DATETIME DEFAULT NULL COMMENT 'announcement update time',
@@ -53,7 +54,8 @@ CREATE TABLE IF NOT EXISTS im_conversation (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
     INDEX idx_type (type),
-    INDEX idx_owner (owner_id)
+    INDEX idx_owner (owner_id),
+    UNIQUE KEY uk_owner_create_request (owner_id, create_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='conversations';
 
 CREATE TABLE IF NOT EXISTS im_conversation_member (

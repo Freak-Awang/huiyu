@@ -79,8 +79,14 @@
       <template v-if="activeTab === 'chat'">
         <div class="panel-header">
           <span class="panel-title">消息</span>
-          <button class="new-chat-btn" @click="showCreateDialog = true" title="新建聊天">
-            <img :src="newChatIcon" alt="新建聊天" />
+          <button
+            class="new-chat-btn"
+            type="button"
+            title="创建群聊"
+            aria-label="创建群聊"
+            @click="showCreateGroupDialog = true"
+          >
+            <img :src="newChatIcon" alt="" />
           </button>
         </div>
         <div class="search-bar">
@@ -202,7 +208,6 @@
               v-for="user in searchedUsers"
               :key="user.userId || user.id"
               class="contact-item"
-              @dblclick="createSingleChat(user)"
             >
               <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                 <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -232,7 +237,6 @@
                   v-for="user in deptUsersMap[dept.deptId]"
                   :key="user.userId || user.id"
                   class="contact-item"
-                  @dblclick="createSingleChat(user)"
                 >
                   <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                     <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -261,7 +265,6 @@
                       v-for="user in deptUsersMap[child.deptId]"
                       :key="user.userId || user.id"
                       class="contact-item"
-                      @dblclick="createSingleChat(user)"
                     >
                       <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
                         <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -501,16 +504,6 @@
               <img :src="fileIcon" alt="" />
               <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
             </label>
-            <button
-              v-if="canUseDesktopScreenshot"
-              class="tool-btn"
-              title="屏幕截图"
-              type="button"
-              :disabled="isTakingScreenshot"
-              @click="takeScreenshot"
-            >
-              <img :src="screenshotIcon" alt="屏幕截图" />
-            </button>
           </div>
           <AttachmentDraftTray
             :drafts="currentAttachmentDrafts"
@@ -919,94 +912,13 @@
       </div>
     </div>
 
-    <!-- 创建会话弹窗：单聊/群聊 -->
-    <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
-      <div class="dialog-box">
-        <div class="dialog-header">
-          <span>{{ createType === 'single' ? '发起单聊' : '创建群聊' }}</span>
-          <button class="dialog-close" @click="closeCreateDialog">✕</button>
-        </div>
-        <div class="dialog-body">
-          <div class="dialog-tabs">
-            <span
-              :class="{ active: createType === 'single' }"
-              @click="createType = 'single'"
-            >单聊</span>
-            <span
-              :class="{ active: createType === 'group' }"
-              @click="createType = 'group'"
-            >群聊</span>
-          </div>
-
-          <template v-if="createType === 'single'">
-            <input
-              v-model="createSearchUser"
-              class="dialog-input"
-              placeholder="搜索用户..."
-              @input="onSearchCreateUser"
-            />
-            <div class="create-user-list">
-              <div
-                v-for="user in createSearchResults"
-                :key="user.userId || user.id"
-                class="create-user-item"
-                @click="doCreateSingleChat(user)"
-              >
-                <div class="contact-avatar">
-                  <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
-                  <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
-                </div>
-                <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
-              </div>
-            </div>
-          </template>
-
-          <template v-if="createType === 'group'">
-            <input
-              v-model="createGroupName"
-              class="dialog-input"
-              placeholder="群聊名称"
-            />
-            <input
-              v-model="createSearchMember"
-              class="dialog-input"
-              placeholder="搜索并添加成员..."
-              @input="onSearchCreateMember"
-            />
-            <div class="selected-members" v-if="createSelectedMembers.length">
-              <span class="section-label">已选成员:</span>
-              <span
-                v-for="member in createSelectedMembers"
-                :key="member.userId || member.id"
-                class="member-tag"
-              >
-                {{ getResolvedUser(member).nickname || getResolvedUser(member).username }}
-                <button @click="removeMemberSelection(member)">✕</button>
-              </span>
-            </div>
-            <div class="create-user-list">
-              <div
-                v-for="user in createMemberResults"
-                :key="user.userId || user.id"
-                class="create-user-item"
-                @click="addMemberSelection(user)"
-              >
-                <div class="contact-avatar">
-                  <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
-                  <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
-                </div>
-                <span class="contact-name">{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
-              </div>
-            </div>
-            <button
-              class="dialog-submit"
-              :disabled="!createGroupName || createSelectedMembers.length === 0"
-              @click="doCreateGroupChat"
-            >创建群聊</button>
-          </template>
-        </div>
-      </div>
-    </div>
+    <CreateGroupDialog
+      v-if="showCreateGroupDialog"
+      :conversations="chatStore.conversations"
+      :current-user-id="String(authStore.currentUser?.userId || '')"
+      @close="showCreateGroupDialog = false"
+      @created="handleGroupCreated"
+    />
 
     <!-- 图片预览全屏遮罩 -->
     <div v-if="previewImage" class="dialog-overlay preview-overlay" @click="previewImage = ''">
@@ -1027,7 +939,6 @@
       :presence="getProfilePresence(selectedProfileUser)"
       @close="showProfileDialog = false"
       @saved="handleProfileSaved"
-      @start-chat="startProfileChat"
     />
   </div>
 </template>
@@ -1047,6 +958,7 @@ import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
 import ConversationAvatar from '../components/ConversationAvatar.vue'
+import CreateGroupDialog from '../components/CreateGroupDialog.vue'
 import DesktopWindowControls from '../components/DesktopWindowControls.vue'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { createWebSocketTicket } from '../api/auth'
@@ -1054,7 +966,6 @@ import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
 import {
   addMembers,
-  createConversation,
   muteConversation,
   normalizeConversation,
   pinConversation,
@@ -1124,7 +1035,6 @@ import pinIcon from '../assets/icons/置顶.svg'
 import bellOnIcon from '../assets/icons/开启铃声.svg'
 import bellOffIcon from '../assets/icons/关闭铃声.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
-import screenshotIcon from '../assets/icons/screenshot.svg'
 import fileIcon from '../assets/icons/file.svg'
 import imageIcon from '../assets/icons/image.svg'
 
@@ -1252,35 +1162,6 @@ function onContactSearch() {
   }, 300)
 }
 
-// 创建或跳转单聊会话
-async function createSingleChat(user: any) {
-  const userId = user.userId || user.id
-  const myId = authStore.currentUser?.userId
-  if (!myId || userId === myId) return
-  try {
-    const res = await createConversation({
-      type: 'SINGLE',
-      targetUserId: userId,
-    })
-    await chatStore.fetchConversations()
-    let conv = chatStore.conversations.find(
-      (c) => c.conversationId === res.data.conversationId
-    )
-    if (!conv) {
-      chatStore.upsertConversation(res.data)
-      conv = res.data
-    }
-    if (conv) {
-      activeTab.value = 'chat'
-      await chatStore.selectConversation(conv.conversationId)
-      closeCreateDialog()
-      scrollToBottom(true)
-    }
-  } catch (err: any) {
-    alert(err?.response?.data?.message || '创建会话失败')
-  }
-}
-
 // 消息区和输入框引用
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
@@ -1303,7 +1184,6 @@ const isAttachmentDragActive = ref(false)
 const attachmentFeedback = ref('')
 const attachmentFeedbackIsError = ref(false)
 const attachmentDragDepth = new DragDepthTracker()
-const isTakingScreenshot = ref(false)
 const hasDesktopWindowControls = !!window.imDesktop?.window
 const draftMentions = ref<MessageMention[]>([])
 const replyTarget = ref<MessageReply | null>(null)
@@ -1342,7 +1222,6 @@ const highlightedMessageId = ref('')
 let highlightMessageTimer: ReturnType<typeof setTimeout> | null = null
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
-const canUseDesktopScreenshot = computed(() => !!window.imDesktop?.startScreenshot)
 const currentAttachmentDrafts = computed(() =>
   attachmentDraftStore.draftsFor(chatStore.currentConversation?.conversationId)
 )
@@ -1603,11 +1482,6 @@ function handleProfileSaved(user: UserInfo) {
   selectedProfileFallback.value = user
 }
 
-async function startProfileChat(user: any) {
-  showProfileDialog.value = false
-  await createSingleChat(user)
-}
-
 const mentionCandidates = computed(() => {
   const conv = chatStore.currentConversation
   const currentUserId = String(authStore.currentUser?.userId ?? '')
@@ -1774,45 +1648,6 @@ function handleWindowDragLeave(event: DragEvent) {
   attachmentDragDepth.reset()
   isAttachmentDragActive.value = false
   if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
-}
-
-// 将 data URL 转换为 File 对象（用于截图场景）
-function dataUrlToFile(dataUrl: string, fileName: string): File {
-  const [header, base64Data] = dataUrl.split(',')
-  const mime = header.match(/^data:(.*?);base64$/)?.[1] || 'image/png'
-  const binary = atob(base64Data || '')
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return new File([bytes], fileName, { type: mime })
-}
-
-// 调用桌面截图 bridge，结果作为图片附件添加到当前会话
-async function takeScreenshot() {
-  // 截图只在桌面 bridge 可用时进入 native flow，结果按图片草稿处理，沿用现有发送流程。
-  if (!window.imDesktop?.startScreenshot || isTakingScreenshot.value) return
-  if (!chatStore.currentConversation || !authStore.currentUser) {
-    alert('请先选择会话')
-    return
-  }
-
-  closeMentionPicker()
-  closeEmojiPanel()
-  isTakingScreenshot.value = true
-  try {
-    const result = await window.imDesktop.startScreenshot()
-    if (!result.canceled && result.dataUrl) {
-      const file = dataUrlToFile(result.dataUrl, `screenshot-${Date.now()}.png`)
-      addAttachmentFiles([file])
-      await nextTick()
-      messageInputRef.value?.focus()
-    }
-  } catch {
-    alert('截图失败')
-  } finally {
-    isTakingScreenshot.value = false
-  }
 }
 
 function handleMessagePaste(event: ClipboardEvent) {
@@ -3272,102 +3107,17 @@ function showBrowserNotification(title: string, body: string) {
   }
 }
 
-// Create dialog
-const showCreateDialog = ref(false)
-const createType = ref<'single' | 'group'>('single')
-const createSearchUser = ref('')
-const createSearchResults = ref<any[]>([])
-const createGroupName = ref('')
-const createSearchMember = ref('')
-const createMemberResults = ref<any[]>([])
-const createSelectedMembers = ref<any[]>([])
+// 创建群聊弹窗
+const showCreateGroupDialog = ref(false)
 
-function closeCreateDialog() {
-  showCreateDialog.value = false
-  createSearchUser.value = ''
-  createSearchResults.value = []
-  createGroupName.value = ''
-  createSearchMember.value = ''
-  createMemberResults.value = []
-  createSelectedMembers.value = []
-}
-
-let createSearchTimer: ReturnType<typeof setTimeout> | null = null
-
-function onSearchCreateUser() {
-  if (createSearchTimer) clearTimeout(createSearchTimer)
-  createSearchTimer = setTimeout(async () => {
-    const kw = createSearchUser.value.trim()
-    if (!kw) {
-      createSearchResults.value = []
-      return
-    }
-    try {
-      const res = await searchUsers(kw, 1, 20)
-      userProfileStore.upsertProfiles(res.data || [])
-      createSearchResults.value = res.data
-    } catch {
-      createSearchResults.value = []
-    }
-  }, 300)
-}
-
-function onSearchCreateMember() {
-  if (createSearchTimer) clearTimeout(createSearchTimer)
-  createSearchTimer = setTimeout(async () => {
-    const kw = createSearchMember.value.trim()
-    if (!kw) {
-      createMemberResults.value = []
-      return
-    }
-    try {
-      const res = await searchUsers(kw, 1, 20)
-      userProfileStore.upsertProfiles(res.data || [])
-      const myId = authStore.currentUser?.userId
-      createMemberResults.value = (res.data || []).filter(
-        (u: any) => (u.userId || u.id) !== myId
-      )
-    } catch {
-      createMemberResults.value = []
-    }
-  }, 300)
-}
-
-function addMemberSelection(user: any) {
-  const uid = user.userId || user.id
-  if (!createSelectedMembers.value.find((m) => (m.userId || m.id) === uid)) {
-    createSelectedMembers.value.push(user)
-  }
-}
-
-function removeMemberSelection(user: any) {
-  const uid = user.userId || user.id
-  createSelectedMembers.value = createSelectedMembers.value.filter(
-    (m) => (m.userId || m.id) !== uid
-  )
-}
-
-async function doCreateSingleChat(user: any) {
-  await createSingleChat(user)
-}
-
-async function doCreateGroupChat() {
-  if (!createGroupName.value || createSelectedMembers.value.length === 0) return
-  try {
-    const memberIds = createSelectedMembers.value.map((m) => m.userId || m.id)
-    const res = await createConversation({
-      type: 'GROUP',
-      name: createGroupName.value,
-      memberIds,
-    })
-    chatStore.upsertConversation(res.data)
-    activeTab.value = 'chat'
-    await chatStore.selectConversation(res.data.conversationId)
-    closeCreateDialog()
-    scrollToBottom(true)
-  } catch (err: any) {
-    alert(err?.response?.data?.message || '创建群聊失败')
-  }
+async function handleGroupCreated(conversation: Conversation) {
+  showCreateGroupDialog.value = false
+  chatStore.upsertConversation(conversation)
+  activeTab.value = 'chat'
+  await chatStore.selectConversation(conversation.conversationId)
+  await nextTick()
+  messageInputRef.value?.focus()
+  scrollToBottom(true)
 }
 
 // Utility
@@ -3426,17 +3176,13 @@ async function handleLogout() {
   router.push('/login')
 }
 
-// 桌面常用快捷键：Ctrl+, 打开设置；Ctrl+Shift+A 启动截图。
+// 桌面常用快捷键：Ctrl+, 打开设置。
 function handleGlobalShortcut(event: KeyboardEvent) {
   if (event.repeat) return
   if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ',') {
     event.preventDefault()
     showSettingsDialog.value = true
     return
-  }
-  if (event.ctrlKey && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a') {
-    event.preventDefault()
-    void takeScreenshot()
   }
 }
 
@@ -5214,94 +4960,6 @@ watch(
   padding: 16px 20px;
   overflow-y: auto;
   flex: 1;
-}
-
-.dialog-tabs {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.dialog-tabs span {
-  padding: 4px 14px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--font-md);
-  color: var(--text-secondary);
-  background: var(--bg-header);
-}
-
-.dialog-tabs span.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.dialog-input {
-  width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  font-size: var(--font-md);
-  margin-bottom: 10px;
-  background: var(--bg-input-rest);
-}
-
-.dialog-input:focus {
-  border-color: var(--accent);
-  background: var(--bg-surface);
-}
-
-.create-user-list {
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.create-user-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 10px;
-  gap: 10px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-
-.create-user-item:hover {
-  background: var(--bg-header);
-}
-
-.section-label {
-  font-size: var(--font-sm);
-  color: var(--text-tertiary);
-  margin-right: 8px;
-}
-
-.selected-members {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.member-tag {
-  background: var(--accent);
-  color: #fff;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.member-tag button {
-  background: none;
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  font-size: var(--font-sm);
 }
 
 .dialog-submit {
