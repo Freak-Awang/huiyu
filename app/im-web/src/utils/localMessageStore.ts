@@ -114,3 +114,21 @@ export async function clearLocalMessages(userId = getLocalMessageUserId()): Prom
     return false
   }
 }
+
+/**
+ * 清空当前设备上指定会话的本地消息缓存。
+ */
+export async function clearLocalConversationMessages(
+  conversationId: string,
+  userId = getLocalMessageUserId(),
+): Promise<boolean> {
+  if (!canUseLocalMessageStore() || !userId || !conversationId || !window.imDesktop?.clearConversationMessages) {
+    return false
+  }
+  try {
+    return await window.imDesktop.clearConversationMessages(userId, conversationId)
+  } catch (error) {
+    console.warn('清理会话本地消息缓存失败', error)
+    return false
+  }
+}

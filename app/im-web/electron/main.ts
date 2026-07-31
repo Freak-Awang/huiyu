@@ -15,6 +15,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   listLocalMessages,
+  clearLocalConversationMessages,
   clearLocalMessages,
   getLocalMessageStats,
   searchLocalMessages,
@@ -430,6 +431,12 @@ ipcMain.handle('messages:stats', (event, userId: string) => {
 ipcMain.handle('messages:clear', (event, userId: string) => {
   assertMainWindowSender(event)
   return clearLocalMessages(userId)
+})
+
+/** 清空指定会话的本地消息缓存 */
+ipcMain.handle('messages:clear-conversation', (event, userId: string, conversationId: string) => {
+  assertMainWindowSender(event)
+  return clearLocalConversationMessages(userId, conversationId)
 })
 
 /**

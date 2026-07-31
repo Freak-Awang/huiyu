@@ -307,31 +307,8 @@
             <span v-else class="chat-header-meta"></span>
           </div>
           <div class="chat-header-actions">
-            <button class="action-btn chat-search-toggle" title="搜索聊天记录" @click="openSearchDrawer">
-              <img :src="searchIcon" alt="搜索" />
-            </button>
-            <button
-              v-if="chatStore.currentConversation.type === 'GROUP'"
-              class="members-action-btn"
-              title="群成员"
-              type="button"
-              @click="openMembersDrawer"
-            >
-              <img :src="contactsIcon" class="members-action-icon" alt="群成员" />
-            </button>
-            <button
-              class="action-btn"
-              :title="chatStore.currentConversation.pinned ? '取消置顶' : '置顶'"
-              @click="togglePin"
-            >
-              <img :src="pinIcon" alt="置顶" />
-            </button>
-            <button
-              class="action-btn"
-              :title="chatStore.currentConversation.muted ? '取消免打扰' : '免打扰'"
-              @click="toggleMute"
-            >
-              <img :src="chatStore.currentConversation.muted ? bellOffIcon : bellOnIcon" alt="免打扰" />
+            <button class="action-btn" title="更多" @click="toggleMoreDrawer">
+              <img :src="moreIcon" alt="更多" />
             </button>
           </div>
         </div>
@@ -682,25 +659,150 @@
 
       <div v-if="showMembersDrawer" class="member-drawer">
         <div class="member-drawer-header">
-          <div class="member-drawer-title">
-            <span>群成员</span>
-            <span>{{ chatStore.currentConversation?.memberCount ?? sortedGroupMembers.length }}人</span>
+          <button
+            class="member-drawer-back"
+            type="button"
+            :aria-label="memberDrawerBackLabel"
+            @click="handleMemberDrawerBack"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+          <strong class="member-drawer-title">{{ memberDrawerTitle }}</strong>
+          <div v-if="memberDrawerMode === 'list' && canManageCurrentGroup" class="member-drawer-actions">
+            <button type="button" aria-label="邀请成员" title="邀请成员" @click="openMemberSubMode('invite')">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+            <button type="button" aria-label="编辑群聊资料" title="编辑群聊资料" @click="openMemberSubMode('settings')">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 14.7a1.7 1.7 0 0 0-1.55-1H5v-3h.45A1.7 1.7 0 0 0 7 9.7a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.66 6a1.7 1.7 0 0 0 1-1.55V4h3v.45a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 9.7a1.7 1.7 0 0 0 1.55 1H21v3h-.05a1.7 1.7 0 0 0-1.55 1.3Z" />
+              </svg>
+            </button>
           </div>
-          <button class="dialog-close" @click="showMembersDrawer = false">✕</button>
         </div>
-        <input
-          v-model="memberSearch"
-          class="member-search"
-          placeholder="搜索成员..."
-        />
-        <div v-if="chatStore.currentConversation?.type === 'GROUP'" class="group-settings-box">
+
+        <template v-if="memberDrawerMode === 'list'">
+          <label class="member-search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input v-model="memberSearch" type="search" placeholder="搜索" aria-label="搜索群聊成员" />
+          </label>
+          <div class="member-list">
+            <div
+              v-for="member in filteredGroupMembers"
+              :key="member.userId"
+              class="member-row"
+            >
+              <button class="member-profile-button" type="button" @click="openUserProfile(member)">
+                <span class="member-avatar" :class="{ offline: isUserOffline(member) }">
+                  <img
+                    v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))"
+                    :src="getUserAvatar(member)"
+                    :alt="`${getMemberName(member)}头像`"
+                    @error="failedAvatars.add(getUserAvatar(member))"
+                  />
+                  <span v-else>{{ getMemberName(member)[0] }}</span>
+                </span>
+                <span class="member-name">{{ getMemberName(member) }}</span>
+              </button>
+              <span
+                v-if="member.role === 'owner' || member.role === 'admin'"
+                class="member-role-badge"
+                :class="`member-role-${member.role}`"
+              >
+                {{ formatMemberRole(member.role) }}
+              </span>
+              <button
+                v-if="hasMemberManagementActions(member)"
+                class="member-menu-trigger"
+                type="button"
+                :aria-label="`管理${getMemberName(member)}`"
+                :aria-expanded="activeMemberActionsId === member.userId"
+                @click.stop="toggleMemberActions(member.userId)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.5" />
+                  <circle cx="12" cy="12" r="1.5" />
+                  <circle cx="19" cy="12" r="1.5" />
+                </svg>
+              </button>
+              <div v-if="activeMemberActionsId === member.userId" class="member-action-menu">
+                <button v-if="canUpdateMemberRole(member)" type="button" @click="toggleMemberRole(member)">
+                  {{ member.role === 'admin' ? '取消管理员' : '设为管理员' }}
+                </button>
+                <button v-if="canTransferGroupOwner(member)" type="button" @click="transferGroupOwner(member)">
+                  转让群主
+                </button>
+                <button
+                  v-if="canRemoveGroupMember(member)"
+                  type="button"
+                  class="danger"
+                  @click="removeGroupMember(member)"
+                >
+                  {{ member.userId === String(authStore.currentUser?.userId ?? '') ? '退出群聊' : '移除成员' }}
+                </button>
+              </div>
+            </div>
+            <div v-if="filteredGroupMembers.length === 0" class="member-empty">未找到相关成员</div>
+          </div>
+        </template>
+
+        <div v-else-if="memberDrawerMode === 'invite'" class="member-invite-panel">
+          <label class="member-search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input
+              v-model="memberAddKeyword"
+              type="search"
+              placeholder="搜索联系人"
+              aria-label="搜索并邀请成员"
+              @input="onSearchAddMember"
+            />
+          </label>
+          <div class="member-invite-results">
+            <button
+              v-for="user in memberAddResults"
+              :key="user.userId || user.id"
+              type="button"
+              @click="addGroupMember(user)"
+            >
+              <span class="member-avatar">
+                <img
+                  v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))"
+                  :src="getUserAvatar(user)"
+                  :alt="`${getResolvedUser(user).nickname || getResolvedUser(user).username}头像`"
+                  @error="failedAvatars.add(getUserAvatar(user))"
+                />
+                <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
+              </span>
+              <span>{{ getResolvedUser(user).nickname || getResolvedUser(user).username }}</span>
+              <small>邀请</small>
+            </button>
+            <div v-if="memberAddKeyword.trim() && memberAddResults.length === 0" class="member-empty">
+              未找到可邀请的联系人
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else-if="memberDrawerMode === 'settings' && chatStore.currentConversation?.type === 'GROUP'"
+          class="group-settings-box"
+        >
           <div class="group-avatar-setting">
             <ConversationAvatar
               :type="'GROUP'"
               :src="getConversationAvatar(chatStore.currentConversation)"
               :name="chatStore.currentConversation.name"
               alt="群头像"
-              :size="72"
+              :size="56"
             />
             <div class="group-avatar-details">
               <span class="group-avatar-label">群头像</span>
@@ -731,7 +833,6 @@
                   @change="onGroupAvatarSelected"
                 />
               </div>
-              <span v-else class="group-avatar-readonly">仅群主可修改群头像</span>
               <p
                 v-if="groupAvatarStatus"
                 class="group-avatar-status"
@@ -745,24 +846,31 @@
           </div>
           <label class="group-setting-field">
             <span>群名称</span>
-            <input
-              type="text"
-              :value="groupSettingsName"
-              :disabled="!canManageCurrentGroup"
-              @input="onGroupNameInput"
-              @keydown.stop
-              @mousedown.stop
-            />
+            <input type="text" :value="groupSettingsName" @input="onGroupNameInput" />
           </label>
+          <button
+            type="button"
+            class="dialog-submit compact-submit"
+            :disabled="groupSettingsSaving"
+            @click="saveGroupSettings"
+          >
+            {{ groupSettingsSaving ? '保存中...' : '保存群聊资料' }}
+          </button>
+          <p v-if="groupSettingsStatus" class="group-settings-status">{{ groupSettingsStatus }}</p>
+        </div>
+
+        <div
+          v-else-if="memberDrawerMode === 'announcement' && chatStore.currentConversation?.type === 'GROUP'"
+          class="group-announcement-editor"
+        >
           <label class="group-setting-field">
             <span>群公告</span>
             <textarea
               :value="groupSettingsAnnouncement"
+              rows="8"
               :disabled="!canManageCurrentGroup"
-              rows="3"
+              placeholder="填写群公告"
               @input="onGroupAnnouncementInput"
-              @keydown.stop
-              @mousedown.stop
             ></textarea>
           </label>
           <button
@@ -770,81 +878,23 @@
             type="button"
             class="dialog-submit compact-submit"
             :disabled="groupSettingsSaving"
-            @click="saveGroupSettings"
+            @click="saveGroupAnnouncement"
           >
-            {{ groupSettingsSaving ? '保存中...' : '保存群设置' }}
+            {{ groupSettingsSaving ? '保存中...' : '保存群公告' }}
           </button>
           <p v-if="groupSettingsStatus" class="group-settings-status">{{ groupSettingsStatus }}</p>
-        </div>
-        <div v-if="canManageCurrentGroup" class="member-add-box">
-          <input
-            v-model="memberAddKeyword"
-            class="member-search member-add-input"
-            placeholder="搜索并添加成员..."
-            @input="onSearchAddMember"
-          />
-          <div v-if="memberAddResults.length" class="member-add-results">
-            <button
-              v-for="user in memberAddResults"
-              :key="user.userId || user.id"
-              type="button"
-              class="member-add-result"
-              @click="addGroupMember(user)"
-            >
-              {{ getResolvedUser(user).nickname || getResolvedUser(user).username }}
-            </button>
-          </div>
-        </div>
-        <div class="member-list">
-          <div
-            v-for="member in filteredGroupMembers"
-            :key="member.userId"
-            class="member-row"
-          >
-            <div class="member-avatar" :class="{ offline: isUserOffline(member) }" @click="openUserProfile(member)">
-              <img v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))" :src="getUserAvatar(member)" @error="failedAvatars.add(getUserAvatar(member))" alt="" />
-              <span v-else>{{ getMemberName(member)[0] }}</span>
-            </div>
-            <div class="member-info">
-              <span class="member-name">{{ getMemberName(member) }}</span>
-              <span v-if="getResolvedUser(member).signature" class="member-signature">{{ getResolvedUser(member).signature }}</span>
-              <span class="member-role" :class="`member-role-${member.role || 'member'}`">
-                {{ formatMemberRole(member.role) }}
-              </span>
-            </div>
-            <button
-              v-if="canUpdateMemberRole(member)"
-              type="button"
-              class="member-role-btn"
-              @click="toggleMemberRole(member)"
-            >
-              {{ member.role === 'admin' ? '取消管理员' : '设为管理员' }}
-            </button>
-            <button
-              v-if="canTransferGroupOwner(member)"
-              type="button"
-              class="member-transfer-btn"
-              @click="transferGroupOwner(member)"
-            >
-              转让群主
-            </button>
-            <button
-              v-if="canRemoveGroupMember(member)"
-              type="button"
-              class="member-remove-btn"
-              @click="removeGroupMember(member)"
-            >
-              {{ member.userId === authStore.currentUser?.userId ? '退出' : '移除' }}
-            </button>
-          </div>
-          <div v-if="filteredGroupMembers.length === 0" class="empty-hint">暂无成员</div>
         </div>
       </div>
 
       <div v-if="showSearchDrawer" class="search-drawer">
         <div class="search-drawer-header">
+          <button class="drawer-back-btn" type="button" @click="closeSearchDrawer">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            <span>返回</span>
+          </button>
           <span class="search-drawer-title">搜索聊天记录</span>
-          <button class="dialog-close" @click="closeSearchDrawer">✕</button>
         </div>
 
         <div class="search-drawer-input-row">
@@ -876,6 +926,153 @@
           <div v-else class="empty-hint">输入关键字开始搜索</div>
         </div>
       </div>
+
+      <!-- 更多功能抽屉 -->
+      <aside
+        v-if="showMoreDrawer"
+        class="more-drawer"
+        aria-label="会话设置"
+      >
+        <div class="more-drawer-header">
+          <button
+            class="more-drawer-back"
+            type="button"
+            aria-label="返回上一级"
+            @click="showMoreDrawer = false"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            <span>返回</span>
+          </button>
+        </div>
+
+        <div class="more-drawer-body">
+          <section class="more-profile-card">
+            <ConversationAvatar
+              :type="chatStore.currentConversation!.type"
+              :src="getConversationAvatar(chatStore.currentConversation!)"
+              :name="getConversationName(chatStore.currentConversation!)"
+              :alt="`${getConversationName(chatStore.currentConversation!)}头像`"
+              :size="40"
+            />
+            <div class="more-profile-copy">
+              <strong>{{ getConversationName(chatStore.currentConversation!) }}</strong>
+            </div>
+
+          </section>
+
+          <template v-if="chatStore.currentConversation?.type === 'GROUP'">
+            <section class="more-members-card">
+              <button class="more-section-heading" type="button" @click="onMoreMembers">
+                <strong>群聊成员</strong>
+                <span>查看{{ chatStore.currentConversation.memberCount ?? sortedGroupMembers.length }}名群成员</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+              <div class="more-member-grid">
+                <button
+                  v-for="member in drawerGroupMembers"
+                  :key="member.userId"
+                  class="more-member-cell"
+                  type="button"
+                  :title="getMemberName(member)"
+                  @click="openUserProfile(member)"
+                >
+                  <span class="more-member-avatar" :class="{ offline: isUserOffline(member) }">
+                    <img
+                      v-if="getUserAvatar(member) && !failedAvatars.has(getUserAvatar(member))"
+                      :src="getUserAvatar(member)"
+                      :alt="`${getMemberName(member)}头像`"
+                      @error="failedAvatars.add(getUserAvatar(member))"
+                    />
+                    <span v-else>{{ getMemberName(member)[0] }}</span>
+                  </span>
+                  <span class="more-member-name">{{ getMemberName(member) }}</span>
+                </button>
+                <button class="more-member-cell" type="button" @click="onMoreInvite">
+                  <span class="more-member-avatar more-member-add" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </span>
+                  <span class="more-member-name">{{ canManageCurrentGroup ? '邀请' : '成员' }}</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="more-field-group">
+              <span class="more-field-label">群公告</span>
+              <button class="more-field-row" type="button" @click="onMoreAnnouncement">
+                <span :class="{ muted: !chatStore.currentConversation.announcement }">
+                  {{ chatStore.currentConversation.announcement || '暂无群公告' }}
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            </section>
+
+            <section v-if="canManageCurrentGroup" class="more-field-group">
+              <span class="more-field-label">资料管理</span>
+              <button class="more-field-row" type="button" @click="onMoreGroupSettings">
+                <span>群资料设置</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            </section>
+
+          </template>
+
+          <section class="more-settings-card">
+            <button
+              class="more-setting-row"
+              type="button"
+              :aria-pressed="chatStore.currentConversation?.pinned"
+              @click="onMoreTogglePin"
+            >
+              <span>设为置顶</span>
+              <span class="more-switch" :class="{ active: chatStore.currentConversation?.pinned }">
+                <span></span>
+              </span>
+            </button>
+            <button
+              class="more-setting-row"
+              type="button"
+              :aria-pressed="chatStore.currentConversation?.muted"
+              @click="onMoreToggleMute"
+            >
+              <span>消息免打扰</span>
+              <span class="more-switch" :class="{ active: chatStore.currentConversation?.muted }">
+                <span></span>
+              </span>
+            </button>
+          </section>
+
+          <section class="more-action-card">
+            <button type="button" @click="onMoreSearch">
+              <span>查找聊天记录</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+            <button type="button" class="more-delete-row" @click="clearCurrentConversationRecords">
+              删除聊天记录
+            </button>
+          </section>
+
+          <button
+            v-if="chatStore.currentConversation?.type === 'GROUP'"
+            class="more-leave-btn"
+            type="button"
+            @click="leaveCurrentGroup"
+          >
+            退出群聊
+          </button>
+        </div>
+      </aside>
       </div>
 
     <div v-if="showGroupAvatarPreview" class="dialog-overlay" @click.self="cancelGroupAvatarPreview">
@@ -991,6 +1188,7 @@ import {
 } from '../api/message'
 import {
   canUseLocalMessageStore,
+  clearLocalConversationMessages,
   searchLocalMessages,
 } from '../utils/localMessageStore'
 import {
@@ -1030,10 +1228,7 @@ import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
 import moreIcon from '../assets/icons/more.svg'
 import newChatIcon from '../assets/icons/new chat.svg'
-import searchIcon from '../assets/icons/search.svg'
 import pinIcon from '../assets/icons/置顶.svg'
-import bellOnIcon from '../assets/icons/开启铃声.svg'
-import bellOffIcon from '../assets/icons/关闭铃声.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
 import fileIcon from '../assets/icons/file.svg'
 import imageIcon from '../assets/icons/image.svg'
@@ -1197,7 +1392,11 @@ const recentEmojis = ref<string[]>([])
 const recentStickers = ref<Sticker[]>([])
 const customStickers = ref<Sticker[]>([])
 const customStickerError = ref('')
+const showMoreDrawer = ref(false)
 const showMembersDrawer = ref(false)
+const memberDrawerMode = ref<'list' | 'invite' | 'settings' | 'announcement'>('list')
+const memberDrawerReturnTarget = ref<'more' | 'members'>('more')
+const activeMemberActionsId = ref('')
 const memberSearch = ref('')
 const memberAddKeyword = ref('')
 const memberAddResults = ref<any[]>([])
@@ -1248,6 +1447,22 @@ const sortedGroupMembers = computed(() => {
     return getMemberName(a).localeCompare(getMemberName(b), 'zh-CN')
   })
 })
+
+const drawerGroupMembers = computed(() => sortedGroupMembers.value.slice(0, 14))
+
+const memberDrawerTitle = computed(() => {
+  if (memberDrawerMode.value === 'invite') return '邀请成员'
+  if (memberDrawerMode.value === 'settings') return '群聊资料'
+  if (memberDrawerMode.value === 'announcement') return '群公告'
+  const count = chatStore.currentConversation?.memberCount ?? sortedGroupMembers.value.length
+  return `群聊成员 ${count}`
+})
+
+const memberDrawerBackLabel = computed(() =>
+  memberDrawerMode.value === 'list' || memberDrawerReturnTarget.value === 'more'
+    ? '返回会话设置'
+    : '返回群聊成员'
+)
 
 const filteredGroupMembers = computed(() => {
   const keyword = memberSearch.value.trim().toLowerCase()
@@ -1512,6 +1727,7 @@ async function handleSelectConv(conv: any) {
     requestConversationPresence(conv.conversationId)
     closeMentionPicker()
     closeEmojiPanel()
+    showMoreDrawer.value = false
     showMembersDrawer.value = false
     resetChatSearch()
     lastMarkedReadMessageId = ''
@@ -1686,6 +1902,78 @@ async function toggleMute() {
   }
 }
 
+// 更多抽屉：切换显示
+async function toggleMoreDrawer() {
+  showSearchDrawer.value = false
+  showMembersDrawer.value = false
+  const shouldOpen = !showMoreDrawer.value
+  showMoreDrawer.value = shouldOpen
+  if (!shouldOpen) return
+
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  if (conv.type === 'GROUP') {
+    await chatStore.refreshConversation(conv.conversationId)
+  }
+}
+
+// 更多抽屉菜单：打开搜索
+function onMoreSearch() {
+  showMoreDrawer.value = false
+  openSearchDrawer()
+}
+
+// 更多抽屉菜单：打开群成员
+function onMoreMembers() {
+  showMoreDrawer.value = false
+  void openMembersDrawer('list')
+}
+
+function onMoreInvite() {
+  if (!canManageCurrentGroup.value) {
+    onMoreMembers()
+    return
+  }
+  showMoreDrawer.value = false
+  void openMembersDrawer('invite')
+}
+
+function onMoreGroupSettings() {
+  if (!canManageCurrentGroup.value) return
+  showMoreDrawer.value = false
+  void openMembersDrawer('settings')
+}
+
+function onMoreAnnouncement() {
+  showMoreDrawer.value = false
+  void openMembersDrawer('announcement')
+}
+
+// 更多抽屉菜单：切换置顶
+function onMoreTogglePin() {
+  void togglePin()
+}
+
+// 更多抽屉菜单：切换免打扰
+function onMoreToggleMute() {
+  void toggleMute()
+}
+
+async function clearCurrentConversationRecords() {
+  const conv = chatStore.currentConversation
+  if (!conv) return
+  if (!window.confirm('确定清除当前设备上的该会话聊天记录吗？服务器保留的历史消息不会被删除。')) return
+  chatStore.clearConversationMessages(conv.conversationId)
+  attachmentDraftStore.clearConversation(conv.conversationId)
+  await clearLocalConversationMessages(conv.conversationId)
+  showMoreDrawer.value = false
+}
+
+function leaveCurrentGroup() {
+  if (!currentGroupMember.value) return
+  void removeGroupMember(currentGroupMember.value)
+}
+
 // 搜索聊天记录（优先本地搜索，回退服务端搜索）
 async function runChatSearch() {
   const conv = chatStore.currentConversation
@@ -1707,6 +1995,7 @@ async function runChatSearch() {
 
 // 打开搜索抽屉
 function openSearchDrawer() {
+  showMoreDrawer.value = false
   showMembersDrawer.value = false
   showSearchDrawer.value = true
   hasSearched.value = false
@@ -1716,8 +2005,51 @@ function openSearchDrawer() {
 }
 
 // 关闭搜索抽屉
+// 关闭搜索抽屉，回到更多抽屉
 function closeSearchDrawer() {
   showSearchDrawer.value = false
+  showMoreDrawer.value = true
+}
+
+// 关闭群成员抽屉，回到更多抽屉
+function closeMembersDrawer() {
+  showMembersDrawer.value = false
+  memberDrawerMode.value = 'list'
+  memberDrawerReturnTarget.value = 'more'
+  activeMemberActionsId.value = ''
+  showMoreDrawer.value = true
+}
+
+function handleMemberDrawerBack() {
+  if (memberDrawerMode.value === 'list' || memberDrawerReturnTarget.value === 'more') {
+    closeMembersDrawer()
+    return
+  }
+  memberDrawerReturnTarget.value = 'more'
+  setMemberDrawerMode('list')
+}
+
+function openMemberSubMode(mode: 'invite' | 'settings') {
+  memberDrawerReturnTarget.value = 'members'
+  setMemberDrawerMode(mode)
+}
+
+function setMemberDrawerMode(mode: 'list' | 'invite' | 'settings' | 'announcement') {
+  memberDrawerMode.value = mode
+  activeMemberActionsId.value = ''
+  if (mode !== 'list') memberSearch.value = ''
+  if (mode !== 'invite') {
+    memberAddKeyword.value = ''
+    memberAddResults.value = []
+  }
+}
+
+function hasMemberManagementActions(member: ConversationMember) {
+  return canUpdateMemberRole(member) || canTransferGroupOwner(member) || canRemoveGroupMember(member)
+}
+
+function toggleMemberActions(userId: string) {
+  activeMemberActionsId.value = activeMemberActionsId.value === userId ? '' : userId
 }
 
 function messageElementId(messageId: string): string {
@@ -1763,11 +2095,18 @@ async function jumpToSearchResult(msg: Message) {
 }
 
 // 打开群成员抽屉：刷新会话数据、加载群设置
-async function openMembersDrawer() {
+async function openMembersDrawer(
+  mode: 'list' | 'invite' | 'settings' | 'announcement' = 'list',
+  returnTarget: 'more' | 'members' = 'more',
+) {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
   resetChatSearch()
+  showMoreDrawer.value = false
   showMembersDrawer.value = true
+  memberDrawerMode.value = mode
+  memberDrawerReturnTarget.value = returnTarget
+  activeMemberActionsId.value = ''
   memberSearch.value = ''
   memberAddKeyword.value = ''
   memberAddResults.value = []
@@ -1867,7 +2206,7 @@ async function confirmGroupAvatarUpload() {
 async function restoreGroupAvatar() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP' || !canEditCurrentGroupAvatar.value || groupAvatarSaving.value) return
-  if (!window.confirm('恢复系统默认“群”字头像？')) return
+  if (!window.confirm('恢复系统默认"群"字头像？')) return
   groupAvatarSaving.value = true
   groupAvatarStatus.value = ''
   groupAvatarStatusIsError.value = false
@@ -1893,7 +2232,7 @@ function onGroupAnnouncementInput(event: Event) {
   groupSettingsStatus.value = ''
 }
 
-// 保存群设置（群名称、群公告）
+// 保存群资料（群名称；群头像通过独立上传接口保存）
 async function saveGroupSettings() {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') return
@@ -1907,17 +2246,37 @@ async function saveGroupSettings() {
   try {
     const res = await updateConversationSettings(conv.conversationId, {
       name,
-      announcement: groupSettingsAnnouncement.value,
     })
     chatStore.upsertConversation(res.data)
     groupSettingsName.value = res.data.name
-    groupSettingsAnnouncement.value = res.data.announcement || ''
-    groupSettingsStatus.value = '群设置已保存'
+    groupSettingsStatus.value = '群资料已保存'
   } catch (err: any) {
     const message = err?.response?.data?.message || err?.message || ''
     groupSettingsStatus.value = message.includes('No static resource') || err?.response?.status === 404
       ? '保存失败：后端服务未更新或未重启，请重启后端后再试'
-      : message || '保存群设置失败'
+      : message || '保存群资料失败'
+  } finally {
+    groupSettingsSaving.value = false
+  }
+}
+
+async function saveGroupAnnouncement() {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP' || !canManageCurrentGroup.value) return
+  groupSettingsSaving.value = true
+  groupSettingsStatus.value = ''
+  try {
+    const res = await updateConversationSettings(conv.conversationId, {
+      announcement: groupSettingsAnnouncement.value,
+    })
+    chatStore.upsertConversation(res.data)
+    groupSettingsAnnouncement.value = res.data.announcement || ''
+    groupSettingsStatus.value = '群公告已保存'
+  } catch (err: any) {
+    const message = err?.response?.data?.message || err?.message || ''
+    groupSettingsStatus.value = message.includes('No static resource') || err?.response?.status === 404
+      ? '保存失败：后端服务未更新或未重启，请重启后端后再试'
+      : message || '保存群公告失败'
   } finally {
     groupSettingsSaving.value = false
   }
@@ -1965,10 +2324,11 @@ async function transferGroupOwner(member: ConversationMember) {
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP' || !canTransferGroupOwner(member)) return
   const memberName = getMemberName(member)
-  if (!window.confirm(`确认将群主转让给“${memberName}”？转让后你将成为普通成员。`)) return
+  if (!window.confirm(`确认将群主转让给"${memberName}"？转让后你将成为普通成员。`)) return
   try {
     const res = await transferConversationOwner(conv.conversationId, member.userId)
     chatStore.upsertConversation(res.data)
+    activeMemberActionsId.value = ''
     groupSettingsStatus.value = `群主已转让给 ${memberName}`
   } catch (err: any) {
     groupSettingsStatus.value = err?.response?.data?.message || err?.message || '群主转让失败'
@@ -1982,6 +2342,7 @@ async function toggleMemberRole(member: ConversationMember) {
   try {
     const res = await updateMemberRole(conv.conversationId, member.userId, nextRole)
     chatStore.upsertConversation(res.data)
+    activeMemberActionsId.value = ''
   } catch (err: any) {
     alert(err?.response?.data?.message || '更新成员角色失败')
   }
@@ -2029,12 +2390,14 @@ async function removeGroupMember(member: ConversationMember) {
   const conv = chatStore.currentConversation
   if (!conv) return
   const isSelf = member.userId === String(authStore.currentUser?.userId ?? '')
-  const confirmed = window.confirm(isSelf ? '确定退出该群聊吗？' : `确定移除“${getMemberName(member)}”吗？`)
+  const confirmed = window.confirm(isSelf ? '确定退出该群聊吗？' : `确定移除"${getMemberName(member)}"吗？`)
   if (!confirmed) return
   try {
     await removeMember(conv.conversationId, member.userId)
+    activeMemberActionsId.value = ''
     if (isSelf) {
       showMembersDrawer.value = false
+      showMoreDrawer.value = false
       chatStore.currentConversation = null
       await chatStore.fetchConversations()
       return
@@ -2525,7 +2888,7 @@ async function renameCustomSticker(sticker: Sticker) {
 }
 
 async function removeCustomSticker(sticker: Sticker) {
-  if (!window.confirm(`删除表情“${sticker.name}”？`)) return
+  if (!window.confirm(`删除表情"${sticker.name}"？`)) return
   try {
     await deleteCustomStickerRecord(sticker.id)
     recentStickers.value = recentStickers.value.filter((item) => stickerStorageKey(item) !== stickerStorageKey(sticker))
@@ -3250,7 +3613,11 @@ watch(
   () => chatStore.currentConversation?.conversationId,
   () => {
     lastMarkedReadMessageId = ''
+    showMoreDrawer.value = false
     showMembersDrawer.value = false
+    memberDrawerMode.value = 'list'
+    memberDrawerReturnTarget.value = 'more'
+    activeMemberActionsId.value = ''
     memberSearch.value = ''
     memberAddKeyword.value = ''
     memberAddResults.value = []
@@ -4533,38 +4900,89 @@ watch(
   right: 0;
   bottom: 0;
   width: 320px;
-  background: var(--bg-surface);
+  max-width: 100%;
+  background: var(--bg-header);
   border-left: 1px solid var(--border-light);
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.08);
   z-index: 20;
   display: flex;
   flex-direction: column;
+  animation: slideInFromRight 0.2s ease-out;
 }
 
 .member-drawer-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 15px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 14px;
   color: var(--text-primary);
 }
 
-.member-drawer-title {
+.member-drawer-back {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  margin-left: -5px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  transition: background-color var(--transition-fast);
 }
 
-.member-drawer-title span:first-child {
+.member-drawer-back:hover {
+  background: var(--bg-hover-light);
+}
+
+.member-drawer-back svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.member-drawer-title {
+  flex: 1;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
-.member-drawer-title span:last-child {
-  color: var(--text-tertiary);
-  font-size: var(--font-sm);
-  font-weight: 400;
+.member-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.member-drawer-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.member-drawer-actions button:hover {
+  background: var(--bg-hover-light);
+  color: var(--text-primary);
+}
+
+.member-drawer-actions svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
 }
 
 /* 搜索抽屉 */
@@ -4647,26 +5065,442 @@ watch(
   font-size: var(--font-sm);
 }
 
-.member-search {
-  margin: 12px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 0 10px;
-  font-size: var(--font-base);
-  background: var(--bg-input-rest);
+/* ============ 更多抽屉 ============ */
+.more-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 100%;
+  background: var(--bg-header);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.08);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  animation: slideInFromRight 0.2s ease-out;
 }
 
-.member-add-box {
-  padding: 0 12px 10px;
+.more-drawer-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.more-drawer-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm, 13px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.more-drawer-back:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover-light);
+}
+
+.more-drawer-back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+/* 共享返回按钮样式（搜索/群成员抽屉） */
+.drawer-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm, 13px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.drawer-back-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover-light);
+}
+
+.drawer-back-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.more-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px 28px;
+  color: var(--text-primary);
+}
+
+.more-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+}
+
+.more-profile-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.more-profile-copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-members-card {
+  margin-top: 22px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.more-section-heading {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.more-section-heading:hover {
+  background: var(--bg-hover-light);
+}
+
+.more-section-heading strong {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.more-section-heading span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.more-section-heading svg,
+.more-field-row svg,
+.more-action-card svg {
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.more-member-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  column-gap: 7px;
+  row-gap: 16px;
+  padding: 12px 12px 18px;
+}
+
+.more-member-cell {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.more-member-cell:hover .more-member-avatar {
+  box-shadow: 0 0 0 2px var(--accent-bg-active);
+}
+
+.more-member-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-avatar);
+  color: #fff;
+  font-size: 12px;
+  transition: box-shadow var(--transition-fast);
+}
+
+.more-member-avatar.offline {
+  filter: grayscale(100%);
+}
+
+.more-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.more-member-add {
+  background: var(--bg-header);
+  color: var(--text-secondary);
+}
+
+.more-member-add svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+}
+
+.more-member-name {
+  width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-field-group {
+  display: block;
+  margin-top: 20px;
+}
+
+.more-field-label {
+  display: block;
+  margin: 0 14px 7px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.more-field-row {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.more-field-row {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+button.more-field-row:hover {
+  background: var(--bg-hover-light);
+}
+
+.more-field-row > span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-field-row > span.muted {
+  color: var(--text-tertiary);
+}
+
+.more-settings-card,
+.more-action-card {
+  margin-top: 20px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.more-setting-row,
+.more-action-card button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.more-setting-row + .more-setting-row,
+.more-action-card button + button {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.more-setting-row:hover,
+.more-action-card button:hover {
+  background: var(--bg-hover-light);
+}
+
+.more-setting-row > span:first-child,
+.more-action-card button > span:first-child {
+  flex: 1;
+}
+
+.more-switch {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--text-disabled);
+  transition: background-color var(--transition-normal);
+}
+
+.more-switch > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform var(--transition-normal);
+}
+
+.more-switch.active {
+  background: #1296db;
+}
+
+.more-switch.active > span {
+  transform: translateX(12px);
+}
+
+.more-action-card .more-delete-row {
+  color: var(--text-primary);
+}
+
+.more-leave-btn {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 40px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  color: var(--danger-strong);
+  font-size: 14px;
+  transition: background-color var(--transition-fast);
+}
+
+.more-leave-btn:hover {
+  background: var(--danger-bg);
+}
+
+@keyframes slideInFromRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .more-drawer {
+    animation: none;
+  }
+
+  .more-switch,
+  .more-switch > span {
+    transition: none;
+  }
+}
+
+.member-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 0 16px 8px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-surface) 58%, var(--bg-input-rest));
+  color: var(--text-tertiary);
+}
+
+.member-search-box svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.member-search-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.member-search-box input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .group-settings-box {
-  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 12px 12px;
+  gap: 12px;
+  padding: 8px 16px 20px;
+  overflow-y: auto;
+}
+
+.group-announcement-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 16px 20px;
+  overflow-y: auto;
+}
+
+.group-announcement-editor textarea {
+  min-height: 160px;
 }
 
 .group-avatar-setting {
@@ -4787,122 +5621,179 @@ watch(
   margin: -2px 0 0;
 }
 
-.member-add-input {
-  margin: 0;
-  width: 100%;
-}
-
-.member-add-results {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.member-add-result {
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--accent-bg-light);
-  color: var(--accent);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  padding: 5px 8px;
-}
-
 .member-list {
   flex: 1;
   overflow-y: auto;
-  padding: 2px 10px 12px;
+  padding: 4px 10px 16px;
 }
 
 .member-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 8px 8px;
+  min-height: 52px;
+  padding: 5px 7px;
   border-radius: 8px;
+  transition: background-color var(--transition-fast);
 }
 
 .member-row:hover {
-  background: #f5f6fb;
+  background: var(--bg-hover-light);
 }
 
-.member-info {
+.member-profile-button {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
+  align-items: center;
+  gap: 9px;
   flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.member-drawer .member-avatar {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: var(--accent-avatar);
+  font-size: 14px;
 }
 
 .member-name {
-  font-size: var(--font-base);
-  color: var(--text-primary);
-  white-space: nowrap;
   overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 14px;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.member-signature {
-  max-width: 170px;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--font-xs);
+.member-role-badge {
+  flex-shrink: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 10px;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-role {
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  font-size: var(--font-xs);
-  line-height: 1;
-  width: fit-content;
 }
 
 .member-role-owner {
-  color: #d46b08;
+  background: rgba(255, 122, 61, 0.12);
+  color: #ff7a3d;
 }
 
 .member-role-admin {
-  color: #4f63d8;
-}
-
-.member-remove-btn {
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--danger-bg);
-  color: var(--danger-strong);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  padding: 5px 8px;
-}
-
-.member-role-btn {
-  border: none;
-  border-radius: var(--radius-md);
   background: var(--accent-bg-light);
   color: var(--accent);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  padding: 5px 8px;
 }
 
-.member-transfer-btn {
-  border: 1px solid #f0b36b;
-  border-radius: var(--radius-md);
-  background: #fff8ed;
-  color: #a85400;
-  cursor: pointer;
-  font-size: var(--font-sm);
-  padding: 5px 8px;
+.member-menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 3px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+  opacity: 0.45;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
 }
 
-.member-transfer-btn:hover,
-.member-transfer-btn:focus-visible {
-  background: #ffefd6;
-  border-color: #d9822b;
+.member-menu-trigger:hover,
+.member-menu-trigger[aria-expanded='true'] {
+  background: var(--bg-surface);
+  opacity: 1;
+}
+
+.member-menu-trigger svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.member-action-menu {
+  position: absolute;
+  top: 40px;
+  right: 6px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  min-width: 116px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.member-action-menu button {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.member-action-menu button:hover {
+  background: var(--bg-hover-light);
+}
+
+.member-action-menu button.danger {
+  color: var(--danger-strong);
+}
+
+.member-empty {
+  padding: 28px 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.member-invite-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.member-invite-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 16px;
+}
+
+.member-invite-results > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 52px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.member-invite-results > button:hover {
+  background: var(--bg-hover-light);
+}
+
+.member-invite-results > button > span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-invite-results small {
+  color: var(--accent);
+  font-size: 12px;
 }
 
 

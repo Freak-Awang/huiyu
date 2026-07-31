@@ -67,10 +67,6 @@
             <strong>{{ profileUser.username || '-' }}</strong>
             <span>部门</span>
             <strong>{{ profileUser.deptName || '-' }}</strong>
-            <span>邮箱</span>
-            <strong>{{ profileUser.email || '-' }}</strong>
-            <span>手机号</span>
-            <strong>{{ profileUser.phone || '-' }}</strong>
           </div>
           <div class="signature-box">
             <span>个性签名</span>
@@ -286,8 +282,6 @@ async function copyProfile() {
     `昵称：${displayName.value}`,
     `账号：${profileUser.value.username || '-'}`,
     `部门：${profileUser.value.deptName || '-'}`,
-    `邮箱：${profileUser.value.email || '-'}`,
-    `手机号：${profileUser.value.phone || '-'}`,
     `个性签名：${profileUser.value.signature || '-'}`,
   ].join('\n')
   try {

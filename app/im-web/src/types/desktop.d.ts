@@ -77,6 +77,7 @@ declare global {
         cacheSize: number
       }>
       clearMessages?: (userId: string) => Promise<boolean>
+      clearConversationMessages?: (userId: string, conversationId: string) => Promise<boolean>
       downloadFile?: (payload: {
         downloadId: string
         fileId: string

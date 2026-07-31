@@ -93,4 +93,17 @@ describe('ChatStore historical message merge', () => {
     expect(store.messages.get('conversation-1')).toHaveLength(1)
     expect(store.messages.get('conversation-1')?.[0].displayContent).toBe('新内容')
   })
+
+  it('clears only the selected conversation message cache', () => {
+    const store = useChatStore()
+    store.messages.set('conversation-1', [message('target', '2026-07-30T09:10:00Z')])
+    store.messages.set('conversation-2', [
+      { ...message('other', '2026-07-30T09:20:00Z'), conversationId: 'conversation-2' },
+    ])
+
+    store.clearConversationMessages('conversation-1')
+
+    expect(store.messages.get('conversation-1')).toEqual([])
+    expect(store.messages.get('conversation-2')).toHaveLength(1)
+  })
 })

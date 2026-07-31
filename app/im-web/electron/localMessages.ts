@@ -238,3 +238,15 @@ export async function clearLocalMessages(userId: string) {
     return true
   })
 }
+
+/**
+ * 清空指定用户某个会话的本地消息缓存。
+ */
+export async function clearLocalConversationMessages(userId: string, conversationId: string) {
+  if (!userId || !conversationId) return false
+  return mutateStore((store) => {
+    const conversations = store.users[userId]?.conversations
+    if (conversations) delete conversations[conversationId]
+    return true
+  })
+}

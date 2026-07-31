@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld('imDesktop', {
   /** 清空本地消息缓存 */
   clearMessages: (userId: string) => ipcRenderer.invoke('messages:clear', userId) as Promise<boolean>,
 
+  /** 清空指定会话的本地消息缓存 */
+  clearConversationMessages: (userId: string, conversationId: string) =>
+    ipcRenderer.invoke('messages:clear-conversation', userId, conversationId) as Promise<boolean>,
+
   /** 通过 Electron 原生对话框下载文件，支持进度回传和取消 */
   downloadFile: (payload: {
     downloadId: string

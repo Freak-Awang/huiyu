@@ -317,6 +317,11 @@ export const useChatStore = defineStore('chat', () => {
     upsertMessage(msg)
   }
 
+  /** 清空指定会话当前设备上的内存消息列表。 */
+  function clearConversationMessages(conversationId: string) {
+    messages.value.set(conversationId, [])
+  }
+
   /**
    * 将搜索命中的历史消息合入缓存，但不更新会话的最后消息预览。
    * 搜索结果可能不在当前分页中，因此需要按时间插入后才能在消息列表中定位。
@@ -555,6 +560,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchMessages,
     fetchPendingMessages,
     addMessage,
+    clearConversationMessages,
     upsertMessage,
     mergeHistoricalMessage,
     receiveMessage,
