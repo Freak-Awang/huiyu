@@ -1017,6 +1017,7 @@
       v-if="showSettingsDialog"
       @close="showSettingsDialog = false"
       @logout="handleLogout"
+      @open-profile="openOwnProfileFromSettings"
       @recent-cache-cleared="clearRecentEmojiState"
       @local-cache-cleared="handleLocalCacheCleared"
     />
@@ -1557,6 +1558,11 @@ function openOwnProfile() {
   selectedProfileFallback.value = authStore.currentUser
   showProfileDialog.value = true
   presenceMenuOpen.value = false
+}
+
+function openOwnProfileFromSettings() {
+  showSettingsDialog.value = false
+  openOwnProfile()
 }
 
 async function openUserProfile(user: any) {
@@ -3420,12 +3426,27 @@ async function handleLogout() {
   router.push('/login')
 }
 
+// 桌面常用快捷键：Ctrl+, 打开设置；Ctrl+Shift+A 启动截图。
+function handleGlobalShortcut(event: KeyboardEvent) {
+  if (event.repeat) return
+  if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ',') {
+    event.preventDefault()
+    showSettingsDialog.value = true
+    return
+  }
+  if (event.ctrlKey && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    void takeScreenshot()
+  }
+}
+
 // 组件挂载：加载贴纸、注册全局事件、初始化认证、加载设置和数据、启动 WebSocket
 onMounted(async () => {
   await loadCustomStickerState()
   document.addEventListener('mousedown', handleDocumentMouseDown)
   window.addEventListener('mousemove', handleUserActivity)
   window.addEventListener('keydown', handleUserActivity)
+  window.addEventListener('keydown', handleGlobalShortcut)
   window.addEventListener('dragover', preventWindowFileDrop)
   window.addEventListener('drop', preventWindowFileDrop)
   window.addEventListener('dragleave', handleWindowDragLeave)
@@ -3458,6 +3479,7 @@ onUnmounted(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)
   window.removeEventListener('keydown', handleUserActivity)
+  window.removeEventListener('keydown', handleGlobalShortcut)
   window.removeEventListener('dragover', preventWindowFileDrop)
   window.removeEventListener('drop', preventWindowFileDrop)
   window.removeEventListener('dragleave', handleWindowDragLeave)

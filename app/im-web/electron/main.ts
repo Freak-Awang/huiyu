@@ -8,7 +8,7 @@
 import { app, BrowserWindow, Menu, Notification, Tray, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { createWriteStream } from 'node:fs'
-import { rename, rm } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { basename, dirname, join } from 'node:path'
@@ -73,6 +73,47 @@ interface FileDownloadPayload {
   serverOrigin: string
   token: string
   suggestedName: string
+}
+
+/** 用户选择的文件存储目录，首次读取后缓存在主进程内 */
+let storageLocation: string | null = null
+
+function storagePreferencesPath() {
+  return join(app.getPath('userData'), 'storage-preferences.json')
+}
+
+function defaultStorageLocation() {
+  return join(app.getPath('documents'), 'ArtTalk Files')
+}
+
+/** 读取文件存储目录；配置缺失或损坏时回退到“文档/ArtTalk Files” */
+async function getStorageLocation() {
+  if (!storageLocation) {
+    try {
+      const preferences = JSON.parse(await readFile(storagePreferencesPath(), 'utf8')) as { location?: unknown }
+      storageLocation = typeof preferences.location === 'string' && preferences.location.trim()
+        ? preferences.location
+        : defaultStorageLocation()
+    } catch {
+      storageLocation = defaultStorageLocation()
+    }
+  }
+  await mkdir(storageLocation, { recursive: true })
+  return storageLocation
+}
+
+/** 原子保存文件存储目录，避免配置写入中断 */
+async function saveStorageLocation(location: string) {
+  const normalized = location.trim()
+  if (!normalized) throw new Error('存储位置不能为空')
+  await mkdir(normalized, { recursive: true })
+  const preferencesFile = storagePreferencesPath()
+  const temporary = `${preferencesFile}.${process.pid}.tmp`
+  await mkdir(dirname(preferencesFile), { recursive: true })
+  await writeFile(temporary, JSON.stringify({ location: normalized }), { encoding: 'utf8', mode: 0o600 })
+  await rename(temporary, preferencesFile)
+  storageLocation = normalized
+  return normalized
 }
 
 /** 当前活跃的截图会话（同时只能有一个） */
@@ -465,6 +506,35 @@ ipcMain.handle('app:openExternal', async (event, url: string) => {
   return false
 })
 
+/** 获取文件默认存储目录 */
+ipcMain.handle('storage:get-location', (event) => {
+  assertMainWindowSender(event)
+  return getStorageLocation()
+})
+
+/** 通过系统目录选择器更改文件默认存储目录 */
+ipcMain.handle('storage:choose-location', async (event) => {
+  assertMainWindowSender(event)
+  if (!mainWindow) return { canceled: true }
+  const currentLocation = await getStorageLocation()
+  const selection = await dialog.showOpenDialog(mainWindow, {
+    title: '选择存储位置',
+    defaultPath: currentLocation,
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  if (selection.canceled || !selection.filePaths[0]) {
+    return { canceled: true, path: currentLocation }
+  }
+  return { canceled: false, path: await saveStorageLocation(selection.filePaths[0]) }
+})
+
+/** 使用系统文件管理器打开当前存储目录 */
+ipcMain.handle('storage:open-location', async (event) => {
+  assertMainWindowSender(event)
+  const error = await shell.openPath(await getStorageLocation())
+  return error ? { success: false, error } : { success: true }
+})
+
 /** 更新未读消息徽标（托盘/任务栏/Dock） */
 ipcMain.handle('notification:setUnreadBadge', (event, count: number) => {
   assertMainWindowSender(event)
@@ -563,7 +633,9 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
   }
   // 清理文件名中的非法字符
   const safeName = basename(payload.suggestedName || `file-${fileId}`).replace(/[<>:"/\\|?*]/g, '_')
-  const selection = await dialog.showSaveDialog(mainWindow, { defaultPath: safeName })
+  const selection = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: join(await getStorageLocation(), safeName),
+  })
   if (selection.canceled || !selection.filePath) return { canceled: true, success: false }
 
   const controller = new AbortController()

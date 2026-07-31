@@ -1,200 +1,399 @@
-<!-- 设置弹窗：通用设置/消息通知/存储管理/关于页面，支持主题切换、快捷键、缓存清理、版本更新 -->
+<!-- 桌面设置中心：参考主流桌面 IM 的分栏结构，集中管理账号、通用、通知、快捷键、存储与更新。 -->
 <template>
   <div class="settings-overlay" @click.self="emit('close')">
-    <div class="settings-dialog">
-      <aside class="settings-nav">
-        <div class="settings-profile">
-          <div class="settings-avatar">
-            <img v-if="authStore.currentUser?.avatar" :src="authStore.currentUser.avatar" alt="" />
-            <span v-else>{{ (authStore.currentUser?.nickname || 'U')[0] }}</span>
+    <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <aside class="settings-sidebar">
+        <div class="settings-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+              <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06-2.78 2.78-.06-.06A1.8 1.8 0 0 0 15 19.4a1.8 1.8 0 0 0-1.1 1.64V21h-3.8v-.08A1.8 1.8 0 0 0 9 19.4a1.8 1.8 0 0 0-1.98.36l-.06.06-2.78-2.78.06-.06A1.8 1.8 0 0 0 4.6 15 1.8 1.8 0 0 0 2.96 13.9H3v-3.8h-.04A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l-.06-.06 2.78-2.78.06.06A1.8 1.8 0 0 0 9 4.6a1.8 1.8 0 0 0 1.1-1.64V3h3.8v.04A1.8 1.8 0 0 0 15 4.6a1.8 1.8 0 0 0 1.98-.36l.06-.06 2.78 2.78-.06.06A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.64 1.1H21v3.8h.04A1.8 1.8 0 0 0 19.4 15Z" />
+            </svg>
           </div>
-          <div class="settings-user">
-            <span>{{ authStore.currentUser?.nickname || authStore.currentUser?.username }}</span>
+          <div>
+            <strong id="settings-title">设置</strong>
+            <small>ArtTalk 桌面端</small>
+          </div>
+        </div>
+
+        <nav class="settings-nav" aria-label="设置分类">
+          <button
+            v-for="item in sections"
+            :key="item.key"
+            type="button"
+            class="settings-nav-item"
+            :class="{ active: activeSection === item.key }"
+            :aria-current="activeSection === item.key ? 'page' : undefined"
+            @click="selectSection(item.key)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path :d="item.icon" />
+            </svg>
+            <span>{{ item.label }}</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-account">
+          <div class="sidebar-avatar">
+            <img v-if="authStore.currentUser?.avatar" :src="authStore.currentUser.avatar" alt="" />
+            <span v-else>{{ avatarText }}</span>
+          </div>
+          <div>
+            <strong>{{ displayName }}</strong>
             <small>{{ authStore.currentUser?.username }}</small>
           </div>
         </div>
-        <button
-          v-for="item in sections"
-          :key="item.key"
-          type="button"
-          class="settings-nav-item settings-section-nav-item"
-          :class="{ active: activeSection === item.key }"
-          @click="activeSection = item.key"
-        >
-          <span>{{ item.label }}</span>
-        </button>
-        <div class="settings-nav-divider"></div>
-        <button type="button" class="settings-nav-item logout-nav-item" @click="emit('logout')">
-          <img :src="powerIcon" alt="" />
-          <span>退出登录</span>
-        </button>
       </aside>
 
-      <main class="settings-panel">
+      <main class="settings-main">
         <header class="settings-header">
           <div>
-            <h2>{{ activeTitle }}</h2>
-            <p>{{ activeHint }}</p>
+            <h2>{{ activeMeta.label }}</h2>
+            <p>{{ activeMeta.hint }}</p>
           </div>
-          <button type="button" class="settings-close" title="关闭" @click="emit('close')">×</button>
+          <button type="button" class="icon-button close-button" aria-label="关闭设置" @click="emit('close')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
         </header>
 
-        <section v-if="activeSection === 'general'" class="settings-section">
-          <div class="settings-group">
-            <label class="setting-row">
-              <span>
-                <strong>界面主题</strong>
-                <small>切换当前客户端的浅色或深色外观</small>
-              </span>
-              <select
-                :value="settingsStore.general.theme"
-                :disabled="settingsStore.saving"
-                @change="saveGeneral({ theme: ($event.target as HTMLSelectElement).value as any })"
-              >
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-              </select>
-            </label>
-            <label class="setting-row">
-              <span>
-                <strong>发送快捷键</strong>
-                <small>选择按 Enter 发送或 Ctrl+Enter 发送</small>
-              </span>
-              <select
-                :value="settingsStore.general.sendShortcut"
-                :disabled="settingsStore.saving"
-                @change="saveGeneral({ sendShortcut: ($event.target as HTMLSelectElement).value as any })"
-              >
-                <option value="enter">Enter 发送，Shift+Enter 换行</option>
-                <option value="ctrlEnter">Ctrl+Enter 发送</option>
-              </select>
-            </label>
-            <label class="setting-row">
-              <span>
-                <strong>关闭窗口</strong>
-                <small>此设置先同步保存，桌面关闭行为后续接入</small>
-              </span>
-              <select
-                :value="settingsStore.general.closeBehavior"
-                :disabled="settingsStore.saving"
-                @change="saveGeneral({ closeBehavior: ($event.target as HTMLSelectElement).value as any })"
-              >
-                <option value="tray">最小化到托盘</option>
-                <option value="exit">退出应用</option>
-              </select>
-            </label>
-            <label class="setting-row">
-              <span>
-                <strong>紧凑模式</strong>
-                <small>减少列表和消息区域的间距</small>
-              </span>
-              <input
-                type="checkbox"
-                :checked="settingsStore.general.compactMode"
-                :disabled="settingsStore.saving"
-                @change="saveGeneral({ compactMode: ($event.target as HTMLInputElement).checked })"
-              />
-            </label>
-          </div>
-        </section>
+        <div class="settings-content">
+          <section v-if="activeSection === 'account'" class="settings-page account-page">
+            <div class="account-hero">
+              <div class="account-avatar">
+                <img v-if="authStore.currentUser?.avatar" :src="authStore.currentUser.avatar" alt="" />
+                <span v-else>{{ avatarText }}</span>
+              </div>
+              <div class="account-identity">
+                <h3>{{ displayName }}</h3>
+                <p>账号：{{ authStore.currentUser?.username || '未设置' }}</p>
+                <span class="status-badge"><i></i> 当前设备已登录</span>
+              </div>
+              <button type="button" class="secondary-button" @click="emit('openProfile')">编辑个人资料</button>
+            </div>
 
-        <section v-else-if="activeSection === 'notification'" class="settings-section">
-          <div class="settings-group">
-            <label class="setting-row" v-for="item in notificationRows" :key="item.key">
-              <span>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.hint }}</small>
-              </span>
-              <input
-                type="checkbox"
-                :checked="settingsStore.notification[item.key]"
-                :disabled="settingsStore.saving"
-                @change="saveNotification({ [item.key]: ($event.target as HTMLInputElement).checked })"
-              />
-            </label>
-          </div>
-        </section>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>当前登录账号</strong>
+                  <small>退出后，本机缓存不会自动删除</small>
+                </div>
+                <button type="button" class="danger-text-button" @click="emit('logout')">退出登录</button>
+              </div>
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>本地数据保护</strong>
+                  <small>聊天缓存使用操作系统安全存储加密，仅当前设备可读取</small>
+                </div>
+                <span class="safe-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7" /></svg>
+                  已保护
+                </span>
+              </div>
+            </div>
+          </section>
 
-        <section v-else-if="activeSection === 'about'" class="settings-section">
-          <div class="about-card">
-            <div>
-              <strong>ArtTalk</strong>
-              <small>当前版本 {{ updateStore.state.currentVersion || '浏览器版' }}</small>
+          <section v-else-if="activeSection === 'general'" class="settings-page">
+            <h3 class="group-title">外观</h3>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>界面主题</strong>
+                  <small>选择适合当前环境的显示外观</small>
+                </div>
+                <div class="segmented-control" aria-label="界面主题">
+                  <button
+                    type="button"
+                    :class="{ active: settingsStore.general.theme === 'light' }"
+                    :disabled="settingsStore.saving"
+                    @click="saveGeneral({ theme: 'light' })"
+                  >
+                    浅色
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ active: settingsStore.general.theme === 'dark' }"
+                    :disabled="settingsStore.saving"
+                    @click="saveGeneral({ theme: 'dark' })"
+                  >
+                    深色
+                  </button>
+                </div>
+              </div>
+              <label class="setting-card-row">
+                <span class="setting-copy">
+                  <strong>紧凑模式</strong>
+                  <small>缩小会话列表和消息区域的间距，显示更多内容</small>
+                </span>
+                <input
+                  class="switch-input"
+                  type="checkbox"
+                  :checked="settingsStore.general.compactMode"
+                  :disabled="settingsStore.saving"
+                  @change="saveGeneral({ compactMode: ($event.target as HTMLInputElement).checked })"
+                />
+                <span class="switch-control" aria-hidden="true"></span>
+              </label>
             </div>
-            <span class="update-status">{{ updateStatusText }}</span>
-          </div>
-          <div v-if="updateStore.state.targetVersion" class="settings-group update-details">
-            <div class="setting-row">
-              <span><strong>{{ updateStore.state.releaseName || `ArtTalk ${updateStore.state.targetVersion}` }}</strong><small>{{ updateStore.state.releaseDate || '新版本' }}</small></span>
-            </div>
-            <div v-if="updateStore.state.releaseNotes?.length" class="release-notes">
-              <p v-for="note in updateStore.state.releaseNotes" :key="note">{{ note }}</p>
-            </div>
-            <div v-if="updateStore.state.status === 'downloading'" class="download-progress">
-              <span :style="{ width: `${updateStore.state.percent || 0}%` }" />
-            </div>
-          </div>
-          <div class="about-actions">
-            <button type="button" class="plain-btn" :disabled="updateStore.isBusy" @click="updateStore.check()">检查更新</button>
-            <button v-if="updateStore.state.status === 'available'" type="button" class="plain-btn" @click="updateStore.download()">开始下载</button>
-            <button v-if="updateStore.state.status === 'downloaded' || updateStore.state.status === 'waiting-for-transfers'" type="button" class="plain-btn" @click="updateStore.install()">{{ updateStore.state.transferBlockers ? '传输完成后安装' : '立即重启安装' }}</button>
-            <select :value="updateStore.channel" @change="updateStore.setChannel(($event.target as HTMLSelectElement).value as 'stable' | 'beta')">
-              <option value="stable">正式版</option>
-              <option value="beta">测试版</option>
-            </select>
-          </div>
-          <p v-if="updateStore.state.error" class="storage-note update-error">{{ updateStore.state.error }}</p>
-        </section>
 
-        <section v-else class="settings-section">
-          <div class="storage-summary">
-            <div>
-              <span class="storage-value">{{ formatSize(storageStats?.cacheSize || 0) }}</span>
-              <small>本地消息缓存</small>
+            <h3 class="group-title">窗口</h3>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>关闭主窗口时</strong>
+                  <small>选择继续在后台接收消息，或直接退出应用</small>
+                </div>
+                <select
+                  class="setting-select"
+                  aria-label="关闭主窗口时"
+                  :value="settingsStore.general.closeBehavior"
+                  :disabled="settingsStore.saving"
+                  @change="saveGeneral({ closeBehavior: ($event.target as HTMLSelectElement).value as CloseBehavior })"
+                >
+                  <option value="tray">最小化到托盘</option>
+                  <option value="exit">退出 ArtTalk</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <span class="storage-value">{{ storageStats?.messageCount || 0 }}</span>
-              <small>缓存消息</small>
-            </div>
-            <div>
-              <span class="storage-value">{{ storageStats?.conversationCount || 0 }}</span>
-              <small>缓存会话</small>
-            </div>
-          </div>
+          </section>
 
-          <div class="settings-group">
-            <div class="setting-row">
-              <span>
-                <strong>本地聊天缓存</strong>
-                <small>只清理当前设备缓存，不会删除服务器聊天记录</small>
-              </span>
-              <button type="button" class="danger-btn" :disabled="!canManageLocalMessages" @click="clearLocalCache">
-                清理
-              </button>
+          <section v-else-if="activeSection === 'notification'" class="settings-page">
+            <h3 class="group-title">消息提醒</h3>
+            <div class="setting-card">
+              <label v-for="item in notificationRows" :key="item.key" class="setting-card-row">
+                <span class="setting-copy">
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.hint }}</small>
+                </span>
+                <input
+                  class="switch-input"
+                  type="checkbox"
+                  :checked="settingsStore.notification[item.key]"
+                  :disabled="settingsStore.saving || (item.key !== 'doNotDisturb' && settingsStore.notification.doNotDisturb)"
+                  @change="saveNotification({ [item.key]: ($event.target as HTMLInputElement).checked })"
+                />
+                <span class="switch-control" aria-hidden="true"></span>
+              </label>
             </div>
-            <div class="setting-row">
-              <span>
-                <strong>最近表情和贴纸</strong>
-                <small>清空输入区最近使用记录</small>
-              </span>
-              <button type="button" class="plain-btn" @click="clearRecentCache">清理</button>
+            <div v-if="settingsStore.notification.doNotDisturb" class="settings-tip">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v4l2.5 1.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+              免打扰已开启，其他消息提醒选项暂时不会生效。
             </div>
-          </div>
-          <p v-if="!canManageLocalMessages" class="storage-note">浏览器模式下无 Electron 本地消息缓存。</p>
-        </section>
+          </section>
 
-        <footer class="settings-footer">
-          <span v-if="settingsStore.saving">正在保存...</span>
-          <span v-else-if="statusText">{{ statusText }}</span>
+          <section v-else-if="activeSection === 'shortcuts'" class="settings-page">
+            <h3 class="group-title">聊天快捷键</h3>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>发送消息</strong>
+                  <small>设置输入框中发送消息的按键组合</small>
+                </div>
+                <select
+                  class="setting-select shortcut-select"
+                  aria-label="发送消息快捷键"
+                  :value="settingsStore.general.sendShortcut"
+                  :disabled="settingsStore.saving"
+                  @change="saveGeneral({ sendShortcut: ($event.target as HTMLSelectElement).value as SendShortcut })"
+                >
+                  <option value="enter">Enter</option>
+                  <option value="ctrlEnter">Ctrl + Enter</option>
+                </select>
+              </div>
+            </div>
+
+            <h3 class="group-title">快捷键提示</h3>
+            <div class="setting-card shortcut-list">
+              <div v-for="item in shortcutRows" :key="item.title" class="shortcut-row">
+                <div class="setting-copy">
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.hint }}</small>
+                </div>
+                <div class="keycap-group">
+                  <kbd v-for="key in item.keys" :key="key">{{ key }}</kbd>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section v-else-if="activeSection === 'storage'" class="settings-page">
+            <h3 class="group-title">本机数据</h3>
+            <div class="setting-card storage-card">
+              <div class="setting-card-row storage-space-row">
+                <div class="setting-copy">
+                  <strong>存储空间</strong>
+                  <small>{{ storageSummaryText }}</small>
+                </div>
+                <button type="button" class="secondary-button compact-button" @click="showStorageManager = true">
+                  管理
+                </button>
+              </div>
+              <div class="setting-card-row storage-location-row">
+                <div class="setting-copy storage-path-copy">
+                  <strong>存储位置</strong>
+                  <small :title="storageLocation">{{ storageLocationText }}</small>
+                </div>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="text-button"
+                    :disabled="!canUseStorageLocation || changingStorageLocation"
+                    @click="changeStorageLocation"
+                  >
+                    {{ changingStorageLocation ? '更改中' : '更改' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-button compact-button"
+                    :disabled="!canUseStorageLocation || !storageLocation"
+                    @click="openStorageLocation"
+                  >
+                    打开文件夹
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p v-if="storageLocationError" class="inline-error">{{ storageLocationError }}</p>
+            <p v-else-if="!canUseStorageLocation" class="page-note">浏览器模式下无法更改本机文件存储位置。</p>
+          </section>
+
+          <section v-else class="settings-page">
+            <div class="about-hero">
+              <div class="about-logo">A</div>
+              <div>
+                <h3>ArtTalk</h3>
+                <p>简洁、安全的团队即时通讯工具</p>
+                <span>当前版本 {{ updateStore.state.currentVersion || '浏览器版' }}</span>
+              </div>
+            </div>
+
+            <h3 class="group-title">软件更新</h3>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>{{ updateStatusTitle }}</strong>
+                  <small>{{ updateStatusHint }}</small>
+                </div>
+                <div class="row-actions">
+                  <button
+                    v-if="updateStore.state.status === 'available'"
+                    type="button"
+                    class="primary-button"
+                    @click="updateStore.download()"
+                  >
+                    下载更新
+                  </button>
+                  <button
+                    v-else-if="updateStore.state.status === 'downloaded' || updateStore.state.status === 'waiting-for-transfers'"
+                    type="button"
+                    class="primary-button"
+                    @click="updateStore.install()"
+                  >
+                    {{ updateStore.state.transferBlockers ? '传输完成后安装' : '立即安装' }}
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="secondary-button"
+                    :disabled="updateStore.isBusy"
+                    @click="updateStore.check()"
+                  >
+                    {{ updateStore.state.status === 'checking' ? '检查中...' : '检查更新' }}
+                  </button>
+                </div>
+              </div>
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>更新通道</strong>
+                  <small>正式版更稳定，测试版可提前体验新功能</small>
+                </div>
+                <select
+                  class="setting-select"
+                  aria-label="更新通道"
+                  :value="updateStore.channel"
+                  @change="updateStore.setChannel(($event.target as HTMLSelectElement).value as 'stable' | 'beta')"
+                >
+                  <option value="stable">正式版</option>
+                  <option value="beta">测试版</option>
+                </select>
+              </div>
+            </div>
+
+            <div v-if="updateStore.state.status === 'downloading'" class="update-progress-card">
+              <div><span>正在下载更新</span><strong>{{ (updateStore.state.percent || 0).toFixed(1) }}%</strong></div>
+              <div class="update-progress"><span :style="{ width: `${updateStore.state.percent || 0}%` }"></span></div>
+            </div>
+            <p v-if="updateStore.state.error" class="inline-error">{{ updateStore.state.error }}</p>
+          </section>
+        </div>
+
+        <footer class="settings-footer" aria-live="polite">
+          <span v-if="settingsStore.saving" class="saving-indicator"><i></i> 正在保存</span>
+          <span v-else-if="statusText" class="saved-indicator">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-8" /></svg>
+            {{ statusText }}
+          </span>
         </footer>
       </main>
+
+      <div v-if="showStorageManager" class="nested-overlay" @click.self="showStorageManager = false">
+        <section class="storage-manager" role="dialog" aria-modal="true" aria-labelledby="storage-manager-title">
+          <header>
+            <div>
+              <h3 id="storage-manager-title">存储空间管理</h3>
+              <p>清理操作仅影响当前设备，不会删除服务器聊天记录</p>
+            </div>
+            <button type="button" class="icon-button" aria-label="关闭存储空间管理" @click="showStorageManager = false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            </button>
+          </header>
+          <div class="storage-manager-body">
+            <div class="storage-metrics">
+              <div>
+                <span>{{ formatSize(storageStats?.cacheSize || 0) }}</span>
+                <small>消息缓存</small>
+              </div>
+              <div>
+                <span>{{ storageStats?.messageCount || 0 }}</span>
+                <small>缓存消息</small>
+              </div>
+              <div>
+                <span>{{ storageStats?.conversationCount || 0 }}</span>
+                <small>缓存会话</small>
+              </div>
+            </div>
+            <div class="setting-card">
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>本地聊天缓存</strong>
+                  <small>清除离线消息副本，稍后可从服务器重新同步</small>
+                </div>
+                <button
+                  type="button"
+                  class="danger-button"
+                  :disabled="!canManageLocalMessages"
+                  @click="clearLocalCache"
+                >
+                  清理
+                </button>
+              </div>
+              <div class="setting-card-row">
+                <div class="setting-copy">
+                  <strong>最近表情和贴纸</strong>
+                  <small>清除输入区的最近使用记录</small>
+                </div>
+                <button type="button" class="secondary-button compact-button" @click="clearRecentCache">清理</button>
+              </div>
+            </div>
+            <p v-if="!canManageLocalMessages" class="page-note">浏览器模式下没有 Electron 本地消息缓存。</p>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 设置弹窗：管理通用设置、消息通知、存储管理和版本信息四个面板
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import { useUpdateStore } from '../stores/update'
@@ -204,30 +403,72 @@ import {
   type LocalMessageStats,
 } from '../utils/localMessageStore'
 import { clearRecentUsageCache } from '../utils/recentUsage'
-import type { GeneralSettings, NotificationSettings } from '../api/settings'
-import powerIcon from '../assets/icons/power.svg'
+import type {
+  CloseBehavior,
+  GeneralSettings,
+  NotificationSettings,
+  SendShortcut,
+} from '../api/settings'
 
 const emit = defineEmits<{
   close: []
   logout: []
+  openProfile: []
   recentCacheCleared: []
   localCacheCleared: []
 }>()
 
-type SectionKey = 'general' | 'notification' | 'storage' | 'about'
+type SectionKey = 'account' | 'general' | 'notification' | 'shortcuts' | 'storage' | 'about'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const updateStore = useUpdateStore()
-const activeSection = ref<SectionKey>('general') // 当前激活的设置面板
+const activeSection = ref<SectionKey>('account')
 const storageStats = ref<LocalMessageStats | null>(null)
+const storageStatsLoaded = ref(false)
+const storageLocation = ref('')
+const storageLocationError = ref('')
+const changingStorageLocation = ref(false)
+const showStorageManager = ref(false)
 const statusText = ref('')
 
-const sections: Array<{ key: SectionKey; label: string; hint: string }> = [
-  { key: 'general', label: '通用设置', hint: '界面、快捷键和窗口偏好' },
-  { key: 'notification', label: '消息通知', hint: '桌面通知和消息提醒策略' },
-  { key: 'storage', label: '存储管理', hint: '查看和清理本机缓存' },
-  { key: 'about', label: '关于 ArtTalk', hint: '版本信息、更新日志和更新通道' },
+const sections: Array<{ key: SectionKey; label: string; hint: string; icon: string }> = [
+  {
+    key: 'account',
+    label: '账号与安全',
+    hint: '管理个人资料、登录状态与本地数据保护',
+    icon: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+  },
+  {
+    key: 'general',
+    label: '通用',
+    hint: '设置界面外观、布局和窗口行为',
+    icon: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6',
+  },
+  {
+    key: 'notification',
+    label: '消息通知',
+    hint: '控制新消息的提醒方式与显示内容',
+    icon: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4',
+  },
+  {
+    key: 'shortcuts',
+    label: '快捷键',
+    hint: '调整发送按键并查看常用操作快捷方式',
+    icon: 'M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10M4 4h16v16H4z',
+  },
+  {
+    key: 'storage',
+    label: '文件与存储',
+    hint: '管理本地缓存、下载目录和存储空间',
+    icon: 'M3 7h7l2 2h9v10H3V7ZM3 7V5h7l2 2',
+  },
+  {
+    key: 'about',
+    label: '关于 ArtTalk',
+    hint: '查看版本信息、更新状态和更新通道',
+    icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 10v7M12 7h.01',
+  },
 ]
 
 const notificationRows: Array<{
@@ -235,58 +476,154 @@ const notificationRows: Array<{
   title: string
   hint: string
 }> = [
-  { key: 'desktop', title: '桌面通知', hint: '收到非当前会话消息时弹出系统通知' },
-  { key: 'sound', title: '提示音', hint: '保存提示音偏好，声音素材后续接入' },
-  { key: 'showPreview', title: '显示消息预览', hint: '关闭后通知正文隐藏具体内容' },
-  { key: 'mentionOnly', title: '仅 @ 我时通知', hint: '普通新消息不再弹出桌面通知' },
-  { key: 'doNotDisturb', title: '全局免打扰', hint: '开启后暂停所有桌面通知' },
+  { key: 'desktop', title: '桌面通知', hint: '收到非当前会话消息时显示系统通知' },
+  { key: 'sound', title: '新消息提示音', hint: '收到新消息时播放提示音' },
+  { key: 'showPreview', title: '通知中显示消息内容', hint: '关闭后，通知仅显示“收到一条新消息”' },
+  { key: 'mentionOnly', title: '仅在有人 @ 我时通知', hint: '普通新消息不再弹出桌面通知' },
+  { key: 'doNotDisturb', title: '免打扰', hint: '暂停所有桌面通知和提示音' },
 ]
 
+const shortcutRows = computed(() => [
+  {
+    title: '输入换行',
+    hint: '在不发送消息的情况下另起一行',
+    keys: settingsStore.general.sendShortcut === 'enter' ? ['Shift', 'Enter'] : ['Enter'],
+  },
+  { title: '打开设置', hint: '从主界面快速进入设置中心', keys: ['Ctrl', ','] },
+  { title: '关闭当前弹窗', hint: '关闭设置、图片预览等浮层', keys: ['Esc'] },
+  { title: '屏幕截图', hint: '也可以使用聊天输入区上方的截图按钮', keys: ['Ctrl', 'Shift', 'A'] },
+])
+
 const activeMeta = computed(() => sections.find((item) => item.key === activeSection.value) || sections[0])
-const activeTitle = computed(() => activeMeta.value.label)
-const activeHint = computed(() => activeMeta.value.hint)
+const displayName = computed(() => authStore.currentUser?.nickname || authStore.currentUser?.username || 'ArtTalk 用户')
+const avatarText = computed(() => displayName.value.slice(0, 1).toUpperCase())
 const canManageLocalMessages = computed(() => !!window.imDesktop?.getMessageStats && !!authStore.currentUser?.userId)
-const updateStatusText = computed(() => {
+const canUseStorageLocation = computed(() => (
+  !!window.imDesktop?.getStorageLocation
+  && !!window.imDesktop?.chooseStorageLocation
+  && !!window.imDesktop?.openStorageLocation
+))
+const storageLocationText = computed(() => {
+  if (storageLocation.value) return storageLocation.value
+  return canUseStorageLocation.value ? '正在读取...' : '浏览器模式'
+})
+const storageSummaryText = computed(() => {
+  if (!storageStatsLoaded.value) return '正在统计本机数据'
+  if (!storageStats.value) return '桌面客户端中可查看本机缓存占用'
+  return `已使用 ${formatSize(storageStats.value.cacheSize)}，共 ${storageStats.value.messageCount} 条缓存消息`
+})
+const updateStatusTitle = computed(() => {
   const labels: Record<string, string> = {
-    idle: '尚未检查', checking: '正在检查', available: '发现新版本', 'not-available': '已是最新版本',
-    downloading: `下载中 ${(updateStore.state.percent || 0).toFixed(1)}%`, downloaded: '等待安装',
-    'waiting-for-transfers': '等待传输完成', installing: '正在安装', error: '更新失败',
+    idle: '检查软件更新',
+    checking: '正在检查更新',
+    available: `发现新版本 ${updateStore.state.targetVersion || ''}`,
+    'not-available': '已是最新版本',
+    downloading: '正在下载更新',
+    downloaded: '更新已下载',
+    'waiting-for-transfers': '等待文件传输完成',
+    installing: '正在安装更新',
+    error: '更新检查失败',
   }
-  return labels[updateStore.state.status] || updateStore.state.status
+  return labels[updateStore.state.status] || '软件更新'
+})
+const updateStatusHint = computed(() => {
+  if (updateStore.state.releaseName) return updateStore.state.releaseName
+  if (updateStore.state.lastCheckedAt) {
+    return `上次检查：${new Date(updateStore.state.lastCheckedAt).toLocaleString()}`
+  }
+  return '保持 ArtTalk 为最新版本，以获得功能改进和安全更新'
 })
 
 onMounted(() => {
+  window.addEventListener('keydown', handleWindowKeydown)
   void loadStorageStats()
+  void loadStorageLocation()
   void updateStore.initialize()
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleWindowKeydown)
+})
+
+function handleWindowKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (showStorageManager.value) {
+    showStorageManager.value = false
+    return
+  }
+  emit('close')
+}
+
+function selectSection(section: SectionKey) {
+  activeSection.value = section
+  showStorageManager.value = false
+}
+
 async function saveGeneral(patch: Partial<GeneralSettings>) {
-  // 保存通用设置并显示状态提示
   try {
     await settingsStore.updateGeneral(patch)
-    flashStatus('已保存')
+    flashStatus('设置已保存')
   } catch (err: any) {
     alert(err?.response?.data?.message || err?.message || '保存设置失败')
   }
 }
 
 async function saveNotification(patch: Partial<NotificationSettings>) {
-  // 保存通知设置
   try {
     await settingsStore.updateNotification(patch)
-    flashStatus('已保存')
+    flashStatus('设置已保存')
   } catch (err: any) {
     alert(err?.response?.data?.message || err?.message || '保存设置失败')
   }
 }
 
 async function loadStorageStats() {
-  // 加载本地消息存储统计
-  storageStats.value = await getLocalMessageStats()
+  try {
+    storageStats.value = await getLocalMessageStats()
+  } finally {
+    storageStatsLoaded.value = true
+  }
+}
+
+async function loadStorageLocation() {
+  if (!window.imDesktop?.getStorageLocation) return
+  storageLocationError.value = ''
+  try {
+    storageLocation.value = await window.imDesktop.getStorageLocation()
+  } catch (err) {
+    storageLocationError.value = errorMessage(err, '读取存储位置失败')
+  }
+}
+
+async function changeStorageLocation() {
+  if (!window.imDesktop?.chooseStorageLocation || changingStorageLocation.value) return
+  changingStorageLocation.value = true
+  storageLocationError.value = ''
+  try {
+    const result = await window.imDesktop.chooseStorageLocation()
+    if (!result.canceled && result.path) {
+      storageLocation.value = result.path
+      flashStatus('存储位置已更改')
+    }
+  } catch (err) {
+    storageLocationError.value = errorMessage(err, '更改存储位置失败')
+  } finally {
+    changingStorageLocation.value = false
+  }
+}
+
+async function openStorageLocation() {
+  if (!window.imDesktop?.openStorageLocation) return
+  storageLocationError.value = ''
+  try {
+    const result = await window.imDesktop.openStorageLocation()
+    if (!result.success) storageLocationError.value = result.error || '打开存储位置失败'
+  } catch (err) {
+    storageLocationError.value = errorMessage(err, '打开存储位置失败')
+  }
 }
 
 async function clearLocalCache() {
-  // 清理本地聊天缓存（仅本设备，不影响服务器数据）
   if (!confirm('仅清理当前设备的本地聊天缓存，不会删除服务器聊天记录。确定清理吗？')) return
   const ok = await clearLocalMessages()
   if (!ok) {
@@ -295,29 +632,31 @@ async function clearLocalCache() {
   }
   emit('localCacheCleared')
   await loadStorageStats()
-  flashStatus('本地缓存已清理')
+  flashStatus('本地聊天缓存已清理')
 }
 
 function clearRecentCache() {
-  // 清理最近使用的表情和贴纸记录
   clearRecentUsageCache()
   emit('recentCacheCleared')
   flashStatus('最近使用记录已清理')
 }
 
-// 格式化字节大小为可读字符串
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
-// 短暂显示状态文本后自动清除
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback
+}
+
 function flashStatus(text: string) {
   statusText.value = text
   window.setTimeout(() => {
     if (statusText.value === text) statusText.value = ''
-  }, 1600)
+  }, 1800)
 }
 </script>
 
@@ -329,74 +668,94 @@ function flashStatus(text: string) {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
   background: var(--bg-overlay);
 }
 
 .settings-dialog {
-  width: min(760px, calc(100vw - 48px));
-  height: min(560px, calc(100vh - 48px));
-  display: flex;
+  position: relative;
+  width: min(900px, calc(100vw - 48px));
+  height: min(640px, calc(100vh - 48px));
+  display: grid;
+  grid-template-columns: 214px minmax(0, 1fr);
   overflow: hidden;
-  border-radius: var(--radius-xl);
-  background: #f6f7fb;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
   box-shadow: var(--shadow-dialog);
 }
 
-.settings-nav {
-  width: 210px;
-  padding: 18px 12px;
-  background: #eceef4;
-  border-right: 1px solid var(--border);
-}
-
-.settings-profile {
+.settings-sidebar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 6px 18px;
-}
-
-.settings-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #667eea;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-}
-
-.settings-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.settings-user {
-  min-width: 0;
-  display: flex;
+  min-height: 0;
   flex-direction: column;
+  padding: 20px 12px 14px;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
 }
 
-.settings-user span,
-.settings-user small {
-  white-space: nowrap;
+.settings-brand,
+.sidebar-account,
+.setting-card-row,
+.shortcut-row,
+.settings-header,
+.account-hero,
+.about-hero,
+.storage-manager header {
+  display: flex;
+  align-items: center;
+}
+
+.settings-brand {
+  gap: 11px;
+  padding: 0 9px 19px;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text-on);
+}
+
+.brand-mark svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.settings-brand strong,
+.settings-brand small,
+.sidebar-account strong,
+.sidebar-account small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.settings-user span {
+.settings-brand strong {
   color: var(--text-primary);
-  font-size: var(--font-md);
+  font-size: var(--font-lg);
   font-weight: 600;
 }
 
-.settings-user small {
+.settings-brand small {
+  margin-top: 2px;
   color: var(--text-tertiary);
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
+}
+
+.settings-nav {
+  display: grid;
+  gap: 4px;
 }
 
 .settings-nav-item {
@@ -404,247 +763,724 @@ function flashStatus(text: string) {
   height: 42px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 0 12px;
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-md);
+  font-size: var(--font-base);
   text-align: left;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .settings-nav-item:hover {
-  background: #e2e5ee;
+  background: var(--bg-hover-light);
+  color: var(--text-primary);
 }
 
 .settings-nav-item.active {
-  background: var(--bg-surface);
+  background: var(--accent-bg-light);
   color: var(--accent);
-  box-shadow: 0 1px 3px rgba(31, 35, 48, 0.08);
+  font-weight: 600;
 }
 
-.settings-nav-item img {
+.settings-nav-item svg,
+.settings-tip svg,
+.saved-indicator svg,
+.safe-label svg {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.settings-nav-item svg {
   width: 18px;
   height: 18px;
 }
 
-.settings-section-nav-item {
-  padding-left: 40px;
-}
-
-.settings-nav-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 8px 4px;
-}
-
-.logout-nav-item {
-  color: #ef4444 !important;
-}
-
-.logout-nav-item:hover {
-  background: rgba(239, 68, 68, 0.08) !important;
-}
-
-.settings-panel {
-  flex: 1;
-  display: flex;
+.sidebar-account {
   min-width: 0;
-  flex-direction: column;
+  gap: 9px;
+  margin-top: auto;
+  padding: 12px 8px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sidebar-avatar,
+.account-avatar {
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent-avatar);
+  color: var(--accent-text-on);
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: var(--font-sm);
+}
+
+.sidebar-avatar img,
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sidebar-account > div:last-child {
+  min-width: 0;
+}
+
+.sidebar-account strong {
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 500;
+}
+
+.sidebar-account small {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: var(--font-2xs);
+}
+
+.settings-main {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 34px;
   background: var(--bg-surface);
 }
 
 .settings-header {
-  display: flex;
-  align-items: flex-start;
+  min-height: 75px;
   justify-content: space-between;
-  padding: 22px 26px 16px;
+  padding: 17px 24px 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-header h2 {
-  margin: 0;
   color: var(--text-primary);
-  font-size: 20px;
-}
-
-.settings-header p {
-  margin-top: 5px;
-  color: var(--text-tertiary);
-  font-size: var(--font-base);
-}
-
-.settings-close {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 24px;
-  line-height: 1;
-}
-
-.settings-close:hover {
-  background: var(--bg-header);
-  color: var(--text-primary);
-}
-
-.settings-section {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 26px;
-}
-
-.settings-group {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.setting-row {
-  min-height: 68px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 14px 16px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-row strong {
-  display: block;
-  color: var(--text-primary);
-  font-size: var(--font-md);
+  font-size: var(--font-xl);
   font-weight: 600;
 }
 
-.setting-row small {
-  display: block;
+.settings-header p {
   margin-top: 4px;
   color: var(--text-tertiary);
   font-size: var(--font-sm);
 }
 
-.setting-row select {
-  width: 210px;
+.icon-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.icon-button:hover {
+  background: var(--bg-hover-light);
+  color: var(--text-primary);
+}
+
+.icon-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.settings-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.settings-page {
+  width: min(620px, 100%);
+  margin: 0 auto;
+  padding: 24px 26px 32px;
+}
+
+.group-title {
+  margin: 0 0 9px 2px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 500;
+}
+
+.group-title:not(:first-child) {
+  margin-top: 22px;
+}
+
+.setting-card {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+
+.setting-card-row,
+.shortcut-row {
+  min-height: 66px;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.setting-card-row:last-child,
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+label.setting-card-row {
+  cursor: pointer;
+}
+
+.setting-copy {
+  min-width: 0;
+}
+
+.setting-copy strong,
+.setting-copy small {
+  display: block;
+}
+
+.setting-copy strong {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 500;
+}
+
+.setting-copy small {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.setting-select {
+  min-width: 150px;
   height: 34px;
+  flex: 0 0 auto;
+  padding: 0 30px 0 10px;
   border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
+  border-radius: 7px;
   background: var(--bg-surface);
   color: var(--text-primary);
-  padding: 0 9px;
+  font-size: var(--font-base);
 }
 
-.setting-row input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
+.shortcut-select {
+  min-width: 135px;
 }
 
-.storage-summary {
+.segmented-control {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.storage-summary > div {
-  min-height: 82px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border: 1px solid var(--border);
+  grid-template-columns: repeat(2, 72px);
+  flex: 0 0 auto;
+  padding: 3px;
   border-radius: 8px;
-  background: #f8f9fc;
-  padding: 14px;
+  background: var(--bg-header);
 }
 
-.storage-value {
+.segmented-control button {
+  height: 30px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.segmented-control button.active {
+  background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  font-weight: 500;
 }
 
-.storage-summary small,
-.storage-note {
+.switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-control {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--bg-input-rest);
+  transition: background var(--transition-fast);
+}
+
+.switch-control::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  content: '';
+  transition: transform var(--transition-fast);
+}
+
+.switch-input:checked + .switch-control {
+  background: var(--accent);
+}
+
+.switch-input:checked + .switch-control::after {
+  transform: translateX(16px);
+}
+
+.switch-input:focus-visible + .switch-control {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch-input:disabled + .switch-control {
+  opacity: 0.5;
+}
+
+.account-hero {
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-chat);
+}
+
+.account-avatar {
+  width: 58px;
+  height: 58px;
+  font-size: 22px;
+}
+
+.account-identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.account-identity h3 {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-identity p {
+  margin-top: 4px;
   color: var(--text-tertiary);
   font-size: var(--font-sm);
 }
 
-.about-card,
-.about-actions {
-  display: flex;
+.status-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--success);
+  font-size: var(--font-xs);
 }
 
-.about-card {
-  margin-bottom: 16px;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: #f8f9fc;
+.status-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
 }
 
-.about-card strong,
-.about-card small { display: block; }
-.about-card strong { color: var(--text-primary); font-size: 20px; }
-.about-card small { margin-top: 4px; color: var(--text-tertiary); }
-.update-status { color: var(--accent); font-size: var(--font-base); }
-.update-details { margin-bottom: 16px; }
-.release-notes { padding: 0 16px 12px; color: #5f6673; font-size: var(--font-base); }
-.release-notes p { margin: 6px 0; }
-.download-progress { height: 6px; overflow: hidden; background: #e7e9ef; }
-.download-progress span { display: block; height: 100%; background: var(--accent); }
-.about-actions { justify-content: flex-start; }
-.about-actions select { height: 34px; border: 1px solid var(--border-input); border-radius: var(--radius-md); padding: 0 9px; }
-.update-error { color: #c62828; }
-
-.danger-btn,
-.plain-btn {
-  min-width: 72px;
-  height: 34px;
-  border-radius: var(--radius-md);
+.primary-button,
+.secondary-button,
+.danger-button,
+.danger-text-button,
+.text-button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 13px;
+  border-radius: 7px;
   font-size: var(--font-base);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.danger-btn {
+.primary-button {
+  background: var(--accent);
+  color: var(--accent-text-on);
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
+}
+
+.secondary-button {
+  border: 1px solid var(--border-input);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--bg-hover-light);
+}
+
+.compact-button {
+  min-height: 30px;
+  padding: 0 11px;
+}
+
+.danger-button {
   background: var(--danger-bg);
   color: var(--danger-strong);
 }
 
-.danger-btn:hover {
-  background: #ffd9d6;
+.danger-button:hover:not(:disabled) {
+  filter: brightness(0.97);
 }
 
-.danger-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.danger-text-button,
+.text-button {
+  background: transparent;
 }
 
-.plain-btn {
-  background: var(--accent-bg-light);
+.danger-text-button {
+  color: var(--danger-strong);
+}
+
+.danger-text-button:hover {
+  background: var(--danger-bg);
+}
+
+.text-button {
   color: var(--accent);
 }
 
-.plain-btn:hover {
-  background: #dde2ff;
+.text-button:hover:not(:disabled) {
+  background: var(--accent-bg-light);
 }
 
-.storage-note {
+.safe-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success);
+  font-size: var(--font-sm);
+}
+
+.safe-label svg {
+  width: 17px;
+  height: 17px;
+}
+
+.settings-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: 8px;
+  background: var(--accent-bg-light);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.settings-tip svg {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.keycap-group,
+.row-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+kbd {
+  min-width: 28px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--border-input);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--bg-header);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-xs);
+}
+
+.storage-path-copy {
+  max-width: 350px;
+}
+
+.storage-path-copy small {
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-note,
+.inline-error {
+  margin: 11px 2px 0;
+  font-size: var(--font-sm);
+}
+
+.page-note {
+  color: var(--text-tertiary);
+}
+
+.inline-error {
+  color: var(--danger-strong);
+}
+
+.about-hero {
+  gap: 15px;
+  margin-bottom: 24px;
+  padding: 6px 2px;
+}
+
+.about-logo {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--accent);
+  color: var(--accent-text-on);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.about-hero h3 {
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.about-hero p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.about-hero span {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+.update-progress-card {
+  margin-top: 13px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+}
+
+.update-progress-card > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.update-progress {
+  height: 6px;
+  overflow: hidden;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--bg-header);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--transition-normal);
 }
 
 .settings-footer {
-  height: 34px;
-  padding: 0 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px;
   color: var(--text-tertiary);
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
+}
+
+.saving-indicator,
+.saved-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.saving-indicator i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: saving-pulse 1s ease-in-out infinite;
+}
+
+.saved-indicator {
+  color: var(--success);
+}
+
+.saved-indicator svg {
+  width: 15px;
+  height: 15px;
+}
+
+.nested-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-overlay);
+}
+
+.storage-manager {
+  width: min(560px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.storage-manager header {
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.storage-manager header h3 {
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+}
+
+.storage-manager header p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+.storage-manager-body {
+  padding: 18px 20px 21px;
+}
+
+.storage-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.storage-metrics > div {
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-chat);
+}
+
+.storage-metrics span,
+.storage-metrics small {
+  display: block;
+}
+
+.storage-metrics span {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.storage-metrics small {
+  margin-top: 5px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+@keyframes saving-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-item,
+  .icon-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .danger-text-button,
+  .text-button,
+  .switch-control,
+  .switch-control::after,
+  .update-progress span {
+    transition: none;
+  }
+
+  .saving-indicator i {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-overlay {
+    padding: 12px;
+  }
+
+  .settings-dialog {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .settings-page {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .setting-card-row,
+  .shortcut-row {
+    gap: 12px;
+  }
+
+  .storage-location-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

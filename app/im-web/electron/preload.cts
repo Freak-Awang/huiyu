@@ -23,6 +23,17 @@ contextBridge.exposeInMainWorld('imDesktop', {
   setCloseBehavior: (behavior: 'tray' | 'exit') =>
     ipcRenderer.invoke('app:setCloseBehavior', behavior) as Promise<boolean>,
 
+  /** 获取文件默认存储目录 */
+  getStorageLocation: () => ipcRenderer.invoke('storage:get-location') as Promise<string>,
+
+  /** 使用系统目录选择器更改文件默认存储目录 */
+  chooseStorageLocation: () =>
+    ipcRenderer.invoke('storage:choose-location') as Promise<{ canceled: boolean; path?: string }>,
+
+  /** 使用系统文件管理器打开当前存储目录 */
+  openStorageLocation: () =>
+    ipcRenderer.invoke('storage:open-location') as Promise<{ success: boolean; error?: string }>,
+
   /** 弹出桌面通知，点击后跳转到对应会话 */
   showMessageNotification: (payload: { title: string; body: string; conversationId: string }) =>
     ipcRenderer.invoke('notification:show', payload) as Promise<boolean>,

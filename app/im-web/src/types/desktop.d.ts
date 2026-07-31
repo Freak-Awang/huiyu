@@ -49,6 +49,9 @@ declare global {
       getPlatform: () => Promise<string>
       openExternal: (url: string) => Promise<boolean>
       setCloseBehavior?: (behavior: 'tray' | 'exit') => Promise<boolean>
+      getStorageLocation?: () => Promise<string>
+      chooseStorageLocation?: () => Promise<{ canceled: boolean; path?: string }>
+      openStorageLocation?: () => Promise<{ success: boolean; error?: string }>
       showMessageNotification?: (payload: {
         title: string
         body: string
