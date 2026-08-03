@@ -201,6 +201,19 @@ public class ConversationController {
         return Result.success(conversationService.getById(id, userId));
     }
 
+    /**
+     * 解散群聊（仅群主可操作）。
+     *
+     * @param id 会话 ID
+     * @return 操作结果
+     */
+    @DeleteMapping("/{id}")
+    public Result<Void> dissolveGroup(@PathVariable("id") Long id) {
+        Long userId = getCurrentUserId();
+        conversationService.dissolveGroup(id, userId);
+        return Result.ok();
+    }
+
     private Long getCurrentUserId() {
         String userIdStr = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Long.parseLong(userIdStr);

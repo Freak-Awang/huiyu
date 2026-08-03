@@ -1067,9 +1067,9 @@
             v-if="chatStore.currentConversation?.type === 'GROUP'"
             class="more-leave-btn"
             type="button"
-            @click="leaveCurrentGroup"
+            @click="isCurrentUserGroupOwner ? disbandCurrentGroup() : leaveCurrentGroup()"
           >
-            退出群聊
+            {{ isCurrentUserGroupOwner ? '解散群聊' : '退出群聊' }}
           </button>
         </div>
       </aside>
@@ -1163,6 +1163,7 @@ import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
 import {
   addMembers,
+  disbandGroup,
   muteConversation,
   normalizeConversation,
   pinConversation,
@@ -1972,6 +1973,22 @@ async function clearCurrentConversationRecords() {
 function leaveCurrentGroup() {
   if (!currentGroupMember.value) return
   void removeGroupMember(currentGroupMember.value)
+}
+
+// 解散群聊（仅群主）
+async function disbandCurrentGroup() {
+  const conv = chatStore.currentConversation
+  if (!conv || conv.type !== 'GROUP') return
+  if (!window.confirm('确定解散该群聊吗？所有成员将被移出，聊天记录将被清除。')) return
+  try {
+    await disbandGroup(conv.conversationId)
+    showMoreDrawer.value = false
+    showMembersDrawer.value = false
+    chatStore.currentConversation = null
+    await chatStore.fetchConversations()
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '解散群聊失败')
+  }
 }
 
 // 搜索聊天记录（优先本地搜索，回退服务端搜索）

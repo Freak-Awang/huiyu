@@ -270,6 +270,16 @@ export function removeMember(convId: string, userId: string) {
 }
 
 /**
+ * 解散群聊（仅群主可操作）。
+ * 调用 DELETE /api/conversations/{convId}
+ * @param convId 会话 ID
+ * @returns 操作结果
+ */
+export function disbandGroup(convId: string) {
+  return http.delete(`/api/conversations/${convId}`)
+}
+
+/**
  * 设置会话置顶状态。
  * 调用 PUT /api/conversations/:convId/pin
  * @param convId 会话 ID

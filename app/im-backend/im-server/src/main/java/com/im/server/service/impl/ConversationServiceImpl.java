@@ -391,6 +391,30 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    /**
+     * 解散群聊（仅群主可操作）。
+     * 使用行锁确保并发安全，删除所有群成员和群会话记录。
+     */
+    @Override
+    @Transactional
+    public void dissolveGroup(Long conversationId, Long operatorId) {
+        ImConversation conversation = getGroupConversationOrThrowForUpdate(conversationId);
+        if (conversation.getType() == null || conversation.getType() != 2) {
+            throw new BusinessException(400, "Only group conversations can be dissolved");
+        }
+        if (!operatorId.equals(conversation.getOwnerId())) {
+            throw new BusinessException(403, "Only the group owner can dissolve the group");
+        }
+
+        // 删除所有群成员记录
+        conversationMemberMapper.delete(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId));
+
+        // 删除群会话记录
+        conversationMapper.deleteById(conversationId);
+    }
+
     @Override
     public void pinConversation(Long conversationId, Long userId, boolean pinned) {
         ImConversationMember member = conversationMemberMapper.selectOne(

@@ -124,4 +124,13 @@ public interface ConversationService {
      * @return 会话视图
      */
     ConversationVO getById(Long id, Long userId);
+
+    /**
+     * 解散群聊（仅群主可操作）。
+     * 删除所有群成员记录及群会话本身。
+     *
+     * @param conversationId 会话 ID
+     * @param operatorId 操作人 ID（必须是群主）
+     */
+    void dissolveGroup(Long conversationId, Long operatorId);
 }
