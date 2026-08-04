@@ -68,7 +68,7 @@
       </div>
       <div class="sidebar-footer">
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
-          <img :src="moreIcon" alt="更多" />
+          <img :src="sidebarMoreIcon" alt="更多" />
         </button>
       </div>
     </div>
@@ -1227,7 +1227,8 @@ import {
 } from '../utils/presence'
 import messageIcon from '../assets/icons/message.svg'
 import contactsIcon from '../assets/icons/contacts.svg'
-import moreIcon from '../assets/icons/more.svg'
+import moreIcon from '../assets/icons/更多.svg'
+import sidebarMoreIcon from '../assets/icons/more.svg'
 import newChatIcon from '../assets/icons/new chat.svg'
 import pinIcon from '../assets/icons/置顶.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
