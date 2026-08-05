@@ -90,7 +90,7 @@ class FileControllerTest {
 
     /**
      * 验证越界 Range（bytes=20-30，超出文件大小）返回 416 Range Not Satisfiable，
-     * 且 Content-Range 为 "bytes */10"。
+     * 且 Content-Range 为 "bytes *&#47;10"。
      */
     @Test
     void rejectsUnsatisfiableRangeWith416() throws Exception {

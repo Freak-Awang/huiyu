@@ -1,6 +1,7 @@
 package com.im.server.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -13,11 +14,14 @@ import com.im.common.dto.UpdateMemberRoleRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImFile;
+import com.im.common.entity.ImFileUpload;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
+import com.im.server.mapper.FileMapper;
+import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.ConversationService;
@@ -67,6 +71,12 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Autowired
     private MessageMapper messageMapper;
+
+    @Autowired
+    private FileMapper fileMapper;
+
+    @Autowired
+    private FileUploadMapper fileUploadMapper;
 
     @Autowired
     private UserMapper userMapper;
@@ -406,7 +416,16 @@ public class ConversationServiceImpl implements ConversationService {
             throw new BusinessException(403, "Only the group owner can dissolve the group");
         }
 
-        // 删除所有群成员记录
+        // Clear references guarded by RESTRICT foreign keys first. File records are
+        // retained as standalone files; upload-task bookkeeping belongs to the group.
+        fileUploadMapper.delete(
+                new LambdaQueryWrapper<ImFileUpload>()
+                        .eq(ImFileUpload::getConversationId, conversationId));
+        fileMapper.update(null,
+                new UpdateWrapper<ImFile>()
+                        .eq("conversation_id", conversationId)
+                        .set("conversation_id", null));
+
         conversationMemberMapper.delete(
                 new LambdaQueryWrapper<ImConversationMember>()
                         .eq(ImConversationMember::getConversationId, conversationId));
