@@ -534,6 +534,15 @@ export const useChatStore = defineStore('chat', () => {
     userProfiles.seedSnapshots(conv.members || [])
   }
 
+  /** 清空全部聊天状态（登出/切换账号时调用，防止跨账号数据泄露） */
+  function reset() {
+    conversations.value = []
+    currentConversation.value = null
+    messages.value = new Map()
+    unreadCounts.value = new Map()
+    mentionUnreadCounts.value = new Map()
+  }
+
   function seedMessageProfile(message: Message) {
     userProfiles.seedSnapshot({
       userId: message.senderId,
@@ -572,5 +581,6 @@ export const useChatStore = defineStore('chat', () => {
     getMentionUnreadCount,
     updateMessageStatus,
     setMessageStatus,
+    reset,
   }
 })

@@ -68,7 +68,7 @@
       </div>
       <div class="sidebar-footer">
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
-          <img :src="moreIcon" alt="更多" />
+          <img :src="sidebarMoreIcon" alt="更多" />
         </button>
       </div>
     </div>
@@ -3546,7 +3546,7 @@ async function openConversationFromNotification(conversationId: string) {
   }
 }
 
-// 退出登录：断开 WebSocket、清除未读标记、跳转到登录页
+// 退出登录：断开 WebSocket、清除未读标记、清空聊天状态、跳转到登录页
 async function handleLogout() {
   wsManager?.disconnect()
   if (window.imDesktop?.setUnreadBadge) {
@@ -3554,6 +3554,7 @@ async function handleLogout() {
   }
   await authStore.logout()
   settingsStore.resetLocal()
+  chatStore.reset()
   router.push('/login')
 }
 

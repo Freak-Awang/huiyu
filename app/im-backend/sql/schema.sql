@@ -41,11 +41,9 @@ CREATE TABLE IF NOT EXISTS im_conversation (
     type TINYINT NOT NULL COMMENT '1=single, 2=group',
     name VARCHAR(128) DEFAULT NULL COMMENT 'group name',
     avatar VARCHAR(256) DEFAULT NULL COMMENT 'conversation avatar',
-    avatar_type VARCHAR(16) DEFAULT NULL COMMENT 'group avatar type: default/custom',
-    avatar_updated_by BIGINT DEFAULT NULL COMMENT 'last group avatar updater user id',
-    avatar_updated_at DATETIME DEFAULT NULL COMMENT 'last group avatar update time',
+    -- avatar_type / avatar_updated_by / avatar_updated_at / create_request_id / uk_owner_create_request
+    -- are added by Flyway migrations V20260730/V20260731; do not add them here or fresh installs break Flyway.
     owner_id BIGINT DEFAULT NULL COMMENT 'group owner id',
-    create_request_id VARCHAR(64) DEFAULT NULL COMMENT 'idempotency key for group creation',
     announcement TEXT DEFAULT NULL COMMENT 'group announcement',
     announcement_updated_by BIGINT DEFAULT NULL COMMENT 'announcement updater user id',
     announcement_updated_at DATETIME DEFAULT NULL COMMENT 'announcement update time',
@@ -54,8 +52,7 @@ CREATE TABLE IF NOT EXISTS im_conversation (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
     INDEX idx_type (type),
-    INDEX idx_owner (owner_id),
-    UNIQUE KEY uk_owner_create_request (owner_id, create_request_id)
+    INDEX idx_owner (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='conversations';
 
 CREATE TABLE IF NOT EXISTS im_conversation_member (
