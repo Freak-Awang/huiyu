@@ -24,7 +24,7 @@ import java.util.List;
  * <p>
  * 在 Spring Security 过滤链中拦截请求，解析 Authorization 头中的 Bearer Token，
  * 验证 Token 有效性（未过期、未撤销、用户状态正常、Token 版本匹配），
- * 并将认证信息写入 SecurityContext。登录、WebSocket、文件下载等路径放行。
+ * 并将认证信息写入 SecurityContext。内部健康检查、登录、WebSocket、文件下载等路径放行。
  * </p>
  */
 @Component
@@ -41,7 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /**
      * 判断当前请求是否跳过 JWT 过滤。
      * <p>
-     * 放行 OPTIONS 预检请求、登录接口和 WebSocket 握手路径。
+     * 放行 OPTIONS 预检请求、内部健康检查、登录接口和 WebSocket 握手路径。
      * 文件下载接口不过滤，由下游自行处理可选的 Bearer Token。
      * </p>
      */
@@ -50,6 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // Downloads pass through this filter so a valid optional bearer token can authorize conversation files.
         String path = request.getRequestURI();
         return HttpMethod.OPTIONS.matches(request.getMethod())
+                || path.equals("/actuator/health")
                 || path.startsWith("/api/auth/login")
                 || path.startsWith("/ws/");
     }

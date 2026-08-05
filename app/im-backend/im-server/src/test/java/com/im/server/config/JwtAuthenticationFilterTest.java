@@ -69,6 +69,24 @@ class JwtAuthenticationFilterTest {
     }
 
     /**
+     * 验证容器内部健康检查无需 JWT 即可到达 Actuator 端点。
+     */
+    @Test
+    void actuatorHealthContinuesWithoutAuthentication() throws Exception {
+        TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
+        FilterChain chain = mock(FilterChain.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(authenticationService);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/health");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verifyNoInteractions(authenticationService);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    /**
      * 验证匿名请求访问非白名单的客户端更新事件接口时返回 401，不继续执行 FilterChain。
      */
     @Test

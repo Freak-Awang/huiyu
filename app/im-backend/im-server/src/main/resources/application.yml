@@ -41,6 +41,15 @@ bootstrap:
     username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 file:
   storage: ${FILE_STORAGE:local}
   max-size: ${FILE_MAX_SIZE:2147483648}

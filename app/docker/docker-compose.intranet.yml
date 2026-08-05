@@ -100,6 +100,12 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
 
   nginx:
     image: nginx:1.29.8-alpine
@@ -122,7 +128,9 @@ services:
       - ../im-admin/dist:/usr/share/nginx/html/admin
       - ./updates:/usr/share/nginx/html/downloads/arttalk:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+        restart: true
 
   minio-init:
     image: huiyu-minio:RELEASE.2025-10-15T17-29-55Z

@@ -11,6 +11,7 @@ RUN mvn package -DskipTests -B
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=build /app/im-server/target/*.jar app.jar
-RUN mkdir -p /app/upload
+RUN apk add --no-cache curl \
+    && mkdir -p /app/upload
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

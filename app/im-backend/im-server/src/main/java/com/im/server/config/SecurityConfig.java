@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Spring Security 配置。
  * <p>
  * 配置安全过滤链：禁用 CSRF、无状态会话、基于 JWT 的认证授权。
- * 放行登录、客户端更新策略查询、WebSocket、文件下载等端点；
+ * 放行内部健康检查、登录、客户端更新策略查询、WebSocket、文件下载等端点；
  * 管理端接口 {@code /api/admin/**} 需要 ADMIN 角色；
  * 其余接口均需认证。同时注册密码编码器和认证管理器。
  * </p>
@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/client/releases/policy").permitAll()
                         .requestMatchers("/ws/**").permitAll()
