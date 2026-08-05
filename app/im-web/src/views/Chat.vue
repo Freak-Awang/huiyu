@@ -68,7 +68,7 @@
       </div>
       <div class="sidebar-footer">
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
-          <img :src="sidebarMoreIcon" alt="更多" />
+          <img :src="moreIcon" alt="更多" />
         </button>
       </div>
     </div>
