@@ -11,25 +11,35 @@
         aria-label="最小化"
         type="button"
         @click="minimize"
-      >─</button>
+      >
+        <img :src="minimizeIcon" alt="最小化" />
+      </button>
       <button
         class="desktop-window-button"
         :aria-label="isMaximized ? '还原' : '最大化'"
         type="button"
         @click="toggleMaximize"
-      >{{ isMaximized ? '❐' : '□' }}</button>
+      >
+        <img :src="isMaximized ? restoreIcon : maximizeIcon" alt="最大化/还原" />
+      </button>
       <button
         class="desktop-window-button desktop-window-close"
         aria-label="关闭"
         type="button"
         @click="closeWindow"
-      >✕</button>
+      >
+        <img :src="closeIcon" alt="关闭" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import minimizeIcon from '../assets/icons/最小化.svg'
+import maximizeIcon from '../assets/icons/最大化.svg'
+import restoreIcon from '../assets/icons/还原.svg'
+import closeIcon from '../assets/icons/关  闭.svg'
 
 defineProps<{
   transparent?: boolean
@@ -103,8 +113,22 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-tertiary, #777);
   cursor: pointer;
-  font-size: 14px;
   transition: background var(--transition-normal, 0.2s), color var(--transition-normal, 0.2s);
+}
+
+.desktop-window-button img {
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+  transition: opacity var(--transition-normal, 0.2s);
+}
+
+.desktop-window-button:hover img {
+  opacity: 1;
+}
+
+.desktop-window-close:hover img {
+  filter: invert(1) brightness(2);
 }
 
 .desktop-window-button:hover {
