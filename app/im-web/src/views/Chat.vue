@@ -3434,7 +3434,16 @@ function initWebSocket() {
       const currentConvId = chatStore.currentConversation?.conversationId
       applySelfPresence(manualPresence.value)
       wsManager?.send('ONLINE_STATUS', { status: manualPresence.value })
-      chatStore.fetchConversations()
+      chatStore.fetchConversations().then(() => {
+        // 批量刷新所有单聊会话的在线状态：
+        // 服务端仅在状态变化时广播，登录前已在线/断连期间下线的联系人状态需主动查询，
+        // 否则会话列表长期显示过期或缺失的在线状态
+        for (const conv of chatStore.conversations) {
+          if (conv.type === 'SINGLE') {
+            requestConversationPresence(conv.conversationId)
+          }
+        }
+      }).catch(() => {})
       updateUnreadBadge()
       if (currentConvId) {
         requestConversationPresence(currentConvId)
@@ -3977,7 +3986,7 @@ watch(
   justify-content: center;
   color: #fff;
   font-size: var(--font-lg);
-  overflow: hidden;
+  /* 不在容器上 overflow: hidden，否则会裁掉右下角的状态圆点；圆形裁剪由 img 自身承担 */
   position: relative;
 }
 
@@ -3985,6 +3994,7 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .online-dot {
@@ -4121,13 +4131,14 @@ watch(
   justify-content: center;
   color: #fff;
   font-size: var(--font-md);
-  overflow: hidden;
+  /* 不在容器上 overflow: hidden，否则会裁掉右下角的状态圆点；圆形裁剪由 img 自身承担 */
 }
 
 .contact-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .contact-info {
@@ -4876,7 +4887,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  /* 不在容器上 overflow: hidden，否则会裁掉右下角的状态圆点；圆形裁剪由 img 自身承担 */
   font-size: var(--font-sm);
 }
 
@@ -4885,6 +4896,7 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .contact-avatar.offline,

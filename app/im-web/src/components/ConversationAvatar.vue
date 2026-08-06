@@ -73,7 +73,7 @@ function handleError() {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  overflow: hidden;
+  /* 不在容器上 overflow: hidden，否则会裁掉右下角的状态圆点；圆形裁剪由 img 自身承担 */
   font-size: 1.15em;
   font-weight: 600;
   line-height: 1;
@@ -83,5 +83,6 @@ function handleError() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 </style>
