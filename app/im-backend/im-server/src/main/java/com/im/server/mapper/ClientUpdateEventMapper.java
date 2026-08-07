@@ -28,9 +28,8 @@ public interface ClientUpdateEventMapper extends BaseMapper<ImClientUpdateEvent>
             SELECT event_type AS eventType, COUNT(*) AS eventCount,
                    COUNT(DISTINCT device_id) AS deviceCount
             FROM im_client_update_event
-            WHERE target_version = #{version} AND channel = #{channel}
+            WHERE release_id = #{releaseId}
             GROUP BY event_type
             """)
-    List<Map<String, Object>> summarize(@Param("version") String version, @Param("channel") String channel);
+    List<Map<String, Object>> summarize(@Param("releaseId") Long releaseId);
 }
-

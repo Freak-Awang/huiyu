@@ -90,7 +90,7 @@ class JwtAuthenticationFilterTest {
      * 验证匿名请求访问非白名单的客户端更新事件接口时返回 401，不继续执行 FilterChain。
      */
     @Test
-    void anonymousUpdateEventIsRejected() throws Exception {
+    void anonymousUpdateEventContinuesForDeviceTelemetry() throws Exception {
         TokenAuthenticationService authenticationService = mock(TokenAuthenticationService.class);
         FilterChain chain = mock(FilterChain.class);
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(authenticationService);
@@ -99,8 +99,8 @@ class JwtAuthenticationFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, chain);
 
-        assertThat(response.getStatus()).isEqualTo(401);
-        verifyNoInteractions(chain);
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(request, response);
     }
 
     /**

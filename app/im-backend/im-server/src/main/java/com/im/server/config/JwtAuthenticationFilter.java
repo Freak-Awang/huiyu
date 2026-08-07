@@ -52,6 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.equals("/actuator/health")
                 || path.startsWith("/api/auth/login")
+                || path.equals(ReleaseAutomationAuthenticationFilter.PATH)
                 || path.startsWith("/ws/");
     }
 
@@ -130,6 +131,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     private boolean isPublicClientUpdateEndpoint(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/api/client/releases/policy");
+        return path.equals("/api/client/releases/policy")
+                || (path.equals("/api/client/update-events") && HttpMethod.POST.matches(request.getMethod()));
     }
 }

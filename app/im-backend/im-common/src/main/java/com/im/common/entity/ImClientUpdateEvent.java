@@ -16,6 +16,7 @@ public class ImClientUpdateEvent {
     @TableId(type = IdType.AUTO)
     private Long id; // 主键ID
     private Long userId; // 用户ID
+    private Long releaseId; // 发布记录ID
     private String deviceId; // 设备ID
     private String currentVersion; // 当前版本号
     private String targetVersion; // 目标版本号
@@ -26,4 +27,3 @@ public class ImClientUpdateEvent {
     private String channel; // 发布渠道
     private LocalDateTime createTime; // 事件上报时间
 }
-

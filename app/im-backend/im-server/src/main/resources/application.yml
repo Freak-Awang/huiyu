@@ -41,6 +41,10 @@ bootstrap:
     username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:}
 
+release:
+  automation:
+    token: ${RELEASE_AUTOMATION_TOKEN:}
+
 management:
   endpoints:
     web:

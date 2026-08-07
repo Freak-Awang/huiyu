@@ -39,6 +39,15 @@ export const useUpdateStore = defineStore('update', () => {
     ['available', 'downloaded', 'waiting-for-transfers', 'error'].includes(state.value.status),
   )
 
+  function setOperationError(error: unknown) {
+    state.value = {
+      ...state.value,
+      status: 'error',
+      forceUpdate: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+
   /** 初始化更新器：注册状态监听并配置更新参数 */
   async function initialize() {
     if (!isDesktop.value) return
@@ -49,28 +58,40 @@ export const useUpdateStore = defineStore('update', () => {
     }
     const serverOrigin = getServerOrigin()
     if (!serverOrigin) return
-    state.value = await window.imDesktop!.configureUpdater!({
-      serverOrigin,
-      token: localStorage.getItem('token') || undefined,
-      channel: channel.value,
-    })
-    initialized.value = true
+    try {
+      state.value = await window.imDesktop!.configureUpdater!({
+        serverOrigin,
+        token: localStorage.getItem('token') || undefined,
+        channel: channel.value,
+      })
+      initialized.value = true
+    } catch (error) {
+      initialized.value = false
+      setOperationError(error)
+    }
   }
 
   /** 检查是否有可用更新 */
   async function check() {
     await initialize()
-    if (window.imDesktop?.checkForUpdates) state.value = await window.imDesktop.checkForUpdates()
+    if (!initialized.value) return
+    try {
+      if (window.imDesktop?.checkForUpdates) state.value = await window.imDesktop.checkForUpdates()
+    } catch (error) { setOperationError(error) }
   }
 
   /** 下载更新包 */
   async function download() {
-    if (window.imDesktop?.downloadUpdate) state.value = await window.imDesktop.downloadUpdate()
+    try {
+      if (window.imDesktop?.downloadUpdate) state.value = await window.imDesktop.downloadUpdate()
+    } catch (error) { setOperationError(error) }
   }
 
   /** 安装更新并重启应用 */
   async function install() {
-    if (window.imDesktop?.installUpdate) await window.imDesktop.installUpdate()
+    try {
+      if (window.imDesktop?.installUpdate) await window.imDesktop.installUpdate()
+    } catch (error) { setOperationError(error) }
   }
 
   /**
@@ -114,4 +135,3 @@ export const useUpdateStore = defineStore('update', () => {
     dispose,
   }
 })
-

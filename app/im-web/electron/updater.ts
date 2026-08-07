@@ -11,6 +11,7 @@ import type { WebContents } from 'electron'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
+import { installationGate, validateServerOrigin, validateUpdateSource } from './update-policy.js'
 
 const { autoUpdater } = electronUpdater
 
@@ -30,6 +31,7 @@ export type UpdateStatus =
 export interface UpdateState {
   status: UpdateStatus
   currentVersion: string
+  releaseId?: number
   targetVersion?: string
   releaseName?: string
   releaseNotes?: string[]
@@ -48,6 +50,7 @@ export interface UpdateState {
 /** 服务端返回的更新策略 */
 interface UpdatePolicy {
   hasUpdate: boolean
+  releaseId?: number
   latestVersion?: string
   minimumSupportedVersion?: string
   forceUpdate?: boolean
@@ -67,17 +70,10 @@ interface UpdaterConfiguration {
 
 /** 待安装标记：记录即将安装的版本信息，用于重启后上报安装成功 */
 interface PendingInstallMarker {
+  releaseId: number
   targetVersion: string
   serverOrigin: string
   channel: 'stable' | 'beta'
-}
-
-/** 缓存的更新策略，用于离线回退 */
-interface CachedPolicy {
-  serverOrigin: string
-  channel: 'stable' | 'beta'
-  savedAt: string
-  policy: UpdatePolicy
 }
 
 /** 更新器外部依赖注入 */
@@ -118,16 +114,19 @@ let state: UpdateState = {
   transferBlockers: 0,
 }
 
+let approvedRelease: {
+  releaseId: number
+  latestVersion: string
+  updateBaseUrl: string
+  channel: 'stable' | 'beta'
+} | null = null
+
 function deviceIdPath() {
   return join(app.getPath('userData'), 'update-device-id')
 }
 
 function pendingInstallPath() {
   return join(app.getPath('userData'), 'pending-update.json')
-}
-
-function cachedPolicyPath() {
-  return join(app.getPath('userData'), 'cached-update-policy.json')
 }
 
 /**
@@ -187,6 +186,7 @@ async function postEvent(eventType: string, errorMessage?: string) {
     deviceId: await getDeviceId(),
     currentVersion: app.getVersion(),
     targetVersion: state.targetVersion,
+    releaseId: state.releaseId,
     eventType,
     errorMessage: errorMessage?.slice(0, 1000),
     platform: process.platform,
@@ -209,7 +209,7 @@ async function postEvent(eventType: string, errorMessage?: string) {
 /**
  * 请求服务端更新策略
  * 携带平台、架构、当前版本、设备ID等参数，服务端据此决定是否推送更新
- * 成功后将策略缓存到本地，供离线回退使用
+ * 策略不可用时不回退到缓存强制策略，确保暂停动作可以立即解除锁屏和安装。
  */
 async function requestPolicy(): Promise<UpdatePolicy> {
   if (!configuration) throw new Error('更新服务器未配置')
@@ -224,38 +224,7 @@ async function requestPolicy(): Promise<UpdatePolicy> {
   const body = await response.json() as { code?: number; message?: string; data?: UpdatePolicy; hasUpdate?: boolean }
   if ('code' in body && body.code !== 200) throw new Error(body.message || '更新策略请求失败')
   const policy = (body.data || body) as UpdatePolicy
-  const cached: CachedPolicy = {
-    serverOrigin: configuration.serverOrigin,
-    channel: configuration.channel,
-    savedAt: new Date().toISOString(),
-    policy,
-  }
-  await writeFile(cachedPolicyPath(), JSON.stringify(cached), { encoding: 'utf8', mode: 0o600 }).catch(() => undefined)
   return policy
-}
-
-/**
- * 加载本地缓存的强制更新策略
- * 仅在当前配置匹配、缓存未过期（24小时内）、且为强制更新时返回
- * 用于策略服务不可用时的离线回退
- */
-async function loadCachedForcePolicy() {
-  if (!configuration) return null
-  try {
-    const cached = JSON.parse(await readFile(cachedPolicyPath(), 'utf8')) as CachedPolicy
-    const age = Date.now() - new Date(cached.savedAt).getTime()
-    if (cached.serverOrigin !== configuration.serverOrigin || cached.channel !== configuration.channel
-        || age < 0 || age > 24 * 60 * 60 * 1000 || !cached.policy.hasUpdate || !cached.policy.forceUpdate) return null
-    return cached.policy
-  } catch {
-    return null
-  }
-}
-
-/** 判断 URL 是否为本地回环地址 */
-function isLoopbackUrl(url: URL) {
-  return url.protocol === 'http:'
-    && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
 }
 
 /**
@@ -263,13 +232,14 @@ function isLoopbackUrl(url: URL) {
  * 仅允许 HTTPS 或本地回环地址，配置后禁止降级安装
  */
 function configureFeed(policy: UpdatePolicy) {
-  if (!policy.updateBaseUrl) throw new Error('更新策略未提供更新源地址')
-  const source = new URL(policy.updateBaseUrl)
-  if (source.protocol !== 'https:' && !isLoopbackUrl(source)) throw new Error('更新源必须使用 HTTPS')
-  autoUpdater.setFeedURL({ provider: 'generic', url: source.toString() })
+  if (!configuration || !policy.updateBaseUrl || !policy.latestVersion) throw new Error('更新策略缺少可信发布信息')
+  const source = validateUpdateSource(configuration.serverOrigin, policy.updateBaseUrl,
+    configuration.channel, policy.latestVersion)
+  autoUpdater.setFeedURL({ provider: 'generic', url: source })
   autoUpdater.channel = configuration?.channel === 'beta' ? 'beta' : 'latest'
   // electron-updater 设置 channel 时会自动启用降级，需要手动关闭
   autoUpdater.allowDowngrade = false
+  return source
 }
 
 /**
@@ -289,6 +259,7 @@ export async function checkForUpdates(manual = false) {
   try {
     const policy = await requestPolicy()
     setState({
+      releaseId: policy.releaseId,
       targetVersion: policy.latestVersion,
       releaseName: policy.releaseName,
       releaseNotes: policy.releaseNotes,
@@ -298,36 +269,27 @@ export async function checkForUpdates(manual = false) {
     })
     await postEvent('CHECKED')
     if (!policy.hasUpdate) {
-      setState({ status: 'not-available', targetVersion: undefined, forceUpdate: false })
+      approvedRelease = null
+      setState({ status: 'not-available', releaseId: undefined, targetVersion: undefined, forceUpdate: false })
       return state
     }
-    configureFeed(policy)
+    if (!policy.releaseId || !policy.latestVersion || !policy.updateBaseUrl
+        || policy.channel !== configuration.channel) {
+      throw new Error('更新策略缺少 releaseId 或不可变产物信息')
+    }
+    const updateBaseUrl = configureFeed(policy)
+    approvedRelease = {
+      releaseId: policy.releaseId,
+      latestVersion: policy.latestVersion,
+      updateBaseUrl,
+      channel: policy.channel,
+    }
     await autoUpdater.checkForUpdates()
     return state
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    // 策略服务不可用时，尝试使用本地缓存的强制更新策略回退
-    const cachedPolicy = await loadCachedForcePolicy()
-    if (cachedPolicy) {
-      setState({
-        targetVersion: cachedPolicy.latestVersion,
-        releaseName: cachedPolicy.releaseName,
-        releaseNotes: cachedPolicy.releaseNotes,
-        releaseDate: cachedPolicy.publishedAt,
-        forceUpdate: true,
-        error: '策略服务暂时不可用，正在使用最近一次有效的强制更新策略。',
-      })
-      configureFeed(cachedPolicy)
-      try {
-        await autoUpdater.checkForUpdates()
-      } catch (cachedError) {
-        const cachedMessage = cachedError instanceof Error ? cachedError.message : String(cachedError)
-        setState({ status: 'error', error: cachedMessage })
-        await postEvent('CHECK_FAILED', cachedMessage)
-      }
-      return state
-    }
-    setState({ status: 'error', error: message })
+    approvedRelease = null
+    setState({ status: 'error', releaseId: undefined, targetVersion: undefined, forceUpdate: false, error: message })
     await postEvent('CHECK_FAILED', message)
     return state
   } finally {
@@ -337,7 +299,7 @@ export async function checkForUpdates(manual = false) {
 
 /** 下载已发现的更新包 */
 export async function downloadUpdate() {
-  if (state.status !== 'available' && state.status !== 'error') return state
+  if (state.status !== 'available' || !approvedRelease) return state
   setState({ status: 'downloading', error: undefined, percent: 0 })
   await postEvent('DOWNLOAD_STARTED')
   try {
@@ -352,8 +314,9 @@ export async function downloadUpdate() {
 
 /** 写入待安装标记，用于重启后上报安装成功 */
 async function writePendingInstallMarker() {
-  if (!configuration || !state.targetVersion) return
+  if (!configuration || !state.targetVersion || !state.releaseId) return
   const marker: PendingInstallMarker = {
+    releaseId: state.releaseId,
     targetVersion: state.targetVersion,
     serverOrigin: configuration.serverOrigin,
     channel: configuration.channel,
@@ -368,12 +331,31 @@ async function writePendingInstallMarker() {
  */
 export async function installUpdate() {
   if (state.status !== 'downloaded' && state.status !== 'waiting-for-transfers') return false
-  if (totalTransferBlockers() > 0) {
+  if (approvedRelease && installationGate(totalTransferBlockers(), approvedRelease) === 'WAIT_FOR_TRANSFERS') {
     installWhenReady = true
     setState({ status: 'waiting-for-transfers' })
     return false
   }
   installWhenReady = false
+  if (!approvedRelease) {
+    setState({ status: 'error', forceUpdate: false, error: '已下载更新缺少有效的发布身份，请重新检查更新' })
+    return false
+  }
+  try {
+    const policy = await requestPolicy()
+    if (installationGate(0, approvedRelease, policy) !== 'ALLOW_INSTALL') {
+      throw new Error('该发布已暂停、替换或策略已变更，禁止安装已下载的更新')
+    }
+    validateUpdateSource(configuration!.serverOrigin, approvedRelease.updateBaseUrl,
+      approvedRelease.channel, approvedRelease.latestVersion)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    installWhenReady = false
+    approvedRelease = null
+    setState({ status: 'error', forceUpdate: false, error: message })
+    await postEvent('INSTALL_BLOCKED_POLICY_CHANGED', message)
+    return false
+  }
   setState({ status: 'installing' })
   await postEvent('INSTALL_REQUESTED')
   await writePendingInstallMarker()
@@ -392,11 +374,12 @@ async function reportSuccessfulStart() {
     if (marker.targetVersion !== app.getVersion()) return
     const priorConfiguration = configuration
     configuration = {
-      serverOrigin: marker.serverOrigin,
+      serverOrigin: validateServerOrigin(marker.serverOrigin),
       channel: marker.channel,
       token: priorConfiguration?.token,
     }
     state.targetVersion = marker.targetVersion
+    state.releaseId = marker.releaseId
     if (await postEvent('VERSION_STARTED')) {
       await rm(pendingInstallPath(), { force: true })
     }
@@ -425,16 +408,23 @@ function scheduleChecks() {
 /**
  * 注册 electron-updater 事件监听
  * - 禁止自动下载：由渲染进程用户确认后手动触发
- * - 自动安装退出：应用退出时自动安装已下载的更新
+ * - 禁止退出时自动安装：安装前必须重新确认服务端发布状态
  * - 强制更新：发现新版本后自动开始下载
  */
 function registerUpdaterEvents() {
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowDowngrade = false
 
   autoUpdater.on('checking-for-update', () => setState({ status: 'checking', error: undefined }))
   autoUpdater.on('update-available', (info) => {
+    if (!approvedRelease || info.version !== approvedRelease.latestVersion) {
+      const message = `策略版本与更新清单不一致（策略 ${approvedRelease?.latestVersion || '未知'}，清单 ${info.version}）`
+      approvedRelease = null
+      setState({ status: 'error', forceUpdate: false, error: message })
+      void postEvent('POLICY_MANIFEST_MISMATCH', message)
+      return
+    }
     setState({
       status: 'available',
       targetVersion: info.version,
@@ -444,7 +434,10 @@ function registerUpdaterEvents() {
     if (state.forceUpdate) void downloadUpdate() // 强制更新：发现新版本即自动下载
   })
   autoUpdater.on('update-not-available', () => {
-    setState({ status: 'not-available', lastCheckedAt: new Date().toISOString() })
+    const message = '服务端策略声明有更新，但更新清单未提供对应版本'
+    approvedRelease = null
+    setState({ status: 'error', forceUpdate: false, error: message, lastCheckedAt: new Date().toISOString() })
+    void postEvent('POLICY_MANIFEST_MISMATCH', message)
   })
   autoUpdater.on('download-progress', (progress) => {
     setState({
@@ -456,6 +449,13 @@ function registerUpdaterEvents() {
     })
   })
   autoUpdater.on('update-downloaded', (info) => {
+    if (!approvedRelease || info.version !== approvedRelease.latestVersion) {
+      const message = '已下载更新与当前发布策略版本不一致，已禁止安装'
+      approvedRelease = null
+      setState({ status: 'error', forceUpdate: false, error: message })
+      void postEvent('POLICY_MANIFEST_MISMATCH', message)
+      return
+    }
     setState({ status: 'downloaded', targetVersion: info.version, percent: 100 })
     void postEvent('DOWNLOAD_SUCCEEDED')
   })
@@ -479,16 +479,25 @@ function registerUpdaterIpc() {
   /** 配置更新服务器地址和通道 */
   ipcMain.handle('updater:configure', async (event, value: UpdaterConfiguration) => {
     assertTrustedSender(event.sender)
-    const url = new URL(value.serverOrigin)
-    if (url.protocol !== 'https:' && !isLoopbackUrl(url)) throw new Error('服务器必须使用 HTTPS')
+    const serverOrigin = validateServerOrigin(value.serverOrigin)
+    const nextToken = value.token || undefined
+    const nextChannel = value.channel === 'beta' ? 'beta' : 'stable'
+    const identityChanged = !!configuration && (configuration.serverOrigin !== serverOrigin
+      || configuration.channel !== nextChannel || configuration.token !== nextToken)
     configuration = {
-      serverOrigin: url.origin,
-      token: value.token || undefined,
-      channel: value.channel === 'beta' ? 'beta' : 'stable',
+      serverOrigin,
+      token: nextToken,
+      channel: nextChannel,
+    }
+    if (identityChanged) {
+      approvedRelease = null
+      installWhenReady = false
+      setState({ status: 'idle', releaseId: undefined, targetVersion: undefined, forceUpdate: false, error: undefined })
     }
     setState({ channel: configuration.channel })
     scheduleChecks()
     await reportSuccessfulStart()
+    if (identityChanged) return checkForUpdates()
     return state
   })
   /** 获取当前更新状态 */

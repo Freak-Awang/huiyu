@@ -1,27 +1,20 @@
 name: Desktop release
 
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
-      version:
-        description: Semantic version to build
+      tag:
+        description: Existing signed release tag to rebuild (for example v0.0.9)
         required: true
         type: string
-      channel:
-        description: Update channel
-        required: true
-        default: stable
-        type: choice
-        options: [stable, beta]
-      publish:
-        description: Publish to the internal update share
-        required: true
-        default: false
-        type: boolean
 
 jobs:
   build-sign-publish:
     runs-on: [self-hosted, Windows, X64]
+    environment: desktop-signing
     permissions:
       contents: read
     defaults:
@@ -29,43 +22,127 @@ jobs:
         shell: powershell
         working-directory: app/im-web
     env:
-      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: app/im-web/package-lock.json
-      - name: Validate version input
+
+      - name: Validate immutable release baseline
+        env:
+          INTERNAL_APP_ORIGIN: ${{ secrets.INTERNAL_APP_ORIGIN }}
         run: |
-          if ('${{ inputs.version }}' -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$') { throw 'Invalid semantic version' }
-          if ('${{ inputs.channel }}' -eq 'stable' -and '${{ inputs.version }}' -match '-') { throw 'Stable releases cannot use a prerelease version' }
-          if ('${{ inputs.channel }}' -eq 'beta' -and '${{ inputs.version }}' -notmatch '-') { throw 'Beta releases must use a prerelease version such as 0.1.0-beta.1' }
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v(?<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z]+(?:\.[0-9A-Za-z-]+)*)?)$') {
+            throw 'Release tag must be v<semver>'
+          }
+          $version = $Matches.version
+          $channel = if ($version.Contains('-')) { 'beta' } else { 'stable' }
+          if ($channel -eq 'beta' -and $version -notmatch '-beta(?:\.|$)') {
+            throw 'Prerelease tags must use the beta identifier'
+          }
+          if ($env:INTERNAL_APP_ORIGIN -notmatch '^https://[^/]+$') {
+            throw 'INTERNAL_APP_ORIGIN must be an HTTPS origin without a path'
+          }
+          $packageVersion = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $lockVersion = (Get-Content -LiteralPath package-lock.json -Raw | ConvertFrom-Json).version
+          if ($packageVersion -ne $version -or $lockVersion -ne $version) {
+            throw "Tag, package.json and package-lock.json versions must match ($version)"
+          }
+          git fetch origin main --tags --force
+          if ((git rev-parse HEAD).Trim() -ne (git rev-list -n 1 $tag).Trim()) {
+            throw 'Checked out commit does not match the release tag'
+          }
+          if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
+            throw 'Release tag must point at origin/main'
+          }
+          if (git status --porcelain) { throw 'Release worktree must be clean' }
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_CHANNEL=$channel" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SOURCE_COMMIT=$((git rev-parse HEAD).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ARTTALK_UPDATE_BASE_URL=$env:INTERNAL_APP_ORIGIN/downloads/arttalk/$channel/$version/win-x64/" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - run: npm ci
-      - run: npm test
-      - name: Set package version
-        run: npm version '${{ inputs.version }}' --no-git-tag-version
+      - run: npm run verify
+
       - name: Build and sign NSIS package
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          ARTTALK_WINDOWS_PUBLISHER: ${{ secrets.WINDOWS_PUBLISHER_NAME }}
         run: npm run build:desktop
-      - name: Verify Authenticode signature
+
+      - name: Verify signed installer, application and manifest
+        env:
+          EXPECTED_SIGNER_THUMBPRINT: ${{ secrets.WINDOWS_SIGNER_THUMBPRINT }}
+          EXPECTED_PUBLISHER: ${{ secrets.WINDOWS_PUBLISHER_NAME }}
         run: |
-          $installer = Get-Item -LiteralPath "release\ArtTalk Setup ${{ inputs.version }}.exe"
-          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-          if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
-      - uses: actions/upload-artifact@v4
+          $installer = Get-Item -LiteralPath "release\ArtTalk-Setup-$env:RELEASE_VERSION-x64.exe"
+          $application = Get-Item -LiteralPath 'release\win-unpacked\ArtTalk.exe'
+          foreach ($file in @($installer, $application)) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature for $($file.Name): $($signature.Status)" }
+            if (-not $signature.TimeStamperCertificate) { throw "Missing trusted timestamp for $($file.Name)" }
+            if ($signature.SignerCertificate.Thumbprint -ne $env:EXPECTED_SIGNER_THUMBPRINT) { throw "Unexpected signer certificate for $($file.Name)" }
+            if ($signature.SignerCertificate.Subject -notlike "*$env:EXPECTED_PUBLISHER*") { throw "Unexpected publisher for $($file.Name)" }
+          }
+          $manifestName = if ($env:RELEASE_CHANNEL -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
+          $manifest = Get-Item -LiteralPath (Join-Path release $manifestName)
+          $manifestText = Get-Content -LiteralPath $manifest.FullName -Raw
+          if ($manifestText -notmatch "(?m)^version:\s*$([regex]::Escape($env:RELEASE_VERSION))\s*$") { throw 'Manifest version mismatch' }
+          $provenance = [ordered]@{
+            version = $env:RELEASE_VERSION
+            channel = $env:RELEASE_CHANNEL
+            sourceCommit = $env:SOURCE_COMMIT
+            installer = $installer.Name
+            installerSize = $installer.Length
+            installerSha512 = $null
+            manifest = $manifest.Name
+            manifestSha256 = (Get-FileHash -LiteralPath $manifest.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            signerThumbprint = $env:EXPECTED_SIGNER_THUMBPRINT
+            verifiedAt = [DateTimeOffset]::UtcNow.ToString('o')
+          }
+          $sha512 = [Security.Cryptography.SHA512]::Create()
+          try { $provenance.installerSha512 = [Convert]::ToBase64String($sha512.ComputeHash([IO.File]::ReadAllBytes($installer.FullName))) }
+          finally { $sha512.Dispose() }
+          $provenance | ConvertTo-Json | Set-Content -LiteralPath 'release\release-provenance.json' -Encoding utf8
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: arttalk-${{ inputs.version }}-${{ inputs.channel }}
+          name: arttalk-${{ env.RELEASE_VERSION }}-${{ env.RELEASE_CHANNEL }}
           path: |
             app/im-web/release/*.exe
             app/im-web/release/*.blockmap
             app/im-web/release/*.yml
+            app/im-web/release/release-provenance.json
           if-no-files-found: error
-      - name: Atomically publish to internal share
-        if: ${{ inputs.publish }}
+
+      - name: Publish immutable files and create approval draft
         env:
           UPDATE_PUBLISH_ROOT: ${{ secrets.UPDATE_PUBLISH_ROOT }}
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          RELEASE_DRAFT_ENDPOINT: ${{ secrets.INTERNAL_APP_ORIGIN }}/api/internal/client-release-drafts
+          EXPECTED_SIGNER_THUMBPRINT: ${{ secrets.WINDOWS_SIGNER_THUMBPRINT }}
+          EXPECTED_PUBLISHER: ${{ secrets.WINDOWS_PUBLISHER_NAME }}
         run: |
-          if (-not $env:UPDATE_PUBLISH_ROOT) { throw 'UPDATE_PUBLISH_ROOT is not configured' }
-          & '..\docker\scripts\publish-update.ps1' -SourceDirectory 'release' -PublishRoot $env:UPDATE_PUBLISH_ROOT -Channel '${{ inputs.channel }}' -Version '${{ inputs.version }}'
+          foreach ($name in @('UPDATE_PUBLISH_ROOT', 'RELEASE_AUTOMATION_TOKEN', 'RELEASE_DRAFT_ENDPOINT')) {
+            if (-not (Get-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue).Value) { throw "$name is not configured" }
+          }
+          & '..\docker\scripts\publish-update.ps1' `
+            -SourceDirectory 'release' `
+            -PublishRoot $env:UPDATE_PUBLISH_ROOT `
+            -Channel $env:RELEASE_CHANNEL `
+            -Version $env:RELEASE_VERSION `
+            -SourceCommit $env:SOURCE_COMMIT `
+            -PublicBaseUrl $env:ARTTALK_UPDATE_BASE_URL `
+            -ExpectedSignerThumbprint $env:EXPECTED_SIGNER_THUMBPRINT `
+            -ExpectedPublisher $env:EXPECTED_PUBLISHER `
+            -DraftEndpoint $env:RELEASE_DRAFT_ENDPOINT `
+            -AutomationToken $env:RELEASE_AUTOMATION_TOKEN

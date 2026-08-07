@@ -27,9 +27,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ReleaseAutomationAuthenticationFilter releaseAutomationAuthenticationFilter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ReleaseAutomationAuthenticationFilter releaseAutomationAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.releaseAutomationAuthenticationFilter = releaseAutomationAuthenticationFilter;
     }
 
     /**
@@ -54,12 +57,15 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/client/releases/policy").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/client/update-events").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/internal/client-release-drafts").hasRole("RELEASE_AUTOMATION")
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/files/download/**").permitAll()
                         .requestMatchers(HttpMethod.HEAD, "/api/files/download/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(releaseAutomationAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

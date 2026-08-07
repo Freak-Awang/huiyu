@@ -28,10 +28,14 @@ public class ImClientRelease {
     private String installerName; // 安装包文件名
     private Long installerSize; // 安装包大小（字节）
     private String installerSha512; // 安装包SHA-512校验值
+    private String sourceCommit; // 构建对应的完整 Git 提交
+    private String manifestName; // electron-builder 更新清单文件名
+    private String manifestDigest; // 更新清单 SHA-256
+    private String signerThumbprint; // Windows 签名证书指纹
+    private LocalDateTime artifactVerifiedAt; // 产物最近一次完整验证时间
     private String status; // 发布状态（如草稿/已发布/已下线）
     private LocalDateTime publishedAt; // 发布时间
     private Long createdBy; // 创建人ID
     private LocalDateTime createTime; // 创建时间
     private LocalDateTime updateTime; // 更新时间
 }
-

@@ -190,6 +190,11 @@ CREATE TABLE IF NOT EXISTS im_client_release (
     installer_name VARCHAR(255) NOT NULL,
     installer_size BIGINT NULL,
     installer_sha512 VARCHAR(256) NOT NULL,
+    source_commit CHAR(40) NOT NULL,
+    manifest_name VARCHAR(64) NOT NULL,
+    manifest_digest CHAR(64) NOT NULL,
+    signer_thumbprint VARCHAR(64) NOT NULL,
+    artifact_verified_at DATETIME NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'DRAFT',
     published_at DATETIME NULL,
     created_by BIGINT NULL,
@@ -213,6 +218,7 @@ CREATE TABLE IF NOT EXISTS im_client_release_target (
 CREATE TABLE IF NOT EXISTS im_client_update_event (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NULL,
+    release_id BIGINT NULL,
     device_id VARCHAR(128) NOT NULL,
     current_version VARCHAR(32) NULL,
     target_version VARCHAR(32) NULL,
@@ -224,8 +230,20 @@ CREATE TABLE IF NOT EXISTS im_client_update_event (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_update_device_version (device_id, target_version),
     KEY idx_update_event_created (event_type, create_time),
-    KEY idx_update_release_stats (target_version, channel, event_type)
+    KEY idx_update_release_stats (target_version, channel, event_type),
+    KEY idx_update_release_id_stats (release_id, event_type, device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='desktop update telemetry';
+
+CREATE TABLE IF NOT EXISTS im_client_release_audit (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    release_id BIGINT NOT NULL,
+    action VARCHAR(48) NOT NULL,
+    reason VARCHAR(500) NULL,
+    operator_id BIGINT NULL,
+    details VARCHAR(2000) NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_release_audit (release_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='append-only desktop release audit evidence';
 
 INSERT INTO sys_dept (name, parent_id, sort_order, status)
 SELECT 'Head Office', 0, 0, 1

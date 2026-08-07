@@ -1,7 +1,7 @@
 {
   "name": "arttalk-desktop",
   "private": true,
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "ArtTalk desktop client",
   "author": "ArtTalk",
   "type": "module",
@@ -42,12 +42,20 @@
     "directories": {
       "output": "release"
     },
+    "artifactName": "ArtTalk-Setup-${version}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "${env.ARTTALK_UPDATE_BASE_URL}"
+      }
+    ],
     "files": [
       "dist/**",
       "dist-electron/**",
       "package.json"
     ],
     "win": {
+      "publisherName": "${env.ARTTALK_WINDOWS_PUBLISHER}",
       "target": [
         {
           "target": "nsis",

@@ -47,4 +47,18 @@ class DatabaseMigrationResourceTest {
             assertThat(sql).contains("ELSE 'custom'");
         }
     }
+
+    @Test
+    void releasePipelineMigrationSupportsBothDatabaseBaselines() throws Exception {
+        try (var input = getClass().getResourceAsStream(
+                "/db/migration/V20260806__harden_client_release_pipeline.sql")) {
+            assertThat(input).isNotNull();
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(sql).contains("information_schema.COLUMNS");
+            assertThat(sql).contains("source_commit");
+            assertThat(sql).contains("manifest_digest");
+            assertThat(sql).contains("release_id");
+            assertThat(sql).contains("im_client_release_audit");
+        }
+    }
 }

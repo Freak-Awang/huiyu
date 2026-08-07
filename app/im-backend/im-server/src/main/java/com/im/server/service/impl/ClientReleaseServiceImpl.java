@@ -11,7 +11,9 @@ import com.im.server.mapper.ClientReleaseMapper;
 import com.im.server.mapper.ClientReleaseTargetMapper;
 import com.im.server.mapper.ClientUpdateEventMapper;
 import com.im.server.mapper.UserMapper;
+import com.im.server.service.ClientReleaseArtifactVerifier;
 import com.im.server.service.ClientReleaseService;
+import com.im.server.service.ReleaseAuditService;
 import com.im.server.service.SemVerUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,16 +24,16 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
-/**
- * 客户端版本发布服务实现：处理版本策略评估、灰度发布、定向规则及更新事件统计。
- */
+/** Implements the immutable draft -> approved release lifecycle and client rollout policy. */
 @Service
 public class ClientReleaseServiceImpl implements ClientReleaseService {
     private static final Set<String> CHANNELS = Set.of("stable", "beta");
@@ -39,27 +41,30 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
     private static final Set<String> TARGET_TYPES = Set.of("DEVICE", "USER", "DEPT");
     private static final Set<String> TARGET_MODES = Set.of("ALLOW", "DENY");
     private static final Set<String> EVENT_TYPES = Set.of("CHECKED", "CHECK_FAILED", "UPDATE_AVAILABLE",
-            "DOWNLOAD_STARTED", "DOWNLOAD_SUCCEEDED", "DOWNLOAD_FAILED", "INSTALL_REQUESTED", "VERSION_STARTED");
+            "POLICY_MANIFEST_MISMATCH", "DOWNLOAD_STARTED", "DOWNLOAD_SUCCEEDED", "DOWNLOAD_FAILED",
+            "INSTALL_REQUESTED", "INSTALL_BLOCKED_POLICY_CHANGED", "VERSION_STARTED");
+    private static final Set<String> RELEASE_EVENT_TYPES = Set.of("UPDATE_AVAILABLE", "POLICY_MANIFEST_MISMATCH",
+            "DOWNLOAD_STARTED", "DOWNLOAD_SUCCEEDED", "DOWNLOAD_FAILED", "INSTALL_REQUESTED",
+            "INSTALL_BLOCKED_POLICY_CHANGED", "VERSION_STARTED");
 
     private final ClientReleaseMapper releaseMapper;
     private final ClientReleaseTargetMapper targetMapper;
     private final ClientUpdateEventMapper eventMapper;
     private final UserMapper userMapper;
+    private final ClientReleaseArtifactVerifier artifactVerifier;
+    private final ReleaseAuditService auditService;
 
     public ClientReleaseServiceImpl(ClientReleaseMapper releaseMapper, ClientReleaseTargetMapper targetMapper,
-                                    ClientUpdateEventMapper eventMapper, UserMapper userMapper) {
+                                    ClientUpdateEventMapper eventMapper, UserMapper userMapper,
+                                    ClientReleaseArtifactVerifier artifactVerifier, ReleaseAuditService auditService) {
         this.releaseMapper = releaseMapper;
         this.targetMapper = targetMapper;
         this.eventMapper = eventMapper;
         this.userMapper = userMapper;
+        this.artifactVerifier = artifactVerifier;
+        this.auditService = auditService;
     }
 
-    /**
-     * 评估客户端更新策略。
-     * <p>
-     * 核心逻辑：先按渠道/平台/架构找到最新已发布版本，再依次检查 DENY 定向规则、
-     * 最低支持版本强制更新、ALLOW 定向规则及灰度百分比，最终决定是否放行更新。
-     */
     @Override
     public PolicyResponse evaluatePolicy(String platform, String arch, String channel, String currentVersion,
                                          String deviceId, Long userId) {
@@ -74,14 +79,18 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
                 .eq(ImClientRelease::getPlatform, normalizePlatform(platform))
                 .eq(ImClientRelease::getArch, normalizeArch(arch)));
         ImClientRelease release = releases.stream()
-                .max((a, b) -> SemVerUtil.compare(a.getVersion(), b.getVersion()))
+                .max((left, right) -> SemVerUtil.compare(left.getVersion(), right.getVersion()))
                 .orElse(null);
         if (release == null || SemVerUtil.compare(release.getVersion(), currentVersion) <= 0) {
             return noUpdate(normalizedChannel);
         }
 
-        SysUser user = userId == null ? null : userMapper.selectById(userId);
         List<ImClientReleaseTarget> targets = targets(release.getId());
+        SysUser user = userId == null ? null : userMapper.selectById(userId);
+        if (user == null && targets.stream().anyMatch(target ->
+                "USER".equals(target.getTargetType()) || "DEPT".equals(target.getTargetType()))) {
+            return noUpdate(normalizedChannel);
+        }
         if (matches(targets, "DENY", deviceId, user)) return noUpdate(normalizedChannel);
 
         boolean belowMinimum = StringUtils.hasText(release.getMinimumVersion())
@@ -92,39 +101,43 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         boolean eligible = force || explicitlyAllowed || rolloutBucket(deviceId, release.getVersion()) < rollout;
         if (!eligible) return noUpdate(normalizedChannel);
 
-        return new PolicyResponse(true, release.getVersion(), release.getMinimumVersion(), force, rollout,
-                release.getReleaseName(), splitNotes(release.getReleaseNotes()), release.getPublishedAt(),
+        return new PolicyResponse(true, release.getId(), release.getVersion(), release.getMinimumVersion(), force,
+                rollout, release.getReleaseName(), splitNotes(release.getReleaseNotes()), release.getPublishedAt(),
                 release.getUpdateBaseUrl(), normalizedChannel);
     }
 
-    /**
-     * 记录客户端更新事件。
-     */
     @Override
     public void recordEvent(UpdateEventRequest request, Long userId) {
-        if (request == null || !EVENT_TYPES.contains(normalize(request.eventType()))) {
-            throw new BusinessException(400, "Unsupported update event type");
-        }
+        String eventType = request == null ? "" : normalize(request.eventType());
+        if (!EVENT_TYPES.contains(eventType)) throw new BusinessException(400, "Unsupported update event type");
         if (!StringUtils.hasText(request.deviceId()) || request.deviceId().length() > 128) {
             throw new BusinessException(400, "Invalid deviceId");
         }
+        ImClientRelease release = request.releaseId() == null ? null : releaseMapper.selectById(request.releaseId());
+        if (RELEASE_EVENT_TYPES.contains(eventType) && release == null) {
+            throw new BusinessException(400, "releaseId is required for this event type");
+        }
+        if (release != null && (!Objects.equals(release.getVersion(), request.targetVersion())
+                || !Objects.equals(release.getChannel(), normalizeChannel(request.channel()))
+                || !Objects.equals(release.getPlatform(), normalizePlatform(request.platform()))
+                || !Objects.equals(release.getArch(), normalizeArch(request.arch())))) {
+            throw new BusinessException(400, "Update event does not match its release record");
+        }
         ImClientUpdateEvent event = new ImClientUpdateEvent();
         event.setUserId(userId);
+        event.setReleaseId(release == null ? null : release.getId());
         event.setDeviceId(request.deviceId());
         event.setCurrentVersion(trim(request.currentVersion(), 32));
         event.setTargetVersion(trim(request.targetVersion(), 32));
-        event.setEventType(normalize(request.eventType()));
+        event.setEventType(eventType);
         event.setErrorMessage(trim(request.errorMessage(), 1000));
-        event.setPlatform(trim(request.platform(), 16));
-        event.setArch(trim(request.arch(), 16));
+        event.setPlatform(normalizePlatform(request.platform()));
+        event.setArch(normalizeArch(request.arch()));
         event.setChannel(normalizeChannel(request.channel()));
         event.setCreateTime(LocalDateTime.now());
         eventMapper.insert(event);
     }
 
-    /**
-     * 分页查询版本发布记录。
-     */
     @Override
     public ReleasePage page(String channel, String status, int page, int pageSize) {
         LambdaQueryWrapper<ImClientRelease> query = new LambdaQueryWrapper<>();
@@ -141,9 +154,6 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return new ReleasePage(result.getRecords(), result.getTotal(), safePage, safeSize);
     }
 
-    /**
-     * 查询版本发布详情。
-     */
     @Override
     public ReleaseDetail get(Long id) {
         ImClientRelease release = releaseMapper.selectById(id);
@@ -151,101 +161,156 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return new ReleaseDetail(release, targets(id));
     }
 
-    /**
-     * 保存版本发布草稿。
-     * <p>
-     * 已发布/暂停/被替换的版本不允许修改安装包信息，只能修改发布名称、说明等元数据。
-     */
     @Override
     @Transactional
-    public ReleaseDetail save(ReleaseRequest request, Long operatorId) {
-        if (request == null) throw new BusinessException(400, "Release payload is required");
-        validateRequest(request);
-        ImClientRelease release = request.id() == null ? new ImClientRelease() : releaseMapper.selectById(request.id());
-        if (release == null) throw new BusinessException(404, "Client release not found");
-        boolean artifactsImmutable = release.getStatus() != null && !"DRAFT".equals(release.getStatus());
-        if (!artifactsImmutable) {
-            release.setVersion(request.version().trim());
-            release.setChannel(normalizeChannel(request.channel()));
-            release.setPlatform(normalizePlatform(request.platform()));
-            release.setArch(normalizeArch(request.arch()));
-            release.setUpdateBaseUrl(normalizeBaseUrl(request.updateBaseUrl()));
-            release.setInstallerName(request.installerName().trim());
-            release.setInstallerSize(request.installerSize());
-            release.setInstallerSha512(request.installerSha512().trim());
+    public ReleaseDetail createAutomationDraft(AutomationDraftRequest request) {
+        DraftValues values = validateDraft(request);
+        ImClientRelease existing = releaseMapper.selectOne(new LambdaQueryWrapper<ImClientRelease>()
+                .eq(ImClientRelease::getVersion, values.version())
+                .eq(ImClientRelease::getChannel, values.channel())
+                .eq(ImClientRelease::getPlatform, values.platform())
+                .eq(ImClientRelease::getArch, values.arch()));
+        if (existing != null) {
+            assertSameArtifacts(existing, values);
+            if ("DRAFT".equals(existing.getStatus())) {
+                existing.setArtifactVerifiedAt(values.verifiedAt());
+                existing.setUpdateTime(LocalDateTime.now());
+                releaseMapper.updateById(existing);
+            }
+            return get(existing.getId());
         }
-        release.setReleaseName(request.releaseName().trim());
-        release.setReleaseNotes(joinNotes(request.releaseNotes()));
-        release.setMinimumVersion(blankToNull(request.minimumVersion()));
-        release.setForceUpdate(Boolean.TRUE.equals(request.forceUpdate()));
-        release.setRolloutPercentage(request.rolloutPercentage() == null ? 100 : request.rolloutPercentage());
+
+        ImClientRelease release = new ImClientRelease();
+        release.setVersion(values.version());
+        release.setChannel(values.channel());
+        release.setPlatform(values.platform());
+        release.setArch(values.arch());
+        release.setReleaseName("ArtTalk " + values.version());
+        release.setForceUpdate(false);
+        release.setRolloutPercentage(0);
+        release.setUpdateBaseUrl(values.baseUrl());
+        release.setManifestName(values.manifestName());
+        release.setManifestDigest(values.manifestDigest());
+        release.setInstallerName(values.installerName());
+        release.setInstallerSize(values.installerSize());
+        release.setInstallerSha512(values.installerSha512());
+        release.setSourceCommit(values.sourceCommit());
+        release.setSignerThumbprint(values.signerThumbprint());
+        release.setArtifactVerifiedAt(values.verifiedAt());
+        release.setStatus("DRAFT");
+        release.setCreateTime(LocalDateTime.now());
         release.setUpdateTime(LocalDateTime.now());
-        if (release.getId() == null) {
-            release.setStatus("DRAFT");
-            release.setCreatedBy(operatorId);
-            release.setCreateTime(LocalDateTime.now());
-            releaseMapper.insert(release);
-        } else {
-            releaseMapper.updateById(release);
-        }
-        replaceTargets(release.getId(), request.targets());
+        releaseMapper.insert(release);
+        auditService.record(release.getId(), "DRAFT_CREATED", "release pipeline import", null,
+                "sourceCommit=" + release.getSourceCommit() + ", manifestDigest=" + release.getManifestDigest());
         return get(release.getId());
     }
 
-    /**
-     * 发布版本。
-     * <p>
-     * 同渠道/平台/架构下只允许一个 PUBLISHED 版本，新版本发布会将旧版本置为 REPLACED。
-     */
     @Override
     @Transactional
-    public ReleaseDetail publish(Long id, Long operatorId) {
+    public ReleaseDetail updatePolicy(Long id, PolicyUpdateRequest request, Long operatorId) {
+        if (request == null) throw new BusinessException(400, "Policy payload is required");
+        ImClientRelease release = get(id).release();
+        if ("REPLACED".equals(release.getStatus())) throw new BusinessException(409, "Replaced releases are read-only");
+        String reason = requireReason(request.reason());
+        if (!StringUtils.hasText(request.releaseName()) || request.releaseName().length() > 128) {
+            throw new BusinessException(400, "releaseName is required and must not exceed 128 characters");
+        }
+        String minimumVersion = blankToNull(request.minimumVersion());
+        if (minimumVersion != null) {
+            requireSemVer(minimumVersion, "minimumVersion");
+            if (SemVerUtil.compare(minimumVersion, release.getVersion()) > 0) {
+                throw new BusinessException(400, "minimumVersion must not exceed release version");
+            }
+        }
+        int rollout = request.rolloutPercentage() == null
+                ? (release.getRolloutPercentage() == null ? 100 : release.getRolloutPercentage())
+                : request.rolloutPercentage();
+        if (rollout < 0 || rollout > 100) throw new BusinessException(400, "rolloutPercentage must be between 0 and 100");
+        boolean forceUpdate = Boolean.TRUE.equals(request.forceUpdate());
+        if (forceUpdate || minimumVersion != null) requireVersionConfirmation(release, request.confirmationVersion());
+        validateTargets(request.targets());
+
+        release.setReleaseName(request.releaseName().trim());
+        release.setReleaseNotes(joinNotes(request.releaseNotes()));
+        release.setMinimumVersion(minimumVersion);
+        release.setForceUpdate(forceUpdate);
+        release.setRolloutPercentage(rollout);
+        release.setUpdateTime(LocalDateTime.now());
+        releaseMapper.updateById(release);
+        replaceTargets(release.getId(), request.targets());
+        auditService.record(id, "POLICY_UPDATED", reason, operatorId,
+                "rollout=" + rollout + ", forceUpdate=" + forceUpdate);
+        return get(id);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseDetail publish(Long id, ReleaseActionRequest request, Long operatorId) {
+        String reason = requireReason(request == null ? null : request.reason());
         ImClientRelease release = get(id).release();
         if (!"DRAFT".equals(release.getStatus()) && !"PAUSED".equals(release.getStatus())) {
             throw new BusinessException(409, "Only draft or paused releases can be published");
         }
-        List<ImClientRelease> active = releaseMapper.selectList(new LambdaQueryWrapper<ImClientRelease>()
-                .eq(ImClientRelease::getStatus, "PUBLISHED")
-                .eq(ImClientRelease::getChannel, release.getChannel())
-                .eq(ImClientRelease::getPlatform, release.getPlatform())
-                .eq(ImClientRelease::getArch, release.getArch()));
-        for (ImClientRelease prior : active) {
+        if (Boolean.TRUE.equals(release.getForceUpdate()) || StringUtils.hasText(release.getMinimumVersion())) {
+            requireVersionConfirmation(release, request.confirmationVersion());
+        }
+        LocalDateTime verifiedAt;
+        try {
+            verifiedAt = artifactVerifier.verify(release);
+        } catch (RuntimeException exception) {
+            auditService.recordFailure(id, "ARTIFACT_VERIFICATION_FAILED", reason, operatorId,
+                    trim(exception.getMessage(), 1000));
+            throw exception;
+        }
+
+        List<ImClientRelease> scope = releaseMapper.lockReleaseScope(
+                release.getChannel(), release.getPlatform(), release.getArch());
+        release = scope.stream().filter(item -> Objects.equals(item.getId(), id)).findFirst().orElse(releaseMapper.selectById(id));
+        if (!"DRAFT".equals(release.getStatus()) && !"PAUSED".equals(release.getStatus())) {
+            throw new BusinessException(409, "Release state changed while it was being verified");
+        }
+        for (ImClientRelease prior : scope) {
+            if (!"PUBLISHED".equals(prior.getStatus()) || Objects.equals(prior.getId(), release.getId())) continue;
             if (SemVerUtil.compare(release.getVersion(), prior.getVersion()) <= 0) {
                 throw new BusinessException(409, "Published version must be higher than the current release");
             }
             prior.setStatus("REPLACED");
             prior.setUpdateTime(LocalDateTime.now());
             releaseMapper.updateById(prior);
+            auditService.record(prior.getId(), "REPLACED", reason, operatorId,
+                    "replacedByReleaseId=" + release.getId());
         }
+        release.setArtifactVerifiedAt(verifiedAt);
         release.setStatus("PUBLISHED");
         release.setPublishedAt(LocalDateTime.now());
-        release.setCreatedBy(release.getCreatedBy() == null ? operatorId : release.getCreatedBy());
         release.setUpdateTime(LocalDateTime.now());
         releaseMapper.updateById(release);
+        auditService.record(id, "PUBLISHED", reason, operatorId, "artifactVerifiedAt=" + verifiedAt);
         return get(id);
     }
 
-    /**
-     * 暂停已发布版本。
-     */
     @Override
-    public ReleaseDetail pause(Long id) {
+    @Transactional
+    public ReleaseDetail pause(Long id, ReleaseActionRequest request, Long operatorId) {
+        String reason = requireReason(request == null ? null : request.reason());
         ImClientRelease release = get(id).release();
-        if (!"PUBLISHED".equals(release.getStatus())) throw new BusinessException(409, "Only published releases can be paused");
+        if (!"PUBLISHED".equals(release.getStatus())) {
+            throw new BusinessException(409, "Only published releases can be paused");
+        }
         release.setStatus("PAUSED");
         release.setUpdateTime(LocalDateTime.now());
         releaseMapper.updateById(release);
+        auditService.record(id, "PAUSED", reason, operatorId, null);
         return get(id);
     }
 
-    /**
-     * 统计版本更新事件数据。
-     */
     @Override
     public Map<String, Object> statistics(Long id) {
         ImClientRelease release = get(id).release();
-        List<Map<String, Object>> rows = eventMapper.summarize(release.getVersion(), release.getChannel());
+        List<Map<String, Object>> rows = eventMapper.summarize(id);
         Map<String, Object> result = new HashMap<>();
+        result.put("releaseId", id);
         result.put("version", release.getVersion());
         result.put("channel", release.getChannel());
         result.put("events", rows);
@@ -257,85 +322,148 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         return result;
     }
 
-    private void validateRequest(ReleaseRequest request) {
+    private DraftValues validateDraft(AutomationDraftRequest request) {
+        if (request == null) throw new BusinessException(400, "Release draft payload is required");
         requireSemVer(request.version(), "version");
-        normalizeChannel(request.channel());
-        if (!StringUtils.hasText(request.releaseName()) || request.releaseName().length() > 128) {
-            throw new BusinessException(400, "releaseName is required and must not exceed 128 characters");
+        String version = request.version().trim();
+        String channel = normalizeChannel(request.channel());
+        if (channel.equals("stable") && version.contains("-")) throw new BusinessException(400, "Stable version cannot be a prerelease");
+        if (channel.equals("beta") && !version.matches(".*-beta(?:\\.|$).*$")) throw new BusinessException(400, "Beta version must use a beta identifier");
+        String platform = normalizePlatform(request.platform());
+        String arch = normalizeArch(request.arch());
+        if (!"win32".equals(platform) || !"x64".equals(arch)) throw new BusinessException(400, "Only win32/x64 is supported by this pipeline");
+        String baseUrl = normalizeBaseUrl(request.updateBaseUrl(), channel, version);
+        String manifestName = channel.equals("beta") ? "beta.yml" : "latest.yml";
+        if (!manifestName.equals(request.manifestName())) throw new BusinessException(400, "Unexpected manifest name");
+        if (!StringUtils.hasText(request.manifestDigest()) || !request.manifestDigest().matches("(?i)^[0-9a-f]{64}$")) {
+            throw new BusinessException(400, "manifestDigest must be a SHA-256 hex digest");
         }
-        if (StringUtils.hasText(request.minimumVersion())) {
-            requireSemVer(request.minimumVersion(), "minimumVersion");
-            if (SemVerUtil.compare(request.minimumVersion(), request.version()) > 0) {
-                throw new BusinessException(400, "minimumVersion must not exceed version");
+        String expectedInstaller = "ArtTalk-Setup-" + version + "-x64.exe";
+        if (!expectedInstaller.equals(request.installerName())) throw new BusinessException(400, "Unexpected installer name");
+        if (request.installerSize() == null || request.installerSize() <= 0) throw new BusinessException(400, "installerSize must be positive");
+        if (!StringUtils.hasText(request.installerSha512()) || !request.installerSha512().matches("[A-Za-z0-9+/]{86}==")) {
+            throw new BusinessException(400, "installerSha512 must be a base64 SHA-512 digest");
+        }
+        if (!StringUtils.hasText(request.sourceCommit()) || !request.sourceCommit().matches("(?i)^[0-9a-f]{40}$")) {
+            throw new BusinessException(400, "sourceCommit must be a full Git SHA");
+        }
+        if (!StringUtils.hasText(request.signerThumbprint()) || !request.signerThumbprint().matches("(?i)^[0-9a-f]{40,64}$")) {
+            throw new BusinessException(400, "signerThumbprint is invalid");
+        }
+        if (request.artifactVerifiedAt() == null) throw new BusinessException(400, "artifactVerifiedAt is required");
+        LocalDateTime verifiedAt = request.artifactVerifiedAt().atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDateTime now = LocalDateTime.now();
+        if (verifiedAt.isBefore(now.minusHours(24)) || verifiedAt.isAfter(now.plusMinutes(5))) {
+            throw new BusinessException(400, "artifactVerifiedAt is outside the accepted window");
+        }
+        return new DraftValues(version, channel, platform, arch, baseUrl, manifestName,
+                request.manifestDigest().toLowerCase(Locale.ROOT), expectedInstaller, request.installerSize(),
+                request.installerSha512(), request.sourceCommit().toLowerCase(Locale.ROOT),
+                request.signerThumbprint().toUpperCase(Locale.ROOT), verifiedAt);
+    }
+
+    private void assertSameArtifacts(ImClientRelease release, DraftValues values) {
+        boolean same = Objects.equals(release.getUpdateBaseUrl(), values.baseUrl())
+                && Objects.equals(release.getManifestName(), values.manifestName())
+                && Objects.equals(release.getManifestDigest(), values.manifestDigest())
+                && Objects.equals(release.getInstallerName(), values.installerName())
+                && Objects.equals(release.getInstallerSize(), values.installerSize())
+                && Objects.equals(release.getInstallerSha512(), values.installerSha512())
+                && Objects.equals(release.getSourceCommit(), values.sourceCommit())
+                && Objects.equals(release.getSignerThumbprint(), values.signerThumbprint());
+        if (!same) throw new BusinessException(409, "Release version already exists with different immutable artifacts");
+    }
+
+    private String normalizeBaseUrl(String value, String channel, String version) {
+        if (!StringUtils.hasText(value)) throw new BusinessException(400, "updateBaseUrl is required");
+        try {
+            URI uri = URI.create(value.trim());
+            String host = uri.getHost();
+            boolean loopback = "http".equalsIgnoreCase(uri.getScheme())
+                    && ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host));
+            String expectedPath = "/downloads/arttalk/" + channel + "/" + version + "/win-x64/";
+            if (host == null || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
+                    || (!"https".equalsIgnoreCase(uri.getScheme()) && !loopback)
+                    || !expectedPath.equals(uri.getPath())) {
+                throw new IllegalArgumentException();
             }
+            return uri.toString();
+        } catch (Exception exception) {
+            throw new BusinessException(400, "updateBaseUrl must use the immutable HTTPS release path");
         }
-        int rollout = request.rolloutPercentage() == null ? 100 : request.rolloutPercentage();
-        if (rollout < 0 || rollout > 100) throw new BusinessException(400, "rolloutPercentage must be between 0 and 100");
-        normalizeBaseUrl(request.updateBaseUrl());
-        if (!StringUtils.hasText(request.installerName())
-                || !request.installerName().matches("[A-Za-z0-9 ._()\\-]{1,200}\\.exe")) {
-            throw new BusinessException(400, "installerName must be a safe .exe basename");
-        }
-        if (!StringUtils.hasText(request.installerSha512())
-                || !request.installerSha512().trim().matches("[A-Za-z0-9+/]{86}==")) {
-            throw new BusinessException(400, "installerSha512 must be a base64-encoded SHA-512 digest");
+    }
+
+    private void validateTargets(List<TargetRule> rules) {
+        if (rules == null) return;
+        if (rules.size() > 1000) throw new BusinessException(400, "Too many target rules");
+        for (TargetRule rule : rules) {
+            String type = normalize(rule.targetType());
+            String mode = normalize(rule.mode());
+            if (!TARGET_TYPES.contains(type) || !TARGET_MODES.contains(mode)
+                    || !StringUtils.hasText(rule.targetValue()) || rule.targetValue().length() > 128) {
+                throw new BusinessException(400, "Invalid release target rule");
+            }
         }
     }
 
     private void replaceTargets(Long releaseId, List<TargetRule> rules) {
-        targetMapper.delete(new LambdaQueryWrapper<ImClientReleaseTarget>().eq(ImClientReleaseTarget::getReleaseId, releaseId));
+        targetMapper.delete(new LambdaQueryWrapper<ImClientReleaseTarget>()
+                .eq(ImClientReleaseTarget::getReleaseId, releaseId));
         if (rules == null) return;
         for (TargetRule rule : rules) {
-            String type = normalize(rule.targetType());
-            String mode = normalize(rule.mode());
-            if (!TARGET_TYPES.contains(type) || !TARGET_MODES.contains(mode) || !StringUtils.hasText(rule.targetValue())) {
-                throw new BusinessException(400, "Invalid release target rule");
-            }
             ImClientReleaseTarget target = new ImClientReleaseTarget();
             target.setReleaseId(releaseId);
-            target.setTargetType(type);
+            target.setTargetType(normalize(rule.targetType()));
             target.setTargetValue(rule.targetValue().trim());
-            target.setMode(mode);
+            target.setMode(normalize(rule.mode()));
             target.setCreateTime(LocalDateTime.now());
             targetMapper.insert(target);
         }
+    }
+
+    private void requireVersionConfirmation(ImClientRelease release, String confirmationVersion) {
+        if (!release.getVersion().equals(confirmationVersion)) {
+            throw new BusinessException(400, "confirmationVersion must match the release version");
+        }
+    }
+
+    private String requireReason(String value) {
+        if (!StringUtils.hasText(value) || value.trim().length() > 500) {
+            throw new BusinessException(400, "A reason of at most 500 characters is required");
+        }
+        return value.trim();
     }
 
     private boolean matches(List<ImClientReleaseTarget> targets, String mode, String deviceId, SysUser user) {
         for (ImClientReleaseTarget target : targets) {
             if (!mode.equals(target.getMode())) continue;
             if ("DEVICE".equals(target.getTargetType()) && target.getTargetValue().equals(deviceId)) return true;
-            if (user != null && "USER".equals(target.getTargetType()) && target.getTargetValue().equals(String.valueOf(user.getId()))) return true;
+            if (user != null && "USER".equals(target.getTargetType())
+                    && target.getTargetValue().equals(String.valueOf(user.getId()))) return true;
             if (user != null && user.getDeptId() != null && "DEPT".equals(target.getTargetType())
                     && target.getTargetValue().equals(String.valueOf(user.getDeptId()))) return true;
         }
         return false;
     }
 
-    /**
-     * 计算设备在指定版本下的灰度分桶值（0-99）。
-     * <p>
-     * 使用 SHA-256(deviceId:version) 的前 4 字节取模 100，保证同一设备在同一版本下
-     * 分桶结果稳定，且不同版本之间分桶独立。
-     */
     private int rolloutBucket(String deviceId, String version) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest((deviceId + ":" + version).getBytes(StandardCharsets.UTF_8));
-            long unsigned = Integer.toUnsignedLong(ByteBuffer.wrap(digest).getInt());
-            return (int) (unsigned % 100);
-        } catch (Exception e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
+            return (int) (Integer.toUnsignedLong(ByteBuffer.wrap(digest).getInt()) % 100);
+        } catch (Exception exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
     }
 
     private List<ImClientReleaseTarget> targets(Long releaseId) {
-        return targetMapper.selectList(new LambdaQueryWrapper<ImClientReleaseTarget>()
+        List<ImClientReleaseTarget> values = targetMapper.selectList(new LambdaQueryWrapper<ImClientReleaseTarget>()
                 .eq(ImClientReleaseTarget::getReleaseId, releaseId));
+        return values == null ? List.of() : values;
     }
 
     private PolicyResponse noUpdate(String channel) {
-        return new PolicyResponse(false, null, null, false, 0, null, List.of(), null, null, channel);
+        return new PolicyResponse(false, null, null, null, false, 0, null, List.of(), null, null, channel);
     }
 
     private long deviceCount(List<Map<String, Object>> rows, String eventType) {
@@ -345,24 +473,6 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
 
     private void requireSemVer(String value, String field) {
         if (!SemVerUtil.isValid(value)) throw new BusinessException(400, field + " must be a valid semantic version");
-    }
-
-    private String normalizeBaseUrl(String value) {
-        if (!StringUtils.hasText(value)) throw new BusinessException(400, "updateBaseUrl is required");
-        try {
-            URI uri = URI.create(value.trim());
-            String host = uri.getHost();
-            boolean loopback = "http".equalsIgnoreCase(uri.getScheme())
-                    && ("localhost".equalsIgnoreCase(host)
-                        || "127.0.0.1".equals(host)
-                        || "::1".equals(host));
-            if (host == null || (!"https".equalsIgnoreCase(uri.getScheme()) && !loopback)) {
-                throw new IllegalArgumentException();
-            }
-            return value.trim().endsWith("/") ? value.trim() : value.trim() + "/";
-        } catch (Exception e) {
-            throw new BusinessException(400, "updateBaseUrl must use HTTPS (HTTP is allowed only for loopback)");
-        }
     }
 
     private String normalizeChannel(String value) {
@@ -402,4 +512,9 @@ public class ClientReleaseServiceImpl implements ClientReleaseService {
         if (!StringUtils.hasText(notes)) return List.of();
         return new ArrayList<>(List.of(notes.split("\\R")));
     }
+
+    private record DraftValues(String version, String channel, String platform, String arch, String baseUrl,
+                               String manifestName, String manifestDigest, String installerName, Long installerSize,
+                               String installerSha512, String sourceCommit, String signerThumbprint,
+                               LocalDateTime verifiedAt) {}
 }
