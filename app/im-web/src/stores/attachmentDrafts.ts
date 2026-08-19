@@ -8,6 +8,8 @@ import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
 
 /** 附件类型：图片或普通文件 */
 export type AttachmentDraftKind = 'image' | 'file'
+/** 附件分类方式：由入口明确指定，或根据文件元数据自动识别 */
+export type AttachmentDraftClassification = AttachmentDraftKind | 'auto'
 /** 附件上传状态 */
 export type AttachmentDraftStatus = 'waiting' | 'hashing' | 'uploading' | 'paused' | 'failed'
 
@@ -60,8 +62,37 @@ function createDraftId() {
     || `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-function isImageFile(file: File) {
-  return file.type.startsWith('image/')
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+])
+
+const GENERIC_MIME_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'binary/octet-stream',
+])
+
+const SUPPORTED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
+
+function normalizedMimeType(file: File) {
+  return (file.type || '').split(';', 1)[0].trim().toLowerCase()
+}
+
+function hasSupportedImageExtension(file: File) {
+  const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : undefined
+  return !!extension && SUPPORTED_IMAGE_EXTENSIONS.has(extension)
+}
+
+function resolveDraftKind(file: File, classification: AttachmentDraftClassification): AttachmentDraftKind {
+  if (classification !== 'auto') return classification
+
+  const mimeType = normalizedMimeType(file)
+  if (SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) return 'image'
+  if (GENERIC_MIME_TYPES.has(mimeType) && hasSupportedImageExtension(file)) return 'image'
+  return 'file'
 }
 
 function fingerprint(file: File) {
@@ -96,9 +127,14 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
    * 自动过滤空文件、超大文件及重复文件，图片文件生成预览 URL。
    * @param conversationId 会话 ID
    * @param files 待添加的文件数组
+   * @param classification 分类方式；图片/文件入口应明确传值，拖拽等场景使用 auto
    * @returns 添加结果（成功列表、重复数、错误列表）
    */
-  function addFiles(conversationId: string, files: File[]): AddAttachmentResult {
+  function addFiles(
+    conversationId: string,
+    files: File[],
+    classification: AttachmentDraftClassification = 'auto',
+  ): AddAttachmentResult {
     const current = draftsFor(conversationId)
     const fingerprints = new Set(current.map((draft) => fingerprint(draft.file)))
     const added: AttachmentDraft[] = []
@@ -107,7 +143,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
 
     for (const file of files) {
       const name = file.name || 'file'
-      const kind: AttachmentDraftKind = isImageFile(file) ? 'image' : 'file'
+      const kind = resolveDraftKind(file, classification)
       const maxSize = kind === 'image' ? DIRECT_UPLOAD_MAX_SIZE : FILE_UPLOAD_MAX_SIZE
       if (file.size <= 0) {
         errors.push(`${name}：文件为空`)

@@ -249,7 +249,11 @@ export async function uploadConversationFile(
     return task.file
   }
   if (!task) {
-    task = (await createUploadTask(file, conversationId, sha256)).data
+    // 分片服务会对 image/* 执行内联图片白名单校验；文件入口明确选择的图片应保持普通文件语义。
+    const taskContentType = (file.type || '').toLowerCase().startsWith('image/')
+      ? 'application/octet-stream'
+      : file.type || 'application/octet-stream'
+    task = (await createUploadTask(file, conversationId, sha256, taskContentType)).data
     if (task.fileExists && task.file) {
       // 秒传：服务端已有相同文件
       options.onProgress?.({ stage: 'completed', progress: 1, uploadedBytes: file.size, totalBytes: file.size })

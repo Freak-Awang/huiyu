@@ -38,11 +38,16 @@ class MemoryStorage {
   clear() { this.values.clear() }
 }
 
-function file(size: number, lastModified = 123): File {
+function file(
+  size: number,
+  lastModified = 123,
+  type = 'application/octet-stream',
+  name = 'report.bin',
+): File {
   return {
-    name: 'report.bin',
+    name,
     size,
-    type: 'application/octet-stream',
+    type,
     lastModified,
     slice: (start: number, end?: number) => ({ size: (end ?? size) - start }) as Blob,
   } as File
@@ -111,6 +116,22 @@ describe('file transfer orchestrator', () => {
 
     expect(result.id).toBe('88')
     expect(api.uploadFilePart).not.toHaveBeenCalled()
+  })
+
+  it('downgrades image MIME when an image is sent as a chunked file', async () => {
+    const largeImageFile = file(100 * 1024 * 1024 + 1, 123, 'image/svg+xml', 'diagram.svg')
+    api.createUploadTask.mockResolvedValue({
+      data: { fileExists: true, file: fileVO('89'), chunkSize: 64, chunkCount: 0, uploadedParts: [] },
+    })
+
+    await uploadConversationFile(largeImageFile, '3', '7')
+
+    expect(api.createUploadTask).toHaveBeenCalledWith(
+      largeImageFile,
+      '3',
+      'abc',
+      'application/octet-stream',
+    )
   })
 
   it('resumes by uploading only missing server parts', async () => {

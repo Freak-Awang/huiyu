@@ -466,7 +466,14 @@
               @keydown.space.prevent="activateFileLabel"
             >
               <img :src="imageIcon" alt="" />
-              <input type="file" accept="image/*" multiple hidden :disabled="isSendingMessage" @change="onSendImage" />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp"
+                multiple
+                hidden
+                :disabled="isSendingMessage"
+                @change="onSendImage"
+              />
             </label>
             <label
               class="tool-btn"
@@ -1150,7 +1157,11 @@ import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import { useUpdateStore } from '../stores/update'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
-import { useAttachmentDraftStore, type AttachmentDraft } from '../stores/attachmentDrafts'
+import {
+  useAttachmentDraftStore,
+  type AttachmentDraft,
+  type AttachmentDraftClassification,
+} from '../stores/attachmentDrafts'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
@@ -1762,7 +1773,7 @@ function setAttachmentFeedback(message: string, isError = false) {
 }
 
 // 添加附件到当前会话的草稿列表，处理重复和错误
-function addAttachmentFiles(files: File[]) {
+function addAttachmentFiles(files: File[], classification: AttachmentDraftClassification = 'auto') {
   const conversationId = chatStore.currentConversation?.conversationId
   if (!conversationId || !authStore.currentUser) {
     setAttachmentFeedback('请先选择会话，再添加附件', true)
@@ -1777,10 +1788,13 @@ function addAttachmentFiles(files: File[]) {
     return false
   }
 
-  const result = attachmentDraftStore.addFiles(conversationId, files)
+  const result = attachmentDraftStore.addFiles(conversationId, files, classification)
   const messages: string[] = []
-  if (result.added.length) messages.push(`已添加 ${result.added.length} 个附件`)
-  if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复附件`)
+  const imageCount = result.added.filter((draft) => draft.kind === 'image').length
+  const fileCount = result.added.length - imageCount
+  if (imageCount) messages.push(`已添加 ${imageCount} 张图片`)
+  if (fileCount) messages.push(`已添加 ${fileCount} 个文件`)
+  if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复项`)
   if (result.errors.length) messages.push(...result.errors)
   setAttachmentFeedback(messages.join('；'), result.errors.length > 0 || !result.added.length)
   return result.added.length > 0
@@ -1849,7 +1863,7 @@ function handleAttachmentDrop(event: DragEvent) {
     setAttachmentFeedback('暂不支持拖入文件夹，请选择文件后重试', true)
     return
   }
-  addAttachmentFiles(Array.from(event.dataTransfer?.files || []))
+  addAttachmentFiles(Array.from(event.dataTransfer?.files || []), 'auto')
 }
 
 function preventWindowFileDrop(event: DragEvent) {
@@ -1873,7 +1887,7 @@ function handleMessagePaste(event: ClipboardEvent) {
   if (!files.length) return
 
   event.preventDefault()
-  addAttachmentFiles(files)
+  addAttachmentFiles(files, 'image')
   closeMentionPicker()
   closeEmojiPanel()
 }
@@ -3240,21 +3254,21 @@ function activateFileLabel(event: KeyboardEvent) {
 
 function onSendImage(e: Event) {
   const input = e.target as HTMLInputElement
-  const files = Array.from(input.files || []).filter((file) => file.type.startsWith('image/'))
-  if (files.length) addAttachmentFiles(files)
+  const files = Array.from(input.files || [])
+  if (files.length) addAttachmentFiles(files, 'image')
   input.value = ''
 }
 
 function onSendFile(e: Event) {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files || [])
-  if (files.length) addAttachmentFiles(files)
+  if (files.length) addAttachmentFiles(files, 'file')
   input.value = ''
 }
 
 // 构建并发送图片/文件消息
 function sendMediaMessage(
-  type: string,
+  type: 'IMAGE' | 'FILE',
   content: string,
   displayContent = content,
   conv = chatStore.currentConversation,
@@ -3270,7 +3284,7 @@ function sendMediaMessage(
     senderName: user.nickname,
     senderAvatar: user.avatar || '',
     senderSignature: user.signature || '',
-    messageType: type as any,
+    messageType: type,
     content,
     displayContent,
     mentions: [],

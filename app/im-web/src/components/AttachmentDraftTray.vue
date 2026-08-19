@@ -1,12 +1,12 @@
 <!-- 附件拖拽区：显示待发送的附件列表，支持图片预览、文件上传进度、暂停/重试/移除操作 -->
 <template>
-  <div v-if="drafts.length" class="attachment-draft-list" aria-label="待发送附件">
+  <div v-if="drafts.length" class="attachment-draft-list" aria-label="待发送图片和文件">
     <article
       v-for="draft in drafts"
       :key="draft.id"
       class="attachment-draft-item"
       :class="{ 'is-image': draft.kind === 'image', 'has-error': draft.status === 'failed' }"
-      :title="`${draft.name} (${formatFileSize(draft.size)})`"
+      :title="`${kindText(draft)}：${draft.name} (${formatFileSize(draft.size)})`"
     >
       <img
         v-if="draft.kind === 'image' && draft.previewUrl"
@@ -17,7 +17,10 @@
       <span v-else class="attachment-draft-icon" aria-hidden="true">
         <img :src="fileIcon" alt="" />
       </span>
-      <span class="attachment-draft-name">{{ draft.name }}</span>
+      <span class="attachment-draft-main">
+        <span class="attachment-draft-name">{{ draft.name }}</span>
+        <span class="attachment-draft-kind">{{ kindText(draft) }}</span>
+      </span>
       <span class="attachment-draft-size">{{ formatFileSize(draft.size) }}</span>
       <span v-if="draft.status !== 'waiting'" class="attachment-draft-status">
         {{ statusText(draft) }}
@@ -39,7 +42,7 @@
         type="button"
         class="attachment-draft-remove"
         :disabled="disabled"
-        :aria-label="`移除附件 ${draft.name}`"
+        :aria-label="`移除${kindText(draft)} ${draft.name}`"
         @click="$emit('remove', draft)"
       >×</button>
     </article>
@@ -68,6 +71,10 @@ function formatFileSize(size: number) {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
   return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
+function kindText(draft: AttachmentDraft) {
+  return draft.kind === 'image' ? '图片' : '文件'
 }
 
 // 根据草稿状态返回对应的状态文本（校验/上传进度、已暂停、失败原因）
@@ -129,12 +136,29 @@ function statusText(draft: AttachmentDraft) {
   width: 20px;
 }
 
+.attachment-draft-main {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
 .attachment-draft-name {
   color: var(--text-primary);
   font-size: var(--font-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.attachment-draft-kind {
+  background: var(--accent-bg-light);
+  border-radius: 999px;
+  color: var(--accent);
+  flex: none;
+  font-size: 10px;
+  line-height: 18px;
+  padding: 0 6px;
 }
 
 .attachment-draft-size {
@@ -215,6 +239,11 @@ function statusText(draft: AttachmentDraft) {
 
 :global(.dark-theme) .attachment-draft-name {
   color: #edf0f5;
+}
+
+:global(.dark-theme) .attachment-draft-kind {
+  background: #41495c;
+  color: #c4ccff;
 }
 
 :global(.dark-theme) .attachment-draft-size {

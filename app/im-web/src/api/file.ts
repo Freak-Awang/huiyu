@@ -175,13 +175,19 @@ function normalizeUploadTask(raw: RawFileUploadTask): FileUploadTask {
  * @param file 待上传文件
  * @param conversationId 所属会话 ID
  * @param sha256 文件 SHA-256 哈希值
+ * @param contentType 任务使用的内容类型；作为普通文件发送图片格式时可降级为二进制类型
  * @returns 创建的上传任务信息
  */
-export function createUploadTask(file: File, conversationId: string, sha256: string) {
+export function createUploadTask(
+  file: File,
+  conversationId: string,
+  sha256: string,
+  contentType = file.type || 'application/octet-stream',
+) {
   return http.post<RawFileUploadTask>('/api/files/upload/tasks', {
     fileName: file.name || 'file',
     fileSize: file.size,
-    contentType: file.type || 'application/octet-stream',
+    contentType,
     sha256,
     conversationId,
   }).then((res) => ({ ...res, data: normalizeUploadTask(res.data) }))

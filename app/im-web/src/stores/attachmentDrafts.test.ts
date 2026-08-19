@@ -35,9 +35,39 @@ describe('AttachmentDraftStore', () => {
     expect(store.draftsFor('conversation-1').map((draft) => [draft.name, draft.kind])).toEqual([
       ['photo.png', 'image'],
       ['clip.mp4', 'file'],
-      ['fallback.jpg', 'file'],
+      ['fallback.jpg', 'image'],
     ])
-    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(createObjectURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('lets explicit picker intent override MIME classification', () => {
+    const store = useAttachmentDraftStore()
+
+    store.addFiles('conversation-1', [file('no-mime.jpg', 10)], 'image')
+    store.addFiles('conversation-1', [file('send-as-file.png', 20, 'image/png')], 'file')
+
+    expect(store.draftsFor('conversation-1').map((draft) => [draft.name, draft.kind])).toEqual([
+      ['no-mime.jpg', 'image'],
+      ['send-as-file.png', 'file'],
+    ])
+  })
+
+  it('auto-detects only supported inline image formats', () => {
+    const store = useAttachmentDraftStore()
+
+    store.addFiles('conversation-1', [
+      file('generic.webp', 10, 'application/octet-stream'),
+      file('vector.svg', 20, 'image/svg+xml'),
+      file('bitmap.bmp', 30, 'image/bmp'),
+      file('report.jpg', 40, 'application/pdf'),
+    ])
+
+    expect(store.draftsFor('conversation-1').map((draft) => [draft.name, draft.kind])).toEqual([
+      ['generic.webp', 'image'],
+      ['vector.svg', 'file'],
+      ['bitmap.bmp', 'file'],
+      ['report.jpg', 'file'],
+    ])
   })
 
   it('rejects empty and oversized files and ignores duplicates', () => {
