@@ -1,15 +1,39 @@
-<!-- 用户资料弹窗：查看/编辑个人信息，支持头像上传与复制资料 -->
+<!-- 用户资料弹窗：查看/编辑个人信息，支持头像上传 -->
 <template>
   <div class="profile-overlay" @click.self="close">
     <div class="profile-dialog">
       <!-- 头像区域：展示头像、在线状态 -->
       <header class="profile-cover">
-        <button type="button" class="profile-close" title="关闭" @click="close">x</button>
-        <div class="profile-avatar">
+        <button type="button" class="profile-close" title="关闭" @click="close">
+          <img :src="closeIcon" alt="关闭" />
+        </button>
+        <button
+          v-if="isSelf"
+          type="button"
+          class="profile-avatar profile-avatar-action"
+          :disabled="editing || saving"
+          title="修改头像"
+          aria-label="修改头像"
+          @click="pickAvatar"
+        >
+          <img v-if="avatarPreview" :src="avatarPreview" @error="avatarLoadFailed = true" alt="头像" />
+          <span v-else>{{ avatarInitial }}</span>
+          <span class="profile-avatar-edit-hint" aria-hidden="true">修改</span>
+          <span class="presence-dot" :class="`presence-${presenceStatus}`"></span>
+        </button>
+        <div v-else class="profile-avatar">
           <img v-if="avatarPreview" :src="avatarPreview" @error="avatarLoadFailed = true" alt="头像" />
           <span v-else>{{ avatarInitial }}</span>
           <span class="presence-dot" :class="`presence-${presenceStatus}`"></span>
         </div>
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/*"
+          hidden
+          aria-label="选择头像图片"
+          @change="onAvatarSelected"
+        />
         <div class="profile-title">
           <h2>{{ displayName }}</h2>
           <span>{{ presenceLabel }}</span>
@@ -18,21 +42,6 @@
 
       <main class="profile-body">
         <template v-if="editing">
-          <label class="profile-field">
-            <span>头像</span>
-            <div class="avatar-edit-row">
-              <button type="button" class="plain-btn" :disabled="saving" @click="pickAvatar">选择图片</button>
-              <span class="avatar-file-name">{{ selectedAvatarName || '支持 JPG、PNG、GIF、WebP' }}</span>
-            </div>
-            <input
-              ref="fileInputRef"
-              type="file"
-              accept="image/*"
-              hidden
-              @change="onAvatarSelected"
-            />
-          </label>
-
           <label class="profile-field">
             <span>昵称</span>
             <input v-model="form.nickname" :disabled="saving" maxlength="30" />
@@ -63,10 +72,16 @@
 
         <template v-else>
           <div class="profile-info-grid">
-            <span>账号</span>
-            <strong>{{ profileUser.username || '-' }}</strong>
             <span>部门</span>
             <strong>{{ profileUser.deptName || '-' }}</strong>
+            <template v-if="profileEmail">
+              <span>邮箱</span>
+              <strong>{{ profileEmail }}</strong>
+            </template>
+            <template v-if="profilePhone">
+              <span>手机号</span>
+              <strong>{{ profilePhone }}</strong>
+            </template>
           </div>
           <div class="signature-box">
             <span>个性签名</span>
@@ -79,14 +94,19 @@
       </main>
 
       <footer class="profile-footer">
-        <template v-if="editing">
+        <template v-if="avatarEditing">
+          <button type="button" class="cancel-btn" :disabled="saving" @click="cancelAvatarEdit">取消</button>
+          <button type="button" class="save-btn" :disabled="saving" @click="saveAvatar">
+            {{ saving ? '保存中...' : '保存头像' }}
+          </button>
+        </template>
+        <template v-else-if="editing">
           <button type="button" class="cancel-btn" :disabled="saving" @click="cancelEdit">取消</button>
           <button type="button" class="save-btn" :disabled="saving" @click="saveProfile">
             {{ saving ? '保存中...' : '保存' }}
           </button>
         </template>
         <template v-else>
-          <button type="button" class="cancel-btn" @click="copyProfile">复制资料</button>
           <button v-if="isSelf" type="button" class="save-btn" @click="startEdit">编辑资料</button>
         </template>
       </footer>
@@ -95,8 +115,9 @@
 </template>
 
 <script setup lang="ts">
-// 用户资料弹窗：展示/编辑个人资料、上传头像与复制资料
+// 用户资料弹窗：展示/编辑个人资料、上传头像
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import closeIcon from '../assets/icons/关闭.svg'
 import { uploadAvatar } from '../api/file'
 import { updateProfile, type UserProfile } from '../api/user'
 import { useAuthStore, type UserInfo } from '../stores/auth'
@@ -120,8 +141,8 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const fileInputRef = ref<HTMLInputElement | null>(null) // 头像文件选择 input 引用
 const selectedAvatar = ref<File | null>(null) // 已选择的头像文件
-const selectedAvatarName = ref('') // 已选头像文件名
 const avatarObjectUrl = ref('') // 头像预览 Blob URL
+const avatarEditing = ref(false) // 是否处于头像编辑确认状态
 const editing = ref(false) // 是否处于编辑模式
 const saving = ref(false) // 是否正在保存
 const errorText = ref('') // 错误提示文本
@@ -132,6 +153,8 @@ const profileUser = computed<ProfileUser>(() => props.user || authStore.currentU
 const profileUserId = computed(() => String(profileUser.value.userId || profileUser.value.id || ''))
 const isSelf = computed(() => profileUserId.value === String(authStore.currentUser?.userId || '')) // 是否查看自己的资料
 const displayName = computed(() => profileUser.value.nickname || profileUser.value.username || '用户')
+const profileEmail = computed(() => profileUser.value.email?.trim() || '')
+const profilePhone = computed(() => profileUser.value.phone?.trim() || '')
 const avatarInitial = computed(() => displayName.value[0] || 'U') // 头像文字回退（首字母）
 const avatarLoadFailed = ref(false) // 头像加载失败标记
 const avatarPreview = computed(() => {
@@ -170,7 +193,7 @@ function resetForm() {
   form.phone = profileUser.value.phone || ''
   form.signature = profileUser.value.signature || ''
   selectedAvatar.value = null
-  selectedAvatarName.value = ''
+  avatarEditing.value = false
   avatarLoadFailed.value = false
   revokeAvatarObjectUrl()
 }
@@ -192,7 +215,16 @@ function cancelEdit() {
 }
 
 function pickAvatar() {
+  if (!isSelf.value || editing.value || saving.value) return
   fileInputRef.value?.click()
+}
+
+function cancelAvatarEdit() {
+  selectedAvatar.value = null
+  avatarEditing.value = false
+  avatarLoadFailed.value = false
+  errorText.value = ''
+  revokeAvatarObjectUrl()
 }
 
 // 处理头像文件选择：校验类型和大小，生成预览 Blob URL
@@ -212,11 +244,34 @@ function onAvatarSelected(event: Event) {
   }
   revokeAvatarObjectUrl()
   selectedAvatar.value = file
-  selectedAvatarName.value = file.name
   avatarObjectUrl.value = URL.createObjectURL(file)
+  avatarEditing.value = true
+  statusText.value = ''
 }
 
-// 保存个人资料：上传头像（如有）、调用更新接口、同步 authStore
+// 保存头像：上传文件并同步当前用户资料
+async function saveAvatar() {
+  if (!isSelf.value || !selectedAvatar.value) return
+  saving.value = true
+  errorText.value = ''
+  statusText.value = ''
+  try {
+    const avatarRes = await uploadAvatar(selectedAvatar.value)
+    authStore.updateCurrentUser({ avatar: avatarRes.data.url })
+    const synchronizedUser = authStore.currentUser
+    if (synchronizedUser) emit('saved', { ...synchronizedUser })
+    selectedAvatar.value = null
+    avatarEditing.value = false
+    statusText.value = '头像已更新'
+    revokeAvatarObjectUrl()
+  } catch (err: any) {
+    errorText.value = err?.response?.data?.message || err?.message || '保存头像失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+// 保存个人资料：调用更新接口并同步 authStore
 async function saveProfile() {
   if (!isSelf.value) return
   const nickname = form.nickname.trim()
@@ -233,12 +288,6 @@ async function saveProfile() {
   errorText.value = ''
   statusText.value = ''
   try {
-    let uploadedAvatarUrl = ''
-    if (selectedAvatar.value) {
-      const avatarRes = await uploadAvatar(selectedAvatar.value)
-      uploadedAvatarUrl = avatarRes.data.url
-    }
-
     const res = await updateProfile({
       nickname,
       email: form.email.trim(),
@@ -251,7 +300,7 @@ async function saveProfile() {
       userId: String(data.userId || data.id || currentUser?.userId || ''),
       username: data.username || currentUser?.username || '',
       nickname: data.nickname || nickname,
-      avatar: data.avatar || uploadedAvatarUrl || currentUser?.avatar || '',
+      avatar: data.avatar || currentUser?.avatar || '',
       signature: data.signature || form.signature.trim(),
       role: data.role || currentUser?.role || '',
       email: data.email || form.email.trim(),
@@ -266,29 +315,10 @@ async function saveProfile() {
     emit('saved', synchronizedUser)
     editing.value = false
     statusText.value = '资料已保存'
-    selectedAvatar.value = null
-    selectedAvatarName.value = ''
-    revokeAvatarObjectUrl()
   } catch (err: any) {
     errorText.value = err?.response?.data?.message || err?.message || '保存个人资料失败'
   } finally {
     saving.value = false
-  }
-}
-
-// 复制用户资料到剪贴板
-async function copyProfile() {
-  const text = [
-    `昵称：${displayName.value}`,
-    `账号：${profileUser.value.username || '-'}`,
-    `部门：${profileUser.value.deptName || '-'}`,
-    `个性签名：${profileUser.value.signature || '-'}`,
-  ].join('\n')
-  try {
-    await navigator.clipboard.writeText(text)
-    statusText.value = '资料已复制'
-  } catch {
-    errorText.value = '复制失败'
   }
 }
 
@@ -333,13 +363,27 @@ function revokeAvatarObjectUrl() {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   border: none;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: transparent;
   cursor: pointer;
+}
+
+.profile-close img {
+  display: block;
+  width: 19px;
+  height: 19px;
+  filter: brightness(0) invert(1);
+  transition: filter 0.2s ease;
+}
+
+.profile-close:hover img {
+  filter: sepia(1) saturate(50) hue-rotate(350deg);
 }
 
 .profile-avatar {
@@ -353,8 +397,45 @@ function revokeAvatarObjectUrl() {
   border: 3px solid rgba(255, 255, 255, 0.75);
   border-radius: 50%;
   background: #667eea;
+  color: #fff;
+  padding: 0;
+  font-family: inherit;
   font-size: 26px;
   font-weight: 600;
+}
+
+.profile-avatar-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.profile-avatar-action:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.profile-avatar-action:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.95);
+  outline-offset: 3px;
+}
+
+.profile-avatar-edit-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.58);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.profile-avatar-action:not(:disabled):hover .profile-avatar-edit-hint,
+.profile-avatar-action:not(:disabled):focus-visible .profile-avatar-edit-hint {
+  opacity: 1;
 }
 
 .profile-avatar img {
@@ -373,6 +454,7 @@ function revokeAvatarObjectUrl() {
   border: 2px solid #fff;
   border-radius: 50%;
   background: #9ca3af;
+  z-index: 1;
 }
 
 .presence-online { background: #22c55e; }
@@ -462,13 +544,6 @@ function revokeAvatarObjectUrl() {
   font-weight: 400;
 }
 
-.avatar-edit-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.plain-btn,
 .cancel-btn,
 .save-btn {
   height: 34px;
@@ -476,21 +551,6 @@ function revokeAvatarObjectUrl() {
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: var(--font-base);
-}
-
-.plain-btn {
-  min-width: 84px;
-  background: var(--accent-bg-light);
-  color: var(--accent);
-}
-
-.avatar-file-name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--font-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .profile-error,
@@ -527,9 +587,14 @@ function revokeAvatarObjectUrl() {
 }
 
 .cancel-btn:disabled,
-.save-btn:disabled,
-.plain-btn:disabled {
+.save-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar-edit-hint {
+    transition: none;
+  }
 }
 </style>

@@ -445,78 +445,78 @@
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
             <button type="button" @click="replyTarget = null">✕</button>
           </div>
-          <div class="input-toolbar">
-            <button
-              ref="emojiButtonRef"
-              class="tool-btn"
-              title="表情"
-              type="button"
-              @click="toggleEmojiPanel"
-            >
-              <img :src="emojiIcon" alt="表情" />
-            </button>
-            <label
-              class="tool-btn"
-              :class="{ disabled: isSendingMessage }"
-              title="发送图片"
-              :aria-disabled="isSendingMessage"
-              role="button"
-              :tabindex="isSendingMessage ? -1 : 0"
-              @keydown.enter.prevent="activateFileLabel"
-              @keydown.space.prevent="activateFileLabel"
-            >
-              <img :src="imageIcon" alt="" />
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp"
-                multiple
-                hidden
-                :disabled="isSendingMessage"
-                @change="onSendImage"
-              />
-            </label>
-            <label
-              class="tool-btn"
-              :class="{ disabled: isSendingMessage }"
-              title="发送文件"
-              :aria-disabled="isSendingMessage"
-              role="button"
-              :tabindex="isSendingMessage ? -1 : 0"
-              @keydown.enter.prevent="activateFileLabel"
-              @keydown.space.prevent="activateFileLabel"
-            >
-              <img :src="fileIcon" alt="" />
-              <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
-            </label>
-          </div>
-          <AttachmentDraftTray
-            :drafts="currentAttachmentDrafts"
-            :disabled="isSendingMessage"
-            :file-icon="fileIcon"
-            @remove="removeAttachmentDraft"
-            @pause="pauseAttachmentDraft"
-            @retry="retryAttachmentDraft"
-          />
-          <p
-            v-if="attachmentFeedback"
-            class="attachment-feedback"
-            :class="{ error: attachmentFeedbackIsError }"
-            :role="attachmentFeedbackIsError ? 'alert' : 'status'"
-            aria-live="polite"
-          >{{ attachmentFeedback }}</p>
           <div class="input-box">
             <div class="message-field">
-              <textarea
-                ref="messageInputRef"
-                v-model="messageText"
-                class="message-input"
-
-                rows="3"
-                :disabled="isSendingMessage"
-                @input="onMessageInput"
-                @keydown="handleMessageKeydown"
-                @paste="handleMessagePaste"
-              ></textarea>
+              <div class="message-content-scroll">
+                <AttachmentDraftTray
+                  ref="attachmentDraftTrayRef"
+                  :drafts="currentAttachmentDrafts"
+                  :disabled="isSendingMessage"
+                  @remove="removeAttachmentDraft"
+                  @pause="pauseAttachmentDraft"
+                  @retry="retryAttachmentDraft"
+                  @focus-input="focusMessageInputAtStart"
+                />
+                <p
+                  v-if="attachmentFeedback && attachmentFeedbackIsError"
+                  class="attachment-feedback error"
+                  role="alert"
+                >{{ attachmentFeedback }}</p>
+                <textarea
+                  ref="messageInputRef"
+                  v-model="messageText"
+                  class="message-input"
+                  rows="3"
+                  :disabled="isSendingMessage"
+                  @input="onMessageInput"
+                  @keydown="handleMessageKeydown"
+                  @paste="handleMessagePaste"
+                ></textarea>
+              </div>
+              <div class="input-toolbar">
+                <button
+                  ref="emojiButtonRef"
+                  class="tool-btn"
+                  title="表情"
+                  type="button"
+                  @click="toggleEmojiPanel"
+                >
+                  <img :src="emojiIcon" alt="表情" />
+                </button>
+                <label
+                  class="tool-btn"
+                  :class="{ disabled: isSendingMessage }"
+                  title="发送图片"
+                  :aria-disabled="isSendingMessage"
+                  role="button"
+                  :tabindex="isSendingMessage ? -1 : 0"
+                  @keydown.enter.prevent="activateFileLabel"
+                  @keydown.space.prevent="activateFileLabel"
+                >
+                  <img :src="imageIcon" alt="" />
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp"
+                    multiple
+                    hidden
+                    :disabled="isSendingMessage"
+                    @change="onSendImage"
+                  />
+                </label>
+                <label
+                  class="tool-btn"
+                  :class="{ disabled: isSendingMessage }"
+                  title="发送文件"
+                  :aria-disabled="isSendingMessage"
+                  role="button"
+                  :tabindex="isSendingMessage ? -1 : 0"
+                  @keydown.enter.prevent="activateFileLabel"
+                  @keydown.space.prevent="activateFileLabel"
+                >
+                  <img :src="fileIcon" alt="" />
+                  <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
+                </label>
+              </div>
               <button
                 class="send-btn"
                 :disabled="isSendingMessage"
@@ -1373,6 +1373,7 @@ function onContactSearch() {
 // 消息区和输入框引用
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const attachmentDraftTrayRef = ref<{ focusLast: () => void } | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
 const customStickerInputRef = ref<HTMLInputElement | null>(null)
@@ -1790,10 +1791,6 @@ function addAttachmentFiles(files: File[], classification: AttachmentDraftClassi
 
   const result = attachmentDraftStore.addFiles(conversationId, files, classification)
   const messages: string[] = []
-  const imageCount = result.added.filter((draft) => draft.kind === 'image').length
-  const fileCount = result.added.length - imageCount
-  if (imageCount) messages.push(`已添加 ${imageCount} 张图片`)
-  if (fileCount) messages.push(`已添加 ${fileCount} 个文件`)
   if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复项`)
   if (result.errors.length) messages.push(...result.errors)
   setAttachmentFeedback(messages.join('；'), result.errors.length > 0 || !result.added.length)
@@ -1810,7 +1807,7 @@ function removeAttachmentDraft(draft: AttachmentDraft) {
     ).catch(() => undefined)
   }
   attachmentDraftStore.removeDraft(draft.conversationId, draft.id)
-  setAttachmentFeedback(`已移除 ${draft.name}`)
+  setAttachmentFeedback('')
 }
 
 function pauseAttachmentDraft(draft: AttachmentDraft) {
@@ -2462,8 +2459,31 @@ function onMessageInput(event: Event) {
   showEmojiPanel.value = false
 }
 
-// 消息输入键盘事件：Esc 关闭面板、方向键选择提及、Enter/Ctrl+Enter 发送
+function focusMessageInputAtStart() {
+  nextTick(() => {
+    messageInputRef.value?.focus()
+    messageInputRef.value?.setSelectionRange(0, 0)
+  })
+}
+
+// 消息输入键盘事件：支持附件原子项导航、面板操作与发送快捷键
 function handleMessageKeydown(event: KeyboardEvent) {
+  const input = event.currentTarget as HTMLTextAreaElement
+  const caretAtStart = input.selectionStart === 0 && input.selectionEnd === 0
+  const attachments = currentAttachmentDrafts.value
+  if (!event.isComposing && caretAtStart && attachments.length && !isSendingMessage.value) {
+    if (event.key === 'Backspace') {
+      event.preventDefault()
+      removeAttachmentDraft(attachments[attachments.length - 1])
+      return
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      attachmentDraftTrayRef.value?.focusLast()
+      return
+    }
+  }
+
   if (event.key === 'Escape' && showEmojiPanel.value) {
     event.preventDefault()
     closeEmojiPanel()
@@ -4574,7 +4594,7 @@ watch(
   color: #4053bf;
   font-size: 12px;
   line-height: 1.4;
-  margin: 0 0 6px;
+  margin: 0 12px 4px;
 }
 
 .attachment-feedback.error {
@@ -4604,7 +4624,11 @@ watch(
 .input-toolbar {
   display: flex;
   gap: 8px;
-  padding-bottom: 6px;
+  left: 8px;
+  padding: 0;
+  position: absolute;
+  bottom: 8px;
+  z-index: 3;
 }
 
 
@@ -4659,23 +4683,69 @@ watch(
 }
 
 .message-field {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
   flex: 1;
+  height: 122px;
+  overflow: hidden;
   position: relative;
+}
+
+.message-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.message-field::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 40px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--bg-surface);
+  content: '';
+  pointer-events: none;
+}
+
+.message-content-scroll {
+  align-items: stretch;
+  display: flex;
+  width: 100%;
+  height: calc(100% - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.message-content-scroll > .attachment-feedback {
+  align-self: center;
+  flex: none;
+  margin: 0 8px;
+  max-width: 240px;
 }
 
 .message-input {
   display: block;
-  width: 100%;
+  flex: 1 0 180px;
+  width: auto;
+  height: 100%;
   box-sizing: border-box;
   resize: none;
   border: none;
   border-radius: 8px;
   padding: 10px 88px 10px 12px;
   font-size: 14px;
-  background: var(--bg-surface);
+  background: transparent;
   line-height: 1.5;
-  min-height: 44px;
-  max-height: 120px;
+  min-height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.message-input:focus-visible {
+  outline: none;
 }
 
 .message-input:disabled {
@@ -4696,7 +4766,7 @@ watch(
   cursor: pointer;
   transition: background var(--transition-normal);
   white-space: nowrap;
-  z-index: 2;
+  z-index: 3;
 }
 
 .send-btn:hover {
