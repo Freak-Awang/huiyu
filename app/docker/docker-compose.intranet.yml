@@ -81,7 +81,6 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      RELEASE_AUTOMATION_TOKEN: ${RELEASE_AUTOMATION_TOKEN:?set RELEASE_AUTOMATION_TOKEN in .env}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       FILE_STORAGE: ${FILE_STORAGE:-local}
@@ -127,7 +126,6 @@ services:
         read_only: true
       - ../im-web/dist:/usr/share/nginx/html/im
       - ../im-admin/dist:/usr/share/nginx/html/admin
-      - ./updates:/usr/share/nginx/html/downloads/arttalk:ro
     depends_on:
       backend:
         condition: service_healthy

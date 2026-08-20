@@ -175,6 +175,8 @@ CREATE TABLE IF NOT EXISTS im_user_settings (
     UNIQUE KEY uk_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user settings';
 
+-- Legacy bootstrap tables required by historical Flyway migrations V20260728 and V20260806.
+-- V20260820 removes them after the migration chain has advanced safely.
 CREATE TABLE IF NOT EXISTS im_client_release (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     version VARCHAR(32) NOT NULL,

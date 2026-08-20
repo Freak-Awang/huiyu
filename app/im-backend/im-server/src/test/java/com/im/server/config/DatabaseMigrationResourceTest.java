@@ -49,16 +49,15 @@ class DatabaseMigrationResourceTest {
     }
 
     @Test
-    void releasePipelineMigrationSupportsBothDatabaseBaselines() throws Exception {
+    void clientUpdateRemovalMigrationDropsModuleTables() throws Exception {
         try (var input = getClass().getResourceAsStream(
-                "/db/migration/V20260806__harden_client_release_pipeline.sql")) {
+                "/db/migration/V20260820__remove_client_online_update.sql")) {
             assertThat(input).isNotNull();
             String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            assertThat(sql).contains("information_schema.COLUMNS");
-            assertThat(sql).contains("source_commit");
-            assertThat(sql).contains("manifest_digest");
-            assertThat(sql).contains("release_id");
-            assertThat(sql).contains("im_client_release_audit");
+            assertThat(sql).contains("DROP TABLE IF EXISTS im_client_release_audit");
+            assertThat(sql).contains("DROP TABLE IF EXISTS im_client_release_target");
+            assertThat(sql).contains("DROP TABLE IF EXISTS im_client_update_event");
+            assertThat(sql).contains("DROP TABLE IF EXISTS im_client_release");
         }
     }
 }

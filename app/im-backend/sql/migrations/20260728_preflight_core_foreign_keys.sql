@@ -61,23 +61,4 @@ WHERE f.upload_id IS NULL
 UNION ALL
 SELECT 'orphan_user_settings', COUNT(*)
 FROM im_user_settings s LEFT JOIN sys_user u ON u.id = s.user_id
-WHERE u.id IS NULL
-UNION ALL
-SELECT 'orphan_release_creator', COUNT(*)
-FROM im_client_release r LEFT JOIN sys_user u ON u.id = r.created_by
-WHERE r.created_by IS NOT NULL AND u.id IS NULL
-UNION ALL
-SELECT 'orphan_release_target', COUNT(*)
-FROM im_client_release_target t LEFT JOIN im_client_release r ON r.id = t.release_id
-WHERE r.id IS NULL
-UNION ALL
-SELECT 'orphan_update_event_user', COUNT(*)
-FROM im_client_update_event e LEFT JOIN sys_user u ON u.id = e.user_id
-WHERE e.user_id IS NOT NULL AND u.id IS NULL
-UNION ALL
-SELECT 'insecure_published_update_url', COUNT(*)
-FROM im_client_release
-WHERE status = 'PUBLISHED'
-  AND update_base_url NOT LIKE 'https://%'
-  AND update_base_url NOT LIKE 'http://localhost%'
-  AND update_base_url NOT LIKE 'http://127.0.0.1%';
+WHERE u.id IS NULL;

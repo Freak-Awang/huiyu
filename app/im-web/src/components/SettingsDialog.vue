@@ -262,67 +262,9 @@
               <div>
                 <h3>ArtTalk</h3>
                 <p>简洁、安全的团队即时通讯工具</p>
-                <span>当前版本 {{ updateStore.state.currentVersion || '浏览器版' }}</span>
+                <span>当前版本 {{ appVersion || '浏览器版' }}</span>
               </div>
             </div>
-
-            <h3 class="group-title">软件更新</h3>
-            <div class="setting-card">
-              <div class="setting-card-row">
-                <div class="setting-copy">
-                  <strong>{{ updateStatusTitle }}</strong>
-                  <small>{{ updateStatusHint }}</small>
-                </div>
-                <div class="row-actions">
-                  <button
-                    v-if="updateStore.state.status === 'available'"
-                    type="button"
-                    class="primary-button"
-                    @click="updateStore.download()"
-                  >
-                    下载更新
-                  </button>
-                  <button
-                    v-else-if="updateStore.state.status === 'downloaded' || updateStore.state.status === 'waiting-for-transfers'"
-                    type="button"
-                    class="primary-button"
-                    @click="updateStore.install()"
-                  >
-                    {{ updateStore.state.transferBlockers ? '传输完成后安装' : '立即安装' }}
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="secondary-button"
-                    :disabled="updateStore.isBusy"
-                    @click="updateStore.check()"
-                  >
-                    {{ updateStore.state.status === 'checking' ? '检查中...' : '检查更新' }}
-                  </button>
-                </div>
-              </div>
-              <div class="setting-card-row">
-                <div class="setting-copy">
-                  <strong>更新通道</strong>
-                  <small>正式版更稳定，测试版可提前体验新功能</small>
-                </div>
-                <select
-                  class="setting-select"
-                  aria-label="更新通道"
-                  :value="updateStore.channel"
-                  @change="updateStore.setChannel(($event.target as HTMLSelectElement).value as 'stable' | 'beta')"
-                >
-                  <option value="stable">正式版</option>
-                  <option value="beta">测试版</option>
-                </select>
-              </div>
-            </div>
-
-            <div v-if="updateStore.state.status === 'downloading'" class="update-progress-card">
-              <div><span>正在下载更新</span><strong>{{ (updateStore.state.percent || 0).toFixed(1) }}%</strong></div>
-              <div class="update-progress"><span :style="{ width: `${updateStore.state.percent || 0}%` }"></span></div>
-            </div>
-            <p v-if="updateStore.state.error" class="inline-error">{{ updateStore.state.error }}</p>
           </section>
         </div>
 
@@ -396,7 +338,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
-import { useUpdateStore } from '../stores/update'
 import {
   clearLocalMessages,
   getLocalMessageStats,
@@ -422,8 +363,8 @@ type SectionKey = 'account' | 'general' | 'notification' | 'shortcuts' | 'storag
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
-const updateStore = useUpdateStore()
 const activeSection = ref<SectionKey>('account')
+const appVersion = ref('')
 const storageStats = ref<LocalMessageStats | null>(null)
 const storageStatsLoaded = ref(false)
 const storageLocation = ref('')
@@ -466,7 +407,7 @@ const sections: Array<{ key: SectionKey; label: string; hint: string; icon: stri
   {
     key: 'about',
     label: '关于 ArtTalk',
-    hint: '查看版本信息、更新状态和更新通道',
+    hint: '查看应用版本信息',
     icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 10v7M12 7h.01',
   },
 ]
@@ -511,33 +452,11 @@ const storageSummaryText = computed(() => {
   if (!storageStats.value) return '桌面客户端中可查看本机缓存占用'
   return `已使用 ${formatSize(storageStats.value.cacheSize)}，共 ${storageStats.value.messageCount} 条缓存消息`
 })
-const updateStatusTitle = computed(() => {
-  const labels: Record<string, string> = {
-    idle: '检查软件更新',
-    checking: '正在检查更新',
-    available: `发现新版本 ${updateStore.state.targetVersion || ''}`,
-    'not-available': '已是最新版本',
-    downloading: '正在下载更新',
-    downloaded: '更新已下载',
-    'waiting-for-transfers': '等待文件传输完成',
-    installing: '正在安装更新',
-    error: '更新检查失败',
-  }
-  return labels[updateStore.state.status] || '软件更新'
-})
-const updateStatusHint = computed(() => {
-  if (updateStore.state.releaseName) return updateStore.state.releaseName
-  if (updateStore.state.lastCheckedAt) {
-    return `上次检查：${new Date(updateStore.state.lastCheckedAt).toLocaleString()}`
-  }
-  return '保持 ArtTalk 为最新版本，以获得功能改进和安全更新'
-})
-
 onMounted(() => {
   window.addEventListener('keydown', handleWindowKeydown)
   void loadStorageStats()
   void loadStorageLocation()
-  void updateStore.initialize()
+  void loadAppVersion()
 })
 
 onBeforeUnmount(() => {
@@ -551,6 +470,14 @@ function handleWindowKeydown(event: KeyboardEvent) {
     return
   }
   emit('close')
+}
+
+async function loadAppVersion() {
+  try {
+    appVersion.value = await window.imDesktop?.getVersion?.() || ''
+  } catch {
+    appVersion.value = ''
+  }
 }
 
 function selectSection(section: SectionKey) {
@@ -1294,36 +1221,6 @@ kbd {
   font-size: var(--font-xs);
 }
 
-.update-progress-card {
-  margin-top: 13px;
-  padding: 13px 15px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-}
-
-.update-progress-card > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-secondary);
-  font-size: var(--font-sm);
-}
-
-.update-progress {
-  height: 6px;
-  overflow: hidden;
-  margin-top: 10px;
-  border-radius: 999px;
-  background: var(--bg-header);
-}
-
-.update-progress span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  transition: width var(--transition-normal);
-}
-
 .settings-footer {
   display: flex;
   align-items: center;
@@ -1446,8 +1343,7 @@ kbd {
   .danger-text-button,
   .text-button,
   .switch-control,
-  .switch-control::after,
-  .update-progress span {
+  .switch-control::after {
     transition: none;
   }
 

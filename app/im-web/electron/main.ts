@@ -1,7 +1,7 @@
 /**
  * Electron 主进程入口
  *
- * 管理原生窗口生命周期、系统托盘、桌面通知、文件下载、自动更新及 IPC 通信。
+ * 管理原生窗口生命周期、系统托盘、桌面通知、文件下载及 IPC 通信。
  * 所有 native 能力通过 preload 脚本的白名单 IPC 暴露给渲染进程，保持 sandbox 隔离。
  * 支持单实例锁，点击关闭按钮最小化到托盘（macOS 除外）。
  */
@@ -22,7 +22,6 @@ import {
   upsertLocalMessage,
   type LocalMessageRecord,
 } from './localMessages.js'
-import { refreshUpdaterTransferState, setupUpdater } from './updater.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -472,7 +471,6 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
 
   const controller = new AbortController()
   activeFileDownloads.set(downloadId, controller)
-  refreshUpdaterTransferState()
   const partialPath = `${selection.filePath}.arttalk.part`
   const sendProgress = (progress: Record<string, unknown>) => {
     if (!event.sender.isDestroyed()) event.sender.send('files:download-progress', progress)
@@ -513,7 +511,6 @@ ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => 
     return { canceled, success: false, error: canceled ? undefined : message }
   } finally {
     activeFileDownloads.delete(downloadId)
-    refreshUpdaterTransferState()
   }
 })
 
@@ -528,14 +525,6 @@ ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
 // ==================== 应用生命周期 ====================
 
 app.whenReady().then(() => {
-  // 初始化自动更新模块
-  setupUpdater({
-    getMainWindow: () => mainWindow,
-    getNativeTransferCount: () => activeFileDownloads.size,
-    beforeInstall: () => {
-      isQuitting = true // 安装更新前标记退出，避免托盘逻辑阻止窗口关闭
-    },
-  })
   createMainWindow()
   createTray()
   // 无边框窗口不再挂载原生应用菜单，避免菜单栏浮出

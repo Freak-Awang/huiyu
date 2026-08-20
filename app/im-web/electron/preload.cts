@@ -4,7 +4,7 @@
  * 在渲染进程沙箱隔离的前提下，通过 contextBridge 向 window 注入类型化的桌面桥接 API。
  * 所有 native 能力通过 ipcRenderer.invoke 调用主进程的 IPC handler，保持安全边界。
  * 暴露两个全局对象：
- * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载、自动更新）
+ * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载）
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -103,33 +103,6 @@ contextBridge.exposeInMainWorld('imDesktop', {
     const listener = (_event: unknown, progress: Parameters<typeof handler>[0]) => handler(progress)
     ipcRenderer.on('files:download-progress', listener)
     return () => ipcRenderer.removeListener('files:download-progress', listener)
-  },
-
-  /** 配置自动更新服务器 */
-  configureUpdater: (configuration: { serverOrigin: string; token?: string; channel?: 'stable' | 'beta' }) =>
-    ipcRenderer.invoke('updater:configure', configuration),
-
-  /** 获取当前更新状态 */
-  getUpdateState: () => ipcRenderer.invoke('updater:get-state'),
-
-  /** 手动检查更新 */
-  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
-
-  /** 下载已发现的更新 */
-  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
-
-  /** 安装已下载的更新（等待传输任务完成后执行） */
-  installUpdate: () => ipcRenderer.invoke('updater:install') as Promise<boolean>,
-
-  /** 设置渲染进程传输任务数（阻止更新安装的计数器） */
-  setUpdateTransferCount: (count: number) =>
-    ipcRenderer.invoke('updater:set-transfer-count', count) as Promise<boolean>,
-
-  /** 监听更新状态变化，返回取消监听的函数 */
-  onUpdateStateChanged: (handler: (state: unknown) => void) => {
-    const listener = (_event: unknown, state: unknown) => handler(state)
-    ipcRenderer.on('updater:state-changed', listener)
-    return () => ipcRenderer.removeListener('updater:state-changed', listener)
   },
 
   /** 自定义窗口控制：最小化、最大/恢复、关闭、查询当前最大化状态 */

@@ -2,45 +2,13 @@
  * desktop.d.ts - Electron桌面桥接层类型声明
  * 
  * 为渲染进程提供 preload.cts 通过 contextBridge 暴露的 imDesktop
- * API 类型定义。涵盖窗口管理、消息本地存储、文件下载、自动更新等功能。
+ * API 类型定义。涵盖窗口管理、消息本地存储、文件下载等功能。
  */
 export {}
 
-/** 自动更新状态枚举 */
-export type UpdateStatus =
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'not-available'
-  | 'downloading'
-  | 'downloaded'
-  | 'waiting-for-transfers'
-  | 'installing'
-  | 'error'
-
-/** 桌面端自动更新状态快照，由 updater.ts 维护并通过 IPC 暴露给渲染进程 */
-export interface DesktopUpdateState {
-  status: UpdateStatus
-  currentVersion: string
-  releaseId?: number
-  targetVersion?: string
-  releaseName?: string
-  releaseNotes?: string[]
-  releaseDate?: string
-  forceUpdate?: boolean
-  percent?: number
-  transferred?: number
-  total?: number
-  bytesPerSecond?: number
-  error?: string
-  lastCheckedAt?: string
-  channel: 'stable' | 'beta'
-  transferBlockers: number
-}
-
 /** 
  * 扩展全局 Window 接口，声明 preload 桥接层暴露的 Electron 主进程能力
- * - imDesktop: 主进程通用API（窗口、通知、消息存储、文件下载、更新等）
+ * - imDesktop: 主进程通用API（窗口、通知、消息存储、文件下载等）
  */
 declare global {
   interface Window {
@@ -94,17 +62,6 @@ declare global {
         state: string
         error?: string
       }) => void) => () => void
-      configureUpdater?: (configuration: {
-        serverOrigin: string
-        token?: string
-        channel?: 'stable' | 'beta'
-      }) => Promise<DesktopUpdateState>
-      getUpdateState?: () => Promise<DesktopUpdateState>
-      checkForUpdates?: () => Promise<DesktopUpdateState>
-      downloadUpdate?: () => Promise<DesktopUpdateState>
-      installUpdate?: () => Promise<boolean>
-      setUpdateTransferCount?: (count: number) => Promise<boolean>
-      onUpdateStateChanged?: (handler: (state: DesktopUpdateState) => void) => () => void
       window?: {
         minimize: () => Promise<boolean>
         toggleMaximize: () => Promise<boolean>

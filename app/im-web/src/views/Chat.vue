@@ -1155,7 +1155,6 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
-import { useUpdateStore } from '../stores/update'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
 import {
   useAttachmentDraftStore,
@@ -1250,7 +1249,6 @@ const router = useRouter()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
-const updateStore = useUpdateStore()
 const userProfileStore = useUserProfileStore()
 const attachmentDraftStore = useAttachmentDraftStore()
 
@@ -1388,7 +1386,6 @@ let avatarLoadGeneration = 0
 const fileDownloadProgress = ref<Record<string, number>>({})
 const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
-watch(isSendingMessage, (sending) => void updateStore.setTransferCount(sending ? 1 : 0), { immediate: true })
 const isAttachmentDragActive = ref(false)
 const attachmentFeedback = ref('')
 const attachmentFeedbackIsError = ref(false)
@@ -3645,7 +3642,6 @@ onMounted(async () => {
 
 // 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
-  void updateStore.setTransferCount(0)
   clearMessageHighlight()
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)

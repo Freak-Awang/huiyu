@@ -52,7 +52,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.equals("/actuator/health")
                 || path.startsWith("/api/auth/login")
-                || path.equals(ReleaseAutomationAuthenticationFilter.PATH)
                 || path.startsWith("/ws/");
     }
 
@@ -60,7 +59,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * 执行 JWT 认证过滤逻辑。
      * <p>
      * 解析 Bearer Token，验证有效性后构建 Authentication 写入 SecurityContext；
-     * 对公共更新策略接口和文件下载接口允许无 Token 访问；
+     * 对文件下载接口允许无 Token 访问；
      * Token 缺失或无效时返回 401 JSON 响应。
      * </p>
      */
@@ -71,11 +70,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-            // 公共客户端更新策略接口允许匿名访问
-            if (isPublicClientUpdateEndpoint(request) && authHeader == null) {
-                filterChain.doFilter(request, response);
-                return;
-            }
             // 文件下载接口允许匿名访问（由下游鉴权）
             if (isFileDownload(request) && authHeader == null) {
                 filterChain.doFilter(request, response);
@@ -126,12 +120,4 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 && (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method));
     }
 
-    /**
-     * 判断是否为公共客户端更新策略查询接口。
-     */
-    private boolean isPublicClientUpdateEndpoint(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return path.equals("/api/client/releases/policy")
-                || (path.equals("/api/client/update-events") && HttpMethod.POST.matches(request.getMethod()));
-    }
 }

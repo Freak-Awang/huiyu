@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "axios": "^1.18.1",
-    "electron-updater": "^6.8.3",
     "pinia": "^3.0.4",
     "vue": "^3.5.34",
     "vue-router": "^5.0.7"
@@ -43,19 +42,12 @@
       "output": "release"
     },
     "artifactName": "ArtTalk-Setup-${version}-${arch}.${ext}",
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "${env.ARTTALK_UPDATE_BASE_URL}"
-      }
-    ],
     "files": [
       "dist/**",
       "dist-electron/**",
       "package.json"
     ],
     "win": {
-      "publisherName": "${env.ARTTALK_WINDOWS_PUBLISHER}",
       "target": [
         {
           "target": "nsis",
