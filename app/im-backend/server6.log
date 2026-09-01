@@ -1,0 +1,62 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.im:im-server >--------------------------
+[INFO] Building im-server 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.4.9:run (default-cli) > test-compile @ im-server >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ im-server ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 9 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ im-server ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ im-server ---
+[INFO] skip non existing resourceDirectory e:\CodeX\linghui-im\app\im-backend\im-server\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ im-server ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.4.9:run (default-cli) < test-compile @ im-server <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.4.9:run (default-cli) @ im-server ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.9)
+
+2026-09-01T17:41:55.744+08:00  INFO 50672 --- [           main] com.im.server.ImServerApplication        : Starting ImServerApplication using Java 17.0.18 with PID 50672 (E:\CodeX\linghui-im\app\im-backend\im-server\target\classes started by Yalo in e:\CodeX\linghui-im\app\im-backend\im-server)
+2026-09-01T17:41:55.747+08:00  INFO 50672 --- [           main] com.im.server.ImServerApplication        : No active profile set, falling back to 1 default profile: "default"
+2026-09-01T17:41:56.519+08:00  INFO 50672 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-01T17:41:56.522+08:00  INFO 50672 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-01T17:41:56.552+08:00  INFO 50672 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 18 ms. Found 0 Redis repository interfaces.
+2026-09-01T17:41:57.082+08:00  INFO 50672 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-09-01T17:41:57.093+08:00  INFO 50672 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-01T17:41:57.094+08:00  INFO 50672 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.44]
+2026-09-01T17:41:57.149+08:00  INFO 50672 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-01T17:41:57.150+08:00  INFO 50672 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1366 ms
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.9 
+2026-09-01T17:41:57.722+08:00  INFO 50672 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-01T17:41:57.734+08:00  INFO 50672 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-01T17:41:57.889+08:00  INFO 50672 --- [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:3306/im_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true (MySQL 8.0)
+2026-09-01T17:41:57.940+08:00  INFO 50672 --- [           main] o.f.core.internal.command.DbValidate     : Successfully validated 9 migrations (execution time 00:00.028s)
+2026-09-01T17:41:57.953+08:00  INFO 50672 --- [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `im_db`: 20260901
+2026-09-01T17:41:57.956+08:00  INFO 50672 --- [           main] o.f.core.internal.command.DbMigrate      : Schema `im_db` is up to date. No migration necessary.
+2026-09-01T17:41:58.601+08:00  WARN 50672 --- [           main] com.im.server.util.SignatureUtil         : Update RSA key not configured, package signature disabled (sha256 only)
+2026-09-01T17:41:58.984+08:00  INFO 50672 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-09-01T17:41:59.330+08:00  INFO 50672 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-09-01T17:41:59.346+08:00  INFO 50672 --- [           main] com.im.server.ImServerApplication        : Started ImServerApplication in 3.957 seconds (process running for 4.249)
+2026-09-01T17:41:59.584+08:00  WARN 50672 --- [           main] c.im.server.config.AdminBootstrapRunner  : Created bootstrap administrator 'admin'. Remove BOOTSTRAP_ADMIN_PASSWORD and rotate the password now.

@@ -1,0 +1,254 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.im:im-server >--------------------------
+[INFO] Building im-server 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.4.9:run (default-cli) > test-compile @ im-server >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ im-server ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 9 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ im-server ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ im-server ---
+[INFO] skip non existing resourceDirectory e:\CodeX\linghui-im\app\im-backend\im-server\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ im-server ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.4.9:run (default-cli) < test-compile @ im-server <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.4.9:run (default-cli) @ im-server ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.9)
+
+2026-09-01T17:40:51.914+08:00  INFO 27776 --- [           main] com.im.server.ImServerApplication        : Starting ImServerApplication using Java 17.0.18 with PID 27776 (E:\CodeX\linghui-im\app\im-backend\im-server\target\classes started by Yalo in e:\CodeX\linghui-im\app\im-backend\im-server)
+2026-09-01T17:40:51.916+08:00  INFO 27776 --- [           main] com.im.server.ImServerApplication        : No active profile set, falling back to 1 default profile: "default"
+2026-09-01T17:40:52.678+08:00  INFO 27776 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-01T17:40:52.680+08:00  INFO 27776 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-01T17:40:52.718+08:00  INFO 27776 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 22 ms. Found 0 Redis repository interfaces.
+2026-09-01T17:40:53.245+08:00  INFO 27776 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-09-01T17:40:53.257+08:00  INFO 27776 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-01T17:40:53.257+08:00  INFO 27776 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.44]
+2026-09-01T17:40:53.316+08:00  INFO 27776 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-01T17:40:53.317+08:00  INFO 27776 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1367 ms
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.9 
+2026-09-01T17:40:53.859+08:00  INFO 27776 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-01T17:40:53.871+08:00  INFO 27776 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-01T17:40:54.008+08:00  INFO 27776 --- [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:3306/im_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true (MySQL 8.0)
+2026-09-01T17:40:54.051+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbValidate     : Successfully validated 9 migrations (execution time 00:00.024s)
+2026-09-01T17:40:54.064+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `im_db`: << Empty Schema >>
+2026-09-01T17:40:54.075+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260727 - add token version"
+2026-09-01T17:40:54.084+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:40:54.145+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260728 - add core foreign keys"
+2026-09-01T17:41:02.743+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260729 - add security query indexes"
+2026-09-01T17:41:03.209+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260730 - add group avatar state"
+2026-09-01T17:41:03.888+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260731 - add group create request id"
+2026-09-01T17:41:04.828+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260804 - allow conversation deletion with files"
+2026-09-01T17:41:07.057+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260806 - harden client release pipeline"
+2026-09-01T17:41:07.059+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.060+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.062+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.063+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.064+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.065+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.067+08:00  INFO 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : +---+
+| 1 |
++---+
+| 1 |
++---+
+
+2026-09-01T17:41:07.150+08:00  WARN 27776 --- [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Table 'im_client_release_audit' already exists (SQL State: 42S01 - Error Code: 1050)
+2026-09-01T17:41:07.201+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260820 - remove client online update"
+2026-09-01T17:41:08.251+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `im_db` to version "20260901 - client online update"
+2026-09-01T17:41:10.498+08:00  INFO 27776 --- [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 9 migrations to schema `im_db`, now at version v20260901 (execution time 00:15.751s)
+2026-09-01T17:41:10.789+08:00  WARN 27776 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'retentionCleanupJob' defined in file [E:\CodeX\linghui-im\app\im-backend\im-server\target\classes\com\im\server\config\RetentionCleanupJob.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'fileRetentionService' defined in file [E:\CodeX\linghui-im\app\im-backend\im-server\target\classes\com\im\server\service\FileRetentionService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 'fileStorageRouter' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'fileStorageRouter' parameter 1: Error creating bean with name 'minioFileStorageClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'minioFileStorageClient' parameter 0: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+2026-09-01T17:41:10.789+08:00  INFO 27776 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-09-01T17:41:10.796+08:00  INFO 27776 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-09-01T17:41:10.808+08:00  INFO 27776 --- [           main] o.apache.catalina.core.StandardService   : Stopping service [Tomcat]
+2026-09-01T17:41:10.822+08:00  INFO 27776 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-09-01T17:41:10.833+08:00 ERROR 27776 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'retentionCleanupJob' defined in file [E:\CodeX\linghui-im\app\im-backend\im-server\target\classes\com\im\server\config\RetentionCleanupJob.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'fileRetentionService' defined in file [E:\CodeX\linghui-im\app\im-backend\im-server\target\classes\com\im\server\service\FileRetentionService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 'fileStorageRouter' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'fileStorageRouter' parameter 1: Error creating bean with name 'minioFileStorageClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'minioFileStorageClient' parameter 0: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1395) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1232) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1222) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1188) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1123) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987) ~[spring-context-6.2.10.jar:6.2.10]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627) ~[spring-context-6.2.10.jar:6.2.10]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.4.9.jar:3.4.9]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752) ~[spring-boot-3.4.9.jar:3.4.9]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.4.9.jar:3.4.9]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.4.9.jar:3.4.9]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361) ~[spring-boot-3.4.9.jar:3.4.9]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350) ~[spring-boot-3.4.9.jar:3.4.9]
+	at com.im.server.ImServerApplication.main(ImServerApplication.java:20) ~[classes/:na]
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'fileRetentionService' defined in file [E:\CodeX\linghui-im\app\im-backend\im-server\target\classes\com\im\server\service\FileRetentionService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 'fileStorageRouter' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'fileStorageRouter' parameter 1: Error creating bean with name 'minioFileStorageClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'minioFileStorageClient' parameter 0: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1395) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1232) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1690) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1635) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 21 common frames omitted
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'fileStorageRouter' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'fileStorageRouter' parameter 1: Error creating bean with name 'minioFileStorageClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'minioFileStorageClient' parameter 0: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:546) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1752) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1635) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 34 common frames omitted
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'minioFileStorageClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Unsatisfied dependency expressed through method 'minioFileStorageClient' parameter 0: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:546) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.addCandidateEntry(DefaultListableBeanFactory.java:2003) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.findAutowireCandidates(DefaultListableBeanFactory.java:1967) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveMultipleBeanCollection(DefaultListableBeanFactory.java:1857) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveMultipleBeans(DefaultListableBeanFactory.java:1825) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1701) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1635) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 48 common frames omitted
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'minioClient' defined in class path resource [com/im/server/config/FileStorageConfig.class]: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1690) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1635) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 66 common frames omitted
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [io.minio.MinioClient]: Factory method 'minioClient' threw exception with message: AccessKey and SecretKey must not be empty
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:200) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169) ~[spring-beans-6.2.10.jar:6.2.10]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 79 common frames omitted
+Caused by: java.lang.IllegalArgumentException: AccessKey and SecretKey must not be empty
+	at io.minio.credentials.Credentials.<init>(Credentials.java:58) ~[minio-8.5.17.jar:8.5.17]
+	at io.minio.credentials.StaticProvider.<init>(StaticProvider.java:28) ~[minio-8.5.17.jar:8.5.17]
+	at io.minio.MinioAsyncClient$Builder.credentials(MinioAsyncClient.java:3319) ~[minio-8.5.17.jar:8.5.17]
+	at io.minio.MinioClient$Builder.credentials(MinioClient.java:2498) ~[minio-8.5.17.jar:8.5.17]
+	at com.im.server.config.FileStorageConfig.minioClient(FileStorageConfig.java:39) ~[classes/:na]
+	at com.im.server.config.FileStorageConfig$$SpringCGLIB$$0.CGLIB$minioClient$1(<generated>) ~[classes/:na]
+	at com.im.server.config.FileStorageConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>) ~[classes/:na]
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258) ~[spring-core-6.2.10.jar:6.2.10]
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400) ~[spring-context-6.2.10.jar:6.2.10]
+	at com.im.server.config.FileStorageConfig$$SpringCGLIB$$0.minioClient(<generated>) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172) ~[spring-beans-6.2.10.jar:6.2.10]
+	... 82 common frames omitted
+
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  22.502 s
+[INFO] Finished at: 2026-09-01T17:41:11+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:3.4.9:run (default-cli) on project im-server: Process terminated with exit code: 1 -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException

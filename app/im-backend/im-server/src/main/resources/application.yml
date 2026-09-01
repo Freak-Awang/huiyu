@@ -18,8 +18,8 @@ spring:
       database: ${SPRING_DATA_REDIS_DATABASE:0}
   servlet:
     multipart:
-      max-file-size: 128MB
-      max-request-size: 128MB
+      max-file-size: 512MB
+      max-request-size: 512MB
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -35,6 +35,16 @@ mybatis-plus:
 
 jwt:
   secret: ${JWT_SECRET:}
+
+update:
+  base-download-url: ${UPDATE_BASE_DOWNLOAD_URL:}
+  storage-path: ${UPDATE_STORAGE_PATH:./updates}
+  xdelta3-path: ${UPDATE_XDELTA3_PATH:xdelta3}
+  rsa-private-key-path: ${UPDATE_RSA_PRIVATE_KEY_PATH:}
+  rsa-public-key-path: ${UPDATE_RSA_PUBLIC_KEY_PATH:}
+  max-patch-source-versions: ${UPDATE_MAX_PATCH_SOURCE_VERSIONS:3}
+  # 单设备检测更新最小间隔秒数（防刷），0 表示不启用
+  check-interval-seconds: ${UPDATE_CHECK_INTERVAL_SECONDS:0}
 
 bootstrap:
   admin:

@@ -6,6 +6,18 @@
  */
 export {}
 
+/** 桌面端在线更新状态快照 */
+interface DesktopUpdateState {
+  status: string
+  updateType?: string
+  targetVersion?: string
+  changelog?: string[]
+  received?: number
+  total?: number
+  fileName?: string
+  error?: string
+}
+
 /** 
  * 扩展全局 Window 接口，声明 preload 桥接层暴露的 Electron 主进程能力
  * - imDesktop: 主进程通用API（窗口、通知、消息存储、文件下载等）
@@ -62,6 +74,17 @@ declare global {
         state: string
         error?: string
       }) => void) => () => void
+      initUpdate?: (payload: {
+        serverOrigin: string
+        token: string
+        channel?: string
+      }) => Promise<{ success: boolean; error?: string }>
+      stopUpdate?: () => Promise<boolean>
+      checkUpdateNow?: () => Promise<DesktopUpdateState>
+      getUpdateState?: () => Promise<DesktopUpdateState>
+      setInstallOnQuit?: (enabled: boolean) => Promise<boolean>
+      quitAndInstallUpdate?: () => Promise<{ success: boolean; error?: string }>
+      onUpdateStateChanged?: (handler: (state: DesktopUpdateState) => void) => () => void
       window?: {
         minimize: () => Promise<boolean>
         toggleMaximize: () => Promise<boolean>

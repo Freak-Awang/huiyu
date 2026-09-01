@@ -105,6 +105,63 @@ contextBridge.exposeInMainWorld('imDesktop', {
     return () => ipcRenderer.removeListener('files:download-progress', listener)
   },
 
+  /** 初始化在线更新（登录成功后调用，启动 30 秒后首次检测） */
+  initUpdate: (payload: { serverOrigin: string; token: string; channel?: string }) =>
+    ipcRenderer.invoke('update:init', payload) as Promise<{ success: boolean; error?: string }>,
+
+  /** 停止在线更新检测（登出时调用） */
+  stopUpdate: () => ipcRenderer.invoke('update:stop') as Promise<boolean>,
+
+  /** 手动触发一次更新检查，返回最新状态 */
+  checkUpdateNow: () =>
+    ipcRenderer.invoke('update:check-now') as Promise<{
+      status: string
+      updateType?: string
+      targetVersion?: string
+      changelog?: string[]
+      received?: number
+      total?: number
+      fileName?: string
+      error?: string
+    }>,
+
+  /** 获取当前更新状态 */
+  getUpdateState: () =>
+    ipcRenderer.invoke('update:get-state') as Promise<{
+      status: string
+      updateType?: string
+      targetVersion?: string
+      changelog?: string[]
+      received?: number
+      total?: number
+      fileName?: string
+      error?: string
+    }>,
+
+  /** 设置是否在退出应用时自动安装已就绪的更新 */
+  setInstallOnQuit: (enabled: boolean) =>
+    ipcRenderer.invoke('update:set-install-on-quit', enabled) as Promise<boolean>,
+
+  /** 立即退出并安装已下载的更新 */
+  quitAndInstallUpdate: () =>
+    ipcRenderer.invoke('update:quit-and-install') as Promise<{ success: boolean; error?: string }>,
+
+  /** 监听更新状态变化，返回取消监听的函数 */
+  onUpdateStateChanged: (handler: (state: {
+    status: string
+    updateType?: string
+    targetVersion?: string
+    changelog?: string[]
+    received?: number
+    total?: number
+    fileName?: string
+    error?: string
+  }) => void) => {
+    const listener = (_event: unknown, state: Parameters<typeof handler>[0]) => handler(state)
+    ipcRenderer.on('update:state-changed', listener)
+    return () => ipcRenderer.removeListener('update:state-changed', listener)
+  },
+
   /** 自定义窗口控制：最小化、最大/恢复、关闭、查询当前最大化状态 */
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<boolean>,

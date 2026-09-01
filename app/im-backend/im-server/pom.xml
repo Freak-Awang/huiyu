@@ -18,6 +18,11 @@
             <groupId>com.im</groupId>
             <artifactId>im-common</artifactId>
         </dependency>
+        <!-- MyBatis-Plus 3.5.9 起分页插件独立为该构件 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>

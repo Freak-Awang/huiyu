@@ -367,7 +367,6 @@
                       href="#"
                       @click.prevent="downloadMessageFile(msg.content)"
                     >
-                      <span class="file-bubble-icon">📎</span>
                       <span class="file-bubble-main">
                         <span class="file-bubble-name">{{ getFileInfo(msg.content).fileName }}</span>
                         <span class="file-bubble-meta">{{ formatFileSize(getFileInfo(msg.content).fileSize) }}</span>
@@ -4442,7 +4441,7 @@ watch(
   color: var(--text-primary);
   display: grid;
   gap: 10px;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-width: 260px;
   max-width: 340px;
   padding: 10px 12px;
@@ -4452,17 +4451,6 @@ watch(
 .file-bubble:hover {
   border-color: #c8cef8;
   background: var(--accent-bg-light);
-}
-
-.file-bubble-icon {
-  align-items: center;
-  background: var(--accent-bg-light);
-  border-radius: 7px;
-  color: var(--accent);
-  display: flex;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
 }
 
 .file-bubble-main {

@@ -265,6 +265,12 @@
                 <span>当前版本 {{ appVersion || '浏览器版' }}</span>
               </div>
             </div>
+            <div v-if="updateStore.supported" class="about-update">
+              <button class="about-update-btn" :disabled="updateStore.checking" @click="handleCheckUpdate">
+                {{ updateStore.checking ? '正在检查…' : '检查更新' }}
+              </button>
+              <span v-if="updateFeedback" class="about-update-feedback">{{ updateFeedback }}</span>
+            </div>
           </section>
         </div>
 
@@ -338,6 +344,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
+import { useUpdateStore } from '../stores/update'
 import {
   clearLocalMessages,
   getLocalMessageStats,
@@ -363,6 +370,8 @@ type SectionKey = 'account' | 'general' | 'notification' | 'shortcuts' | 'storag
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const updateStore = useUpdateStore()
+const updateFeedback = ref('')
 const activeSection = ref<SectionKey>('account')
 const appVersion = ref('')
 const storageStats = ref<LocalMessageStats | null>(null)
@@ -477,6 +486,17 @@ async function loadAppVersion() {
     appVersion.value = await window.imDesktop?.getVersion?.() || ''
   } catch {
     appVersion.value = ''
+  }
+}
+
+/** 手动检查更新：有更新时弹出全局更新弹窗，无更新时提示已是最新 */
+async function handleCheckUpdate() {
+  updateFeedback.value = ''
+  await updateStore.checkNow()
+  if (updateStore.error) {
+    updateFeedback.value = `检查失败：${updateStore.error}`
+  } else if (!updateStore.hasUpdate) {
+    updateFeedback.value = '当前已是最新版本'
   }
 }
 
@@ -1217,6 +1237,38 @@ kbd {
 .about-hero span {
   display: block;
   margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+.about-update {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.about-update-btn {
+  padding: 7px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.about-update-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text-on);
+}
+
+.about-update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.about-update-feedback {
   color: var(--text-tertiary);
   font-size: var(--font-xs);
 }

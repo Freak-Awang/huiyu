@@ -22,6 +22,7 @@ import {
   upsertLocalMessage,
   type LocalMessageRecord,
 } from './localMessages.js'
+import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -530,6 +531,13 @@ app.whenReady().then(() => {
   // 无边框窗口不再挂载原生应用菜单，避免菜单栏浮出
   Menu.setApplicationMenu(null)
 
+  // 注册在线更新模块：IPC 处理器 + 恢复待安装更新，托盘 tooltip 展示下载进度
+  registerUpdateHandlers({
+    getMainWindow: () => mainWindow,
+    assertSender: assertMainWindowSender,
+    onTrayProgress: (text) => tray?.setToolTip(text),
+  })
+
   // macOS：点击 Dock 图标时，若无窗口则重新创建
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -549,10 +557,14 @@ if (!hasSingleInstanceLock) {
   app.on('second-instance', () => focusMainWindow())
 }
 
-// 退出前取消所有活跃的文件下载
-app.on('before-quit', () => {
+// 退出前取消所有活跃的文件下载；若用户选择"退出时自动安装"则先执行更新安装
+app.on('before-quit', (event) => {
   isQuitting = true
   activeFileDownloads.forEach((controller) => controller.abort())
+  if (shouldInstallOnQuit()) {
+    event.preventDefault()
+    void installPendingUpdateOnQuit()
+  }
 })
 
 // macOS 特殊处理：关闭所有窗口不退出应用（符合 macOS 惯例）

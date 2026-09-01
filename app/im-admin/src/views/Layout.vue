@@ -21,6 +21,10 @@
             <el-icon><OfficeBuilding /></el-icon>
             <span>部门管理</span>
           </el-menu-item>
+          <el-menu-item index="/releases">
+            <el-icon><Promotion /></el-icon>
+            <span>版本发布</span>
+          </el-menu-item>
         </el-menu>
         <div class="user-info">
           <el-icon><UserFilled /></el-icon>
@@ -40,7 +44,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, OfficeBuilding, UserFilled } from '@element-plus/icons-vue'
+import { User, OfficeBuilding, UserFilled, Promotion } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 

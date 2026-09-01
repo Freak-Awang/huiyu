@@ -36,6 +36,12 @@ const router = createRouter({
                     component: () => import('../views/DeptManage.vue'),
                     meta: { requiresAuth: true, title: '部门管理' },
                 },
+                {
+                    path: 'releases',
+                    name: 'ReleaseManage',
+                    component: () => import('../views/ReleaseManage.vue'),
+                    meta: { requiresAuth: true, title: '版本发布' },
+                },
             ],
         },
     ],
