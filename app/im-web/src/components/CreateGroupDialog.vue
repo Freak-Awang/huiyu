@@ -733,9 +733,14 @@ function isActiveContact(user: Partial<Contact>) {
   flex: 1 1 0;
   overflow-y: scroll;
   padding: 0 10px 12px;
-  scrollbar-color: var(--border) transparent;
+  /* 滚动条默认隐藏，滚动时由全局 .sb-visible 类显现，停止 2 秒后隐藏 */
+  scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.contact-scroll.sb-visible {
+  scrollbar-color: var(--border) transparent;
 }
 
 .contact-scroll::-webkit-scrollbar {
@@ -743,13 +748,18 @@ function isActiveContact(user: Partial<Contact>) {
 }
 
 .contact-scroll::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: transparent;
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
+  transition: background-color 0.3s ease;
 }
 
-.contact-scroll::-webkit-scrollbar-thumb:hover {
+.contact-scroll.sb-visible::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+.contact-scroll.sb-visible::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
   background-clip: padding-box;
 }

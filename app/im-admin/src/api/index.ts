@@ -7,7 +7,7 @@ import { ElMessage } from 'element-plus'
 import router from '../router'
 
 const client = axios.create({
-    baseURL: import.meta.env.PROD ? '' : 'http://localhost:8080',
+    baseURL: import.meta.env.PROD ? '' : 'http://172.16.59.253',
     timeout: 15000,
     headers: { 'Content-Type': 'application/json' },
 })

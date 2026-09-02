@@ -6,7 +6,10 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { setupAutoHideScrollbar } from './utils/autoHideScrollbar'
 import './style.css'
+
+setupAutoHideScrollbar()
 
 const app = createApp(App)
 app.use(createPinia())
