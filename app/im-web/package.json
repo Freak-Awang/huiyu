@@ -38,6 +38,7 @@
   "build": {
     "appId": "com.im.desktop",
     "productName": "ArtTalk",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
@@ -48,6 +49,7 @@
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

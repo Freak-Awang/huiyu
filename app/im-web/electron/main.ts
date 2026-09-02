@@ -26,6 +26,12 @@ import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+/** 应用图标路径：开发模式读 public/，生产模式读 Vite 拷贝进 dist/ 的副本 */
+function appIconPath(filename = 'app-icon.png') {
+  const base = process.env.VITE_DEV_SERVER_URL ? '../public' : '../dist'
+  return join(__dirname, base, filename)
+}
+
 /** 主窗口实例 */
 let mainWindow: BrowserWindow | null = null
 
@@ -150,6 +156,7 @@ function createMainWindow() {
     title: 'ArtTalk',
     backgroundColor: '#f5f5f5',
     frame: false,
+    icon: appIconPath(),
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -184,10 +191,8 @@ function createMainWindow() {
  * 双击托盘图标显示主窗口
  */
 function createTray() {
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAM0lEQVR4AWMYmWL8z0ABYBw1gGE0DBgYGBh+MDAw7Gf4//8/AxKdgYEBiI5Eo2EAAJp8CwY0Vb4pAAAAAElFTkSuQmCC'
-  )
-  tray = new Tray(icon)
+  const icon = nativeImage.createFromPath(appIconPath('app-icon-32.png'))
+  tray = new Tray(icon.isEmpty() ? icon : icon.resize({ width: 16, height: 16 }))
   tray.setToolTip('ArtTalk')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -524,6 +529,9 @@ ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
 })
 
 // ==================== 应用生命周期 ====================
+
+// Windows：固定 AppUserModelId，确保任务栏图标、通知与安装包 appId 正确关联
+app.setAppUserModelId('com.im.desktop')
 
 app.whenReady().then(() => {
   createMainWindow()
