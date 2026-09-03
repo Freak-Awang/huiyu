@@ -39,11 +39,19 @@
             class="attachment-draft-meta"
             :class="{ 'is-status': draft.status !== 'waiting' }"
           >
-            {{ draft.status === 'waiting' ? formatFileSize(draft.size) : statusText(draft) }}
+            {{ draft.status === 'waiting' ? waitingMetaText(draft) : statusText(draft) }}
           </span>
         </span>
         <span class="attachment-draft-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
+          <svg v-if="draft.kind === 'folder'" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M3.5 6.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none">
             <path d="M7 3.5h7l4 4V20.5H7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
             <path d="M14 3.5v4h4M9.5 11.5h6M9.5 14.5h6M9.5 17.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -55,7 +63,7 @@
         :class="{ 'is-visible': draft.status !== 'waiting' }"
       >
         <button
-          v-if="draft.kind === 'file' && (draft.status === 'hashing' || draft.status === 'uploading')"
+          v-if="draft.kind !== 'image' && (draft.status === 'hashing' || draft.status === 'uploading')"
           type="button"
           class="attachment-draft-action"
           @click="$emit('pause', draft)"
@@ -148,7 +156,17 @@ function formatFileSize(size: number) {
 }
 
 function kindText(draft: AttachmentDraft) {
-  return draft.kind === 'image' ? '图片' : '文件'
+  if (draft.kind === 'image') return '图片'
+  if (draft.kind === 'folder') return '文件夹'
+  return '文件'
+}
+
+// 待上传状态的元信息：文件夹显示文件数+总大小，其余显示文件大小
+function waitingMetaText(draft: AttachmentDraft) {
+  if (draft.kind === 'folder') {
+    return `${draft.folderFiles?.length ?? 0} 个文件 · ${formatFileSize(draft.size)}`
+  }
+  return formatFileSize(draft.size)
 }
 
 // 根据草稿状态返回对应的状态文本（校验/上传进度、已暂停、失败原因）

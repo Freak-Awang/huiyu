@@ -53,6 +53,8 @@ public class MessageServiceImpl implements MessageService {
     private static final String MESSAGE_TYPE_IMAGE = "IMAGE";
     private static final String MESSAGE_TYPE_FILE = "FILE";
     private static final String MESSAGE_TYPE_STICKER = "STICKER";
+    private static final String MESSAGE_TYPE_SHAKE = "SHAKE";
+    private static final String MESSAGE_TYPE_FOLDER = "FOLDER";
     private static final String MENTION_TYPE_ALL = "all";
     private static final String MENTION_ALL_USER_ID = "__ALL__";
 
@@ -565,6 +567,9 @@ public class MessageServiceImpl implements MessageService {
         if (!StringUtils.hasText(content)) {
             return "";
         }
+        if (MESSAGE_TYPE_SHAKE.equalsIgnoreCase(messageType)) {
+            return "[窗口抖动]";
+        }
 
         try {
             JsonNode node = objectMapper.readTree(content);
@@ -587,6 +592,11 @@ public class MessageServiceImpl implements MessageService {
                         return "[表情] " + node.get("name").asText();
                     }
                     return "[表情]";
+                case MESSAGE_TYPE_FOLDER:
+                    if (node.has("folderName")) {
+                        return "[文件夹] " + node.get("folderName").asText();
+                    }
+                    return "[文件夹]";
                 default:
                     break;
             }
@@ -625,7 +635,9 @@ public class MessageServiceImpl implements MessageService {
         if (MESSAGE_TYPE_TEXT.equalsIgnoreCase(messageType)
                 || MESSAGE_TYPE_IMAGE.equalsIgnoreCase(messageType)
                 || MESSAGE_TYPE_FILE.equalsIgnoreCase(messageType)
-                || MESSAGE_TYPE_STICKER.equalsIgnoreCase(messageType)) {
+                || MESSAGE_TYPE_STICKER.equalsIgnoreCase(messageType)
+                || MESSAGE_TYPE_SHAKE.equalsIgnoreCase(messageType)
+                || MESSAGE_TYPE_FOLDER.equalsIgnoreCase(messageType)) {
             return;
         }
         throw new BusinessException(400, "Unsupported message type");
@@ -650,6 +662,9 @@ public class MessageServiceImpl implements MessageService {
         boolean isFile = MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType());
         boolean isImage = MESSAGE_TYPE_IMAGE.equalsIgnoreCase(request.getMessageType());
         if (!isFile && !isImage) {
+            if (MESSAGE_TYPE_FOLDER.equalsIgnoreCase(request.getMessageType())) {
+                validateFolderMessage(request);
+            }
             return;
         }
         String invalidContentMessage = isFile ? "Invalid file message content" : "Invalid image message content";
@@ -673,6 +688,40 @@ public class MessageServiceImpl implements MessageService {
             }
             if (isImage && !ImageTypeDetector.isSafeInlineType(file.getContentType())) {
                 throw new BusinessException(415, "Image message must reference an image file");
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException(400, invalidContentMessage);
+        }
+    }
+
+    private void validateFolderMessage(SendMessageRequest request) {
+        String invalidContentMessage = "Invalid folder message content";
+        try {
+            JsonNode root = objectMapper.readTree(request.getContent());
+            JsonNode folderNameNode = root.get("folderName");
+            if (folderNameNode == null || folderNameNode.asText().isBlank()) {
+                throw new BusinessException(400, invalidContentMessage);
+            }
+            JsonNode filesNode = root.get("files");
+            if (filesNode == null || !filesNode.isArray() || filesNode.isEmpty()) {
+                throw new BusinessException(400, invalidContentMessage);
+            }
+            for (JsonNode fileNode : filesNode) {
+                JsonNode fileIdNode = fileNode.get("fileId");
+                if (fileIdNode == null || fileIdNode.asText().isBlank()
+                        || !fileNode.hasNonNull("fileName") || !fileNode.hasNonNull("fileSize")) {
+                    throw new BusinessException(400, invalidContentMessage);
+                }
+                ImFile file = fileMetadataService.getById(Long.parseLong(fileIdNode.asText()));
+                if (file == null || !FileMetadataService.STATUS_AVAILABLE.equals(file.getStatus())) {
+                    throw new BusinessException(404, "File not found");
+                }
+                if (file.getConversationId() == null
+                        || !file.getConversationId().equals(request.getConversationId())) {
+                    throw new BusinessException(403, "File does not belong to this conversation");
+                }
             }
         } catch (BusinessException e) {
             throw e;

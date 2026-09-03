@@ -21,8 +21,8 @@ export interface Message {
   senderAvatar: string
   /** 发送者个性签名 */
   senderSignature: string
-  /** 消息类型：文本、图片、文件或表情 */
-  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
+  /** 消息类型：文本、图片、文件、文件夹、表情或窗口抖动 */
+  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'FOLDER' | 'STICKER' | 'SHAKE'
   /** 原始消息内容（JSON 字符串或纯文本） */
   content: string
   /** 格式化后的展示内容 */
@@ -129,7 +129,7 @@ export interface RawMessage {
   senderName?: string | null
   senderAvatar?: string | null
   senderSignature?: string | null
-  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'STICKER'
+  messageType?: 'TEXT' | 'IMAGE' | 'FILE' | 'FOLDER' | 'STICKER' | 'SHAKE'
   content?: string | null
   clientMsgId?: string | null
   createTime?: string | null
@@ -175,7 +175,9 @@ export function normalizeMessage(raw: RawMessage): Message {
       ? parseStickerDisplayName(content)
       : messageType === 'FILE'
         ? parseFileDisplayName(content)
-        : parsedText.text,
+        : messageType === 'FOLDER'
+          ? parseFolderDisplayName(content)
+          : parsedText.text,
     mentions: parsedText.mentions,
     clientMsgId: raw.clientMsgId || undefined,
     createdAt: timestamp,
@@ -225,6 +227,51 @@ function parseFileDisplayName(content: string): string {
     // Old or malformed file messages fall back to the raw payload.
   }
   return '[文件]'
+}
+
+/** 文件夹消息中的单个文件条目 */
+export interface FolderMessageFile {
+  fileId: number | string
+  path: string
+  fileName: string
+  fileSize: number
+  contentType?: string
+  downloadUrl?: string
+}
+
+/** 文件夹消息内容 */
+export interface FolderMessageContent {
+  folderName: string
+  fileCount: number
+  totalSize: number
+  files: FolderMessageFile[]
+}
+
+/**
+ * 解析文件夹消息内容；内容非法时返回 null
+ * @param content 消息内容（JSON 字符串）
+ */
+export function parseFolderMessageContent(content: string): FolderMessageContent | null {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object' && typeof parsed.folderName === 'string'
+        && Array.isArray(parsed.files)) {
+      return {
+        folderName: parsed.folderName,
+        fileCount: Number(parsed.fileCount ?? parsed.files.length),
+        totalSize: Number(parsed.totalSize || 0),
+        files: parsed.files as FolderMessageFile[],
+      }
+    }
+  } catch {
+    // Malformed folder messages fall through to null.
+  }
+  return null
+}
+
+function parseFolderDisplayName(content: string): string {
+  const folder = parseFolderMessageContent(content)
+  return folder ? `[文件夹] ${folder.folderName}` : '[文件夹]'
 }
 
 /**

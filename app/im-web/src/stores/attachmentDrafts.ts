@@ -6,10 +6,16 @@ import { defineStore } from 'pinia'
 import { markRaw, ref } from 'vue'
 import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
 
-/** 附件类型：图片或普通文件 */
-export type AttachmentDraftKind = 'image' | 'file'
+/** 附件类型：图片、普通文件或文件夹 */
+export type AttachmentDraftKind = 'image' | 'file' | 'folder'
 /** 附件分类方式：由入口明确指定，或根据文件元数据自动识别 */
-export type AttachmentDraftClassification = AttachmentDraftKind | 'auto'
+export type AttachmentDraftClassification = Exclude<AttachmentDraftKind, 'folder'> | 'auto'
+
+/** 文件夹内文件（path 为相对文件夹根目录的路径） */
+export interface AttachmentFolderFile {
+  path: string
+  file: File
+}
 /** 附件上传状态 */
 export type AttachmentDraftStatus = 'waiting' | 'hashing' | 'uploading' | 'paused' | 'failed'
 
@@ -23,8 +29,10 @@ export interface AttachmentDraft {
   conversationId: string
   /** 附件类型 */
   kind: AttachmentDraftKind
-  /** 浏览器 File 对象（使用 markRaw 避免响应式包装） */
+  /** 浏览器 File 对象（使用 markRaw 避免响应式包装）；folder 类型为占位空文件，实际内容见 folderFiles */
   file: File
+  /** 文件夹内容（仅 folder 类型存在） */
+  folderFiles?: AttachmentFolderFile[]
   /** 文件名 */
   name: string
   /** 文件大小（字节） */
@@ -99,6 +107,14 @@ function fingerprint(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`
 }
 
+/** 草稿去重指纹：文件夹按名称+总大小+文件数，其余按文件属性 */
+function draftFingerprint(draft: AttachmentDraft) {
+  if (draft.kind === 'folder') {
+    return `folder:${draft.name}:${draft.size}:${draft.folderFiles?.length ?? 0}`
+  }
+  return fingerprint(draft.file)
+}
+
 function formatLimit(bytes: number) {
   if (bytes >= 1024 ** 3) return `${Math.round(bytes / 1024 ** 3)}GB`
   return `${Math.round(bytes / 1024 ** 2)}MB`
@@ -136,7 +152,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     classification: AttachmentDraftClassification = 'auto',
   ): AddAttachmentResult {
     const current = draftsFor(conversationId)
-    const fingerprints = new Set(current.map((draft) => fingerprint(draft.file)))
+    const fingerprints = new Set(current.map(draftFingerprint))
     const added: AttachmentDraft[] = []
     const errors: string[] = []
     let duplicateCount = 0
@@ -179,6 +195,60 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
       draftsByConversation.value[conversationId] = [...current, ...added]
     }
     return { added, duplicateCount, errors }
+  }
+
+  /**
+   * 向指定会话添加文件夹附件（作为整体草稿，内部文件保留相对路径）。
+   * 过滤空文件与超大文件；与现有草稿（按名称+总大小+文件数）重复时拒绝。
+   * @param conversationId 会话 ID
+   * @param folder 文件夹（名称 + 带相对路径的文件列表）
+   * @returns 添加结果（成功列表、重复数、错误列表）
+   */
+  function addFolder(
+    conversationId: string,
+    folder: { name: string; files: AttachmentFolderFile[] },
+  ): AddAttachmentResult {
+    const current = draftsFor(conversationId)
+    const fingerprints = new Set(current.map(draftFingerprint))
+    const errors: string[] = []
+    const name = folder.name || 'folder'
+
+    const validFiles = folder.files.filter(({ path, file }) => {
+      if (file.size <= 0) {
+        errors.push(`${path}：文件为空`)
+        return false
+      }
+      if (file.size > FILE_UPLOAD_MAX_SIZE) {
+        errors.push(`${path}：不能超过 ${formatLimit(FILE_UPLOAD_MAX_SIZE)}`)
+        return false
+      }
+      return true
+    })
+    if (!validFiles.length) {
+      if (!errors.length) errors.push(`${name}：文件夹为空`)
+      return { added: [], duplicateCount: 0, errors }
+    }
+
+    const totalSize = validFiles.reduce((sum, { file }) => sum + file.size, 0)
+    const probe: AttachmentDraft = {
+      id: '',
+      conversationId,
+      kind: 'folder',
+      file: markRaw(new File([], name)),
+      folderFiles: validFiles.map(({ path, file }) => ({ path, file: markRaw(file) })),
+      name,
+      size: totalSize,
+      mimeType: '',
+      lastModified: Date.now(),
+      status: 'waiting',
+      progress: 0,
+    }
+    if (fingerprints.has(draftFingerprint(probe))) {
+      return { added: [], duplicateCount: 1, errors }
+    }
+    probe.id = createDraftId()
+    draftsByConversation.value[conversationId] = [...current, probe]
+    return { added: [probe], duplicateCount: 0, errors }
   }
 
   /**
@@ -242,6 +312,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     draftsByConversation,
     draftsFor,
     addFiles,
+    addFolder,
     updateDraft,
     removeDraft,
     clearConversation,

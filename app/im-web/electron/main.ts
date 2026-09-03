@@ -327,6 +327,40 @@ ipcMain.handle('window:isMaximized', (event) => {
   return !!mainWindow?.isMaximized()
 })
 
+/** 窗口抖动（振屏）：在原位置附近快速小幅移动窗口，模拟 QQ 抖一抖效果 */
+let windowShakeTimer: NodeJS.Timeout | null = null
+ipcMain.handle('window:shake', (event) => {
+  assertMainWindowSender(event)
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  // 最大化或最小化状态下无法移动窗口，退化为仅页面内容抖动
+  if (mainWindow.isMaximized() || mainWindow.isMinimized()) return false
+  // 抖动进行中则忽略叠加请求，避免窗口位置漂移
+  if (windowShakeTimer) return false
+
+  const [baseX, baseY] = mainWindow.getPosition()
+  const offsets: Array<[number, number]> = [
+    [10, 4], [-10, -4], [8, -5], [-8, 5], [6, 3], [-6, -3], [4, -2], [-4, 2], [0, 0],
+  ]
+  let step = 0
+  windowShakeTimer = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      if (windowShakeTimer) clearInterval(windowShakeTimer)
+      windowShakeTimer = null
+      return
+    }
+    const [dx, dy] = offsets[step]
+    mainWindow.setPosition(baseX + dx, baseY + dy)
+    step += 1
+    if (step >= offsets.length) {
+      if (windowShakeTimer) clearInterval(windowShakeTimer)
+      windowShakeTimer = null
+      // 确保窗口精确回到原位
+      mainWindow.setPosition(baseX, baseY)
+    }
+  }, 50)
+  return true
+})
+
 /** 通过系统默认浏览器打开外链，仅允许 https/http 协议 */
 ipcMain.handle('app:openExternal', async (event, url: string) => {
   assertMainWindowSender(event)

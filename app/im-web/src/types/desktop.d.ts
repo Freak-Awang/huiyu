@@ -90,6 +90,7 @@ declare global {
         toggleMaximize: () => Promise<boolean>
         close: () => Promise<boolean>
         isMaximized: () => Promise<boolean>
+        shake?: () => Promise<boolean>
         onMaximizeChanged?: (handler: (maximized: boolean) => void) => () => void
       }
     }

@@ -6,6 +6,7 @@
       'compact-mode': settingsStore.general.compactMode,
       'dark-theme': settingsStore.general.theme === 'dark',
       'desktop-window': hasDesktopWindowControls,
+      'window-shaking': isWindowShaking,
     }"
   >
     <DesktopWindowControls />
@@ -374,6 +375,40 @@
                       <span class="file-bubble-action">{{ getFileDownloadLabel(msg.content) }}</span>
                     </a>
                   </template>
+                  <template v-else-if="msg.messageType === 'FOLDER'">
+                    <div class="folder-bubble">
+                      <a
+                        class="file-bubble folder-bubble-card"
+                        href="#"
+                        @click.prevent="toggleFolderExpand(msg)"
+                      >
+                        <span class="file-bubble-main">
+                          <span class="file-bubble-name">{{ getFolderInfo(msg.content).folderName }}</span>
+                          <span class="file-bubble-meta">{{ getFolderInfo(msg.content).files.length }} 个文件 · {{ formatFileSize(getFolderInfo(msg.content).totalSize) }}</span>
+                        </span>
+                        <span class="file-bubble-action">{{ isFolderExpanded(msg) ? '收起' : '展开' }}</span>
+                      </a>
+                      <ul v-if="isFolderExpanded(msg)" class="folder-file-list">
+                        <li
+                          v-for="file in getFolderInfo(msg.content).files"
+                          :key="String(file.fileId)"
+                          class="folder-file-item"
+                        >
+                          <a href="#" class="folder-file-link" @click.prevent="downloadFolderFile(file)">
+                            <span class="folder-file-name">{{ file.path || file.fileName }}</span>
+                            <span class="folder-file-meta">{{ formatFileSize(file.fileSize) }}</span>
+                            <span class="folder-file-action">{{ getFolderFileDownloadLabel(file) }}</span>
+                          </a>
+                        </li>
+                      </ul>
+                    </div>
+                  </template>
+                  <template v-else-if="msg.messageType === 'SHAKE'">
+                    <div class="text-bubble shake-bubble">
+                      <img :src="shakeIcon" alt="" class="shake-bubble-icon" />
+                      <span>{{ msg.senderId === String(authStore.currentUser?.userId ?? '') ? '你' : getMessageSenderName(msg) }}发送了一个窗口抖动</span>
+                    </div>
+                  </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
                     <div class="sticker-bubble">
                       <template v-if="getStickerInfo(msg.content)">
@@ -515,6 +550,15 @@
                   <img :src="fileIcon" alt="" />
                   <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
                 </label>
+                <button
+                  class="tool-btn"
+                  title="发送窗口抖动"
+                  type="button"
+                  :disabled="isSendingMessage"
+                  @click="sendShakeMessage()"
+                >
+                  <img :src="shakeIcon" alt="窗口抖动" />
+                </button>
               </div>
               <button
                 class="send-btn"
@@ -1190,8 +1234,10 @@ import {
   isAllMention,
   MESSAGE_MENTION_ALL_ID,
   normalizeMessage,
+  parseFolderMessageContent,
   recallMessage,
   searchMessages as searchServerMessages,
+  type FolderMessageFile,
   type Message,
   type MessageMention,
   type MessageReply,
@@ -1209,7 +1255,12 @@ import {
 import { cancelConversationFileUpload, uploadConversationFile } from '../utils/fileTransfer'
 import { downloadAuthenticatedFile } from '../utils/fileDownload'
 import { runAttachmentQueue } from '../utils/attachmentQueue'
-import { DragDepthTracker, hasDirectoryDragItem, hasFileDragPayload } from '../utils/fileDrop'
+import {
+  DragDepthTracker,
+  collectDroppedItems,
+  hasFileDragPayload,
+  type DroppedFolder,
+} from '../utils/fileDrop'
 import { EMOJI_GROUPS } from '../constants/emoji'
 import {
   STICKERS,
@@ -1243,6 +1294,7 @@ import pinIcon from '../assets/icons/置顶.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
 import fileIcon from '../assets/icons/file.svg'
 import imageIcon from '../assets/icons/image.svg'
+import shakeIcon from '../assets/icons/shake.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -1769,8 +1821,12 @@ function setAttachmentFeedback(message: string, isError = false) {
   attachmentFeedbackIsError.value = isError
 }
 
-// 添加附件到当前会话的草稿列表，处理重复和错误
-function addAttachmentFiles(files: File[], classification: AttachmentDraftClassification = 'auto') {
+// 添加附件到当前会话的草稿列表，处理重复和错误；extraMessages 会合并进反馈提示
+function addAttachmentFiles(
+  files: File[],
+  classification: AttachmentDraftClassification = 'auto',
+  extraMessages: string[] = [],
+) {
   const conversationId = chatStore.currentConversation?.conversationId
   if (!conversationId || !authStore.currentUser) {
     setAttachmentFeedback('请先选择会话，再添加附件', true)
@@ -1786,7 +1842,7 @@ function addAttachmentFiles(files: File[], classification: AttachmentDraftClassi
   }
 
   const result = attachmentDraftStore.addFiles(conversationId, files, classification)
-  const messages: string[] = []
+  const messages: string[] = [...extraMessages]
   if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复项`)
   if (result.errors.length) messages.push(...result.errors)
   setAttachmentFeedback(messages.join('；'), result.errors.length > 0 || !result.added.length)
@@ -1807,7 +1863,7 @@ function removeAttachmentDraft(draft: AttachmentDraft) {
 }
 
 function pauseAttachmentDraft(draft: AttachmentDraft) {
-  if (draft.kind !== 'file') return
+  if (draft.kind === 'image') return
   attachmentDraftStore.updateDraft(draft.conversationId, draft.id, {
     status: 'paused',
     error: undefined,
@@ -1845,18 +1901,42 @@ function handleAttachmentDragLeave(event: DragEvent) {
   }
 }
 
-// 附件放置：提取文件添加到附件列表
-function handleAttachmentDrop(event: DragEvent) {
+// 附件放置：散文件直接添加，文件夹作为整体草稿添加
+async function handleAttachmentDrop(event: DragEvent) {
   if (!hasFileDragPayload(event.dataTransfer)) return
   event.preventDefault()
   event.stopPropagation()
   attachmentDragDepth.reset()
   isAttachmentDragActive.value = false
-  if (hasDirectoryDragItem(event.dataTransfer?.items)) {
-    setAttachmentFeedback('暂不支持拖入文件夹，请选择文件后重试', true)
-    return
+  const { files, folders } = await collectDroppedItems(event.dataTransfer)
+  const notes: string[] = []
+  let folderHasError = false
+  for (const folder of folders) {
+    const result = addAttachmentFolder(folder)
+    notes.push(...result.messages)
+    folderHasError = folderHasError || result.isError
   }
-  addAttachmentFiles(Array.from(event.dataTransfer?.files || []), 'auto')
+  if (files.length) {
+    addAttachmentFiles(files, 'auto', notes)
+  } else if (notes.length) {
+    setAttachmentFeedback(notes.join('；'), folderHasError)
+  }
+}
+
+// 添加文件夹附件草稿，返回反馈信息（不直接设置，由调用方合并展示）
+function addAttachmentFolder(folder: DroppedFolder) {
+  const conversationId = chatStore.currentConversation?.conversationId
+  if (!conversationId || !authStore.currentUser) {
+    return { messages: ['请先选择会话，再添加附件'], isError: true }
+  }
+  if (isSendingMessage.value) {
+    return { messages: ['附件正在发送，请稍后再添加'], isError: true }
+  }
+  const result = attachmentDraftStore.addFolder(conversationId, folder)
+  const messages: string[] = []
+  if (result.duplicateCount) messages.push(`已忽略重复的文件夹「${folder.name}」`)
+  if (result.errors.length) messages.push(...result.errors)
+  return { messages, isError: result.errors.length > 0 && !result.added.length }
 }
 
 function preventWindowFileDrop(event: DragEvent) {
@@ -2766,9 +2846,8 @@ function getFileInfo(content: string): { fileId: string; fileName: string; fileS
   return { fileId: '', fileName: '文件', fileSize: 0, url: '#' }
 }
 
-// 下载消息中的文件附件，支持进度显示和取消
-async function downloadMessageFile(content: string) {
-  const file = getFileInfo(content)
+// 下载文件（带进度的通用实现，文件消息与文件夹内文件共用）
+async function downloadFileWithProgress(file: { fileId: string; fileName: string; fileSize: number }) {
   if (!file.fileId) return
   const active = fileDownloadControllers.get(file.fileId)
   if (active) {
@@ -2794,12 +2873,56 @@ async function downloadMessageFile(content: string) {
   }
 }
 
-// 获取文件下载按钮的显示文本（下载/百分比/取消）
-function getFileDownloadLabel(content: string) {
-  const fileId = getFileInfo(content).fileId
+// 下载消息中的文件附件，支持进度显示和取消
+async function downloadMessageFile(content: string) {
+  await downloadFileWithProgress(getFileInfo(content))
+}
+
+// 解析文件夹消息内容，非法内容回退为占位结构
+function getFolderInfo(content: string) {
+  return parseFolderMessageContent(content) || { folderName: '文件夹', fileCount: 0, totalSize: 0, files: [] }
+}
+
+// 文件夹气泡展开状态（按消息 key 记录）
+const expandedFolderMessageKeys = ref<string[]>([])
+
+function folderMessageKey(msg: Message) {
+  return msg.messageId || msg.clientMsgId || ''
+}
+
+function isFolderExpanded(msg: Message) {
+  return expandedFolderMessageKeys.value.includes(folderMessageKey(msg))
+}
+
+function toggleFolderExpand(msg: Message) {
+  const key = folderMessageKey(msg)
+  expandedFolderMessageKeys.value = isFolderExpanded(msg)
+    ? expandedFolderMessageKeys.value.filter((item) => item !== key)
+    : [...expandedFolderMessageKeys.value, key]
+}
+
+// 下载文件夹消息中的单个文件
+async function downloadFolderFile(file: FolderMessageFile) {
+  await downloadFileWithProgress({
+    fileId: String(file.fileId || ''),
+    fileName: file.fileName || '文件',
+    fileSize: Number(file.fileSize || 0),
+  })
+}
+
+// 获取下载按钮的显示文本（下载/百分比/取消）
+function getDownloadLabelByFileId(fileId: string) {
   if (!fileId || !(fileId in fileDownloadProgress.value)) return '下载'
   const progress = fileDownloadProgress.value[fileId]
   return progress > 0 ? `${Math.round(progress * 100)}%` : '取消'
+}
+
+function getFileDownloadLabel(content: string) {
+  return getDownloadLabelByFileId(getFileInfo(content).fileId)
+}
+
+function getFolderFileDownloadLabel(file: FolderMessageFile) {
+  return getDownloadLabelByFileId(String(file.fileId || ''))
 }
 
 // 清理所有已认证图片的 Blob URL，切换会话时调用
@@ -3072,7 +3195,9 @@ function messageReplyText(msg: Message): string {
   if (msg.displayContent) return msg.displayContent
   if (msg.messageType === 'IMAGE') return '[图片]'
   if (msg.messageType === 'FILE') return `[文件] ${getFileInfo(msg.content).fileName}`
+  if (msg.messageType === 'FOLDER') return `[文件夹] ${getFolderInfo(msg.content).folderName}`
   if (msg.messageType === 'STICKER') return '[表情]'
+  if (msg.messageType === 'SHAKE') return '[窗口抖动]'
   return msg.content || ''
 }
 
@@ -3223,6 +3348,46 @@ async function processAttachmentDraft(
         contentType: image.contentType || draft.mimeType || 'image/png',
       }
       sendMediaMessage('IMAGE', JSON.stringify(imageContent), '[图片]', conversation, user)
+    } else if (draft.kind === 'folder') {
+      const folderFiles = draft.folderFiles || []
+      const uploadedFiles: FolderMessageFile[] = []
+      let uploadedBytes = 0
+      const updateFolderProgress = (stage: 'hashing' | 'uploading', current: File, fileProgress: number) => {
+        attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+          status: stage,
+          progress: Math.min(1, (uploadedBytes + fileProgress * current.size) / draft.size),
+        })
+      }
+      for (const { path, file } of folderFiles) {
+        const result = await uploadConversationFile(file, conversation.conversationId, user.userId, {
+          signal: controller.signal,
+          onProgress: (progress) => updateFolderProgress(
+            progress.stage === 'completed' ? 'uploading' : progress.stage,
+            file,
+            progress.progress,
+          ),
+        })
+        uploadedBytes += file.size
+        uploadedFiles.push({
+          fileId: result.id,
+          path,
+          fileName: result.originalName || file.name,
+          fileSize: result.size || file.size,
+          contentType: result.contentType || file.type || 'application/octet-stream',
+          downloadUrl: result.downloadUrl || result.url || getFileUrl(result.id),
+        })
+        attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
+          status: 'uploading',
+          progress: Math.min(1, uploadedBytes / draft.size),
+        })
+      }
+      const folderContent = {
+        folderName: draft.name,
+        fileCount: uploadedFiles.length,
+        totalSize: draft.size,
+        files: uploadedFiles,
+      }
+      sendMediaMessage('FOLDER', JSON.stringify(folderContent), `[文件夹] ${draft.name}`, conversation, user)
     } else {
       const file = await uploadConversationFile(draft.file, conversation.conversationId, user.userId, {
         signal: controller.signal,
@@ -3263,6 +3428,63 @@ function handleSendText() {
   void handleSendMessage()
 }
 
+// 窗口抖动（振屏）：发送 SHAKE 类型消息，收发双方窗口都会抖动
+const SHAKE_COOLDOWN_MS = 3000 // 发送冷却，避免连续抖动刷屏
+const SHAKE_ANIMATION_MS = 600 // CSS 抖动动画时长
+let lastShakeSentAt = 0
+const isWindowShaking = ref(false)
+let windowShakeTimer: ReturnType<typeof setTimeout> | null = null
+
+// 触发本端窗口抖动：桌面端通过主进程物理移动窗口，同时页面内容做 CSS 抖动
+function triggerWindowShake() {
+  if (window.imDesktop?.window?.shake) {
+    void window.imDesktop.window.shake()
+  }
+  if (windowShakeTimer) clearTimeout(windowShakeTimer)
+  isWindowShaking.value = false
+  // 强制重启动画：先移除 class，下一帧再加回
+  requestAnimationFrame(() => {
+    isWindowShaking.value = true
+    windowShakeTimer = setTimeout(() => {
+      isWindowShaking.value = false
+      windowShakeTimer = null
+    }, SHAKE_ANIMATION_MS)
+  })
+}
+
+// 发送窗口抖动消息
+function sendShakeMessage() {
+  const conv = chatStore.currentConversation
+  const user = authStore.currentUser
+  if (!conv || !user || isSendingMessage.value) return
+  const now = Date.now()
+  if (now - lastShakeSentAt < SHAKE_COOLDOWN_MS) return
+  lastShakeSentAt = now
+
+  const clientMsgId = generateId()
+  const localMessage: Message = {
+    messageId: '',
+    conversationId: conv.conversationId,
+    senderId: user.userId,
+    senderName: user.nickname,
+    senderAvatar: user.avatar || '',
+    senderSignature: user.signature || '',
+    messageType: 'SHAKE',
+    content: '[窗口抖动]',
+    displayContent: '[窗口抖动]',
+    mentions: [],
+    clientMsgId,
+    createdAt: new Date().toISOString(),
+    status: 'SENDING',
+    ...getInitialReadReceipt(conv),
+  }
+  chatStore.addMessage(localMessage)
+  sendOutgoingMessage(localMessage)
+  closeEmojiPanel()
+  scrollToBottom(true)
+  triggerWindowShake()
+}
+
 function activateFileLabel(event: KeyboardEvent) {
   if (isSendingMessage.value) return
   ;(event.currentTarget as HTMLElement | null)?.click()
@@ -3282,9 +3504,9 @@ function onSendFile(e: Event) {
   input.value = ''
 }
 
-// 构建并发送图片/文件消息
+// 构建并发送图片/文件/文件夹消息
 function sendMediaMessage(
-  type: 'IMAGE' | 'FILE',
+  type: 'IMAGE' | 'FILE' | 'FOLDER',
   content: string,
   displayContent = content,
   conv = chatStore.currentConversation,
@@ -3350,6 +3572,13 @@ async function handleWsMessage(msg: WsMessage) {
       }
       if (isCurrentConversation && wasAtBottom) {
         scrollToBottom(true)
+      }
+      // 收到他人发来的窗口抖动消息时抖动本端窗口
+      if (
+        receivedMessage.messageType === 'SHAKE' &&
+        receivedMessage.senderId !== String(authStore.currentUser?.userId ?? '')
+      ) {
+        triggerWindowShake()
       }
       updateUnreadBadge()
       break
@@ -4448,6 +4677,64 @@ watch(
   text-decoration: none;
 }
 
+.folder-bubble {
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.folder-bubble-card {
+  min-width: 0;
+  max-width: none;
+}
+
+.folder-file-list {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  list-style: none;
+  margin: 4px 0 0;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.folder-file-link {
+  align-items: center;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 6px 8px;
+  text-decoration: none;
+}
+
+.folder-file-link:hover {
+  background: var(--bg-header);
+}
+
+.folder-file-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-file-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.folder-file-action {
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .file-bubble:hover {
   border-color: #c8cef8;
   background: var(--accent-bg-light);
@@ -4657,6 +4944,36 @@ watch(
 .tool-btn:focus-visible {
   outline: 2px solid #4053bf;
   outline-offset: 2px;
+}
+
+/* 窗口抖动（振屏）：页面内容 CSS 抖动动画，桌面端同时配合主进程物理移动窗口 */
+@keyframes windowShake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-8px, 4px); }
+  20% { transform: translate(8px, -4px); }
+  30% { transform: translate(-7px, -5px); }
+  40% { transform: translate(7px, 5px); }
+  50% { transform: translate(-5px, 3px); }
+  60% { transform: translate(5px, -3px); }
+  70% { transform: translate(-3px, -2px); }
+  80% { transform: translate(3px, 2px); }
+  90% { transform: translate(-1px, 1px); }
+}
+
+.chat-layout.window-shaking {
+  animation: windowShake 0.6s ease-in-out;
+}
+
+.shake-bubble {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary, #888);
+}
+
+.shake-bubble-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .input-box {

@@ -21,11 +21,105 @@ export function hasFileDragPayload(dataTransfer?: Pick<DataTransfer, 'types'> | 
 export function hasDirectoryDragItem(items?: DataTransferItemList | null) {
   if (!items) return false
   return Array.from(items).some((item) => {
-    const entry = (item as DataTransferItem & {
-      webkitGetAsEntry?: () => { isDirectory?: boolean } | null
-    }).webkitGetAsEntry?.()
+    const entry = getEntryFromItem(item)
     return entry?.isDirectory === true
   })
+}
+
+/** FileSystemEntry 的最小结构定义（兼容 webkitGetAsEntry 返回值） */
+type FileSystemEntryLike = {
+  isFile: boolean
+  isDirectory: boolean
+  name: string
+  file?: (success: (file: File) => void, error?: (err: unknown) => void) => void
+  createReader?: () => {
+    readEntries: (
+      success: (entries: FileSystemEntryLike[]) => void,
+      error?: (err: unknown) => void,
+    ) => void
+  }
+}
+
+function getEntryFromItem(item: DataTransferItem): FileSystemEntryLike | null {
+  return (
+    (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntryLike | null })
+      .webkitGetAsEntry?.() ?? null
+  )
+}
+
+function readEntryFile(entry: FileSystemEntryLike): Promise<File | null> {
+  return new Promise((resolve) => {
+    entry.file?.(resolve, () => resolve(null))
+  })
+}
+
+// readEntries 每次最多返回 100 条，需循环读取直到返回空批次
+function readEntryBatch(reader: ReturnType<NonNullable<FileSystemEntryLike['createReader']>>) {
+  return new Promise<FileSystemEntryLike[]>((resolve) => {
+    reader.readEntries(resolve, () => resolve([]))
+  })
+}
+
+/** 拖入的文件夹：名称 + 带相对路径的文件列表 */
+export interface DroppedFolder {
+  name: string
+  files: { path: string; file: File }[]
+}
+
+/** 拖放收集结果：顶层散文件 + 文件夹列表 */
+export interface DroppedItems {
+  files: File[]
+  folders: DroppedFolder[]
+}
+
+async function walkEntry(
+  entry: FileSystemEntryLike,
+  output: { path: string; file: File }[],
+  prefix: string,
+) {
+  if (entry.isFile && entry.file) {
+    const file = await readEntryFile(entry)
+    if (file) output.push({ path: prefix + file.name, file })
+    return
+  }
+  if (entry.isDirectory && entry.createReader) {
+    const reader = entry.createReader()
+    let batch: FileSystemEntryLike[]
+    do {
+      batch = await readEntryBatch(reader)
+      for (const child of batch) await walkEntry(child, output, `${prefix}${entry.name}/`)
+    } while (batch.length > 0)
+  }
+}
+
+/**
+ * 收集拖放载荷，区分顶层散文件与文件夹（文件夹递归展开并保留相对路径）
+ *
+ * 必须在拖放事件处理函数中同步调用（内部会同步读取 dataTransfer.items），
+ * 之后异步遍历目录。不支持 entries API 的环境回退到 dataTransfer.files（全部视为散文件）。
+ * @param dataTransfer - 拖放事件的数据传输对象
+ */
+export async function collectDroppedItems(dataTransfer?: DataTransfer | null): Promise<DroppedItems> {
+  if (!dataTransfer) return { files: [], folders: [] }
+  const entries = Array.from(dataTransfer.items || [])
+    .filter((item) => item.kind === 'file')
+    .map(getEntryFromItem)
+    .filter((entry): entry is FileSystemEntryLike => !!entry)
+
+  if (!entries.length) return { files: Array.from(dataTransfer.files || []), folders: [] }
+
+  const result: DroppedItems = { files: [], folders: [] }
+  for (const entry of entries) {
+    if (entry.isDirectory) {
+      const folder: DroppedFolder = { name: entry.name, files: [] }
+      await walkEntry(entry, folder.files, '')
+      result.folders.push(folder)
+    } else if (entry.isFile && entry.file) {
+      const file = await readEntryFile(entry)
+      if (file) result.files.push(file)
+    }
+  }
+  return result
 }
 
 /**

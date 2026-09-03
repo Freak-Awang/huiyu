@@ -104,4 +104,47 @@ describe('AttachmentDraftStore', () => {
     expect(abort).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:one.png')
   })
+
+  it('adds folder drafts keeping relative paths and rejects duplicates', () => {
+    const store = useAttachmentDraftStore()
+    const folder = {
+      name: 'docs',
+      files: [
+        { path: 'a.txt', file: file('a.txt', 10) },
+        { path: 'inner/b.txt', file: file('b.txt', 20) },
+      ],
+    }
+    const result = store.addFolder('conversation-1', folder)
+
+    expect(result.errors).toEqual([])
+    const drafts = store.draftsFor('conversation-1')
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0].kind).toBe('folder')
+    expect(drafts[0].name).toBe('docs')
+    expect(drafts[0].size).toBe(30)
+    expect(drafts[0].folderFiles?.map((item) => item.path)).toEqual(['a.txt', 'inner/b.txt'])
+
+    const duplicate = store.addFolder('conversation-1', folder)
+    expect(duplicate.added).toEqual([])
+    expect(duplicate.duplicateCount).toBe(1)
+  })
+
+  it('filters empty and oversized files when adding folders', () => {
+    const store = useAttachmentDraftStore()
+    const empty = store.addFolder('conversation-1', { name: 'empty', files: [] })
+    expect(empty.added).toEqual([])
+    expect(empty.errors).toEqual(['empty：文件夹为空'])
+
+    const result = store.addFolder('conversation-1', {
+      name: 'mixed',
+      files: [
+        { path: 'ok.txt', file: file('ok.txt', 10) },
+        { path: 'zero.txt', file: file('zero.txt', 0) },
+        { path: 'huge.bin', file: file('huge.bin', FILE_UPLOAD_MAX_SIZE + 1) },
+      ],
+    })
+    expect(result.added).toHaveLength(1)
+    expect(result.errors).toHaveLength(2)
+    expect(result.added[0].folderFiles?.map((item) => item.path)).toEqual(['ok.txt'])
+  })
 })

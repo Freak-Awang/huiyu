@@ -168,6 +168,8 @@ contextBridge.exposeInMainWorld('imDesktop', {
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize') as Promise<boolean>,
     close: () => ipcRenderer.invoke('window:close') as Promise<boolean>,
     isMaximized: () => ipcRenderer.invoke('window:isMaximized') as Promise<boolean>,
+    /** 窗口抖动（振屏）：主进程在原位置附近快速小幅移动窗口 */
+    shake: () => ipcRenderer.invoke('window:shake') as Promise<boolean>,
     /** 监听主进程广播的最大化状态变化，返回取消监听的函数 */
     onMaximizeChanged: (handler: (maximized: boolean) => void) => {
       const listener = (_event: unknown, maximized: boolean) => handler(maximized)
