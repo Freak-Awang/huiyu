@@ -7,9 +7,9 @@
  * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载）
  */
 import { contextBridge, ipcRenderer } from 'electron'
-import { randomUUID } from 'node:crypto'
 
 const p2pPorts = new Map<string, MessagePort>()
+let p2pWriteRequestSequence = 0
 const p2pWritePending = new Map<string, {
   receiveId: string
   resolve: (value: { offset: number }) => void
@@ -43,6 +43,11 @@ function closeP2pPort(receiveId: string) {
     pending.reject(new Error('P2P 接收任务已关闭'))
     p2pWritePending.delete(requestId)
   }
+}
+
+function nextP2pWriteRequestId() {
+  p2pWriteRequestSequence = (p2pWriteRequestSequence + 1) % Number.MAX_SAFE_INTEGER
+  return `p2p-write-${Date.now()}-${p2pWriteRequestSequence}`
 }
 
 contextBridge.exposeInMainWorld('imDesktop', {
@@ -166,7 +171,7 @@ contextBridge.exposeInMainWorld('imDesktop', {
   writeP2pChunk: (receiveId: string, fileIndex: number, offset: number, data: ArrayBuffer) => {
     const port = p2pPorts.get(receiveId)
     if (!port) return Promise.reject(new Error('P2P 接收通道不可用'))
-    const requestId = randomUUID()
+    const requestId = nextP2pWriteRequestId()
     return new Promise<{ offset: number }>((resolve, reject) => {
       const timer = setTimeout(() => {
         p2pWritePending.delete(requestId)
