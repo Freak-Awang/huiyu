@@ -5,10 +5,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.im.common.dto.SendMessageRequest;
+import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
+import com.im.common.exception.BusinessException;
+import com.im.server.config.P2pTransferProperties;
+import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
+import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.MessageService;
 import org.slf4j.Logger;
@@ -20,7 +25,10 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -57,25 +65,45 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     private static final String CMD_MESSAGE_RECEIVE = "MESSAGE_RECEIVE";
     private static final String CMD_MESSAGE_READ = "MESSAGE_READ";
     private static final String CMD_ONLINE_STATUS = "ONLINE_STATUS";
+    private static final String CMD_CLIENT_CAPABILITIES = "CLIENT_CAPABILITIES";
+    private static final String CMD_P2P_PEER_STATUS = "P2P_PEER_STATUS";
+    private static final String CMD_P2P_OFFER_CREATE = "P2P_OFFER_CREATE";
+    private static final String CMD_P2P_SOURCE_REGISTER = "P2P_SOURCE_REGISTER";
+    private static final String CMD_P2P_TRANSFER_REQUEST = "P2P_TRANSFER_REQUEST";
+    private static final String CMD_P2P_SIGNAL = "P2P_SIGNAL";
+    private static final String CMD_P2P_TRANSFER_CANCEL = "P2P_TRANSFER_CANCEL";
+    private static final String CMD_P2P_TRANSFER_CLAIMED = "P2P_TRANSFER_CLAIMED";
 
     private final StringRedisTemplate redisTemplate;
     private final MessageService messageService;
+    private final ConversationMapper conversationMapper;
     private final ConversationMemberMapper conversationMemberMapper;
+    private final MessageMapper messageMapper;
     private final UserMapper userMapper;
     private final WebSocketSessionManager sessionManager;
+    private final P2pTransferRegistry p2pRegistry;
+    private final P2pTransferProperties p2pProperties;
     private final ObjectMapper objectMapper;
 
     public ImWebSocketHandler(StringRedisTemplate redisTemplate,
                               MessageService messageService,
+                              ConversationMapper conversationMapper,
                               ConversationMemberMapper conversationMemberMapper,
+                              MessageMapper messageMapper,
                               UserMapper userMapper,
                               WebSocketSessionManager sessionManager,
+                              P2pTransferRegistry p2pRegistry,
+                              P2pTransferProperties p2pProperties,
                               ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.messageService = messageService;
+        this.conversationMapper = conversationMapper;
         this.conversationMemberMapper = conversationMemberMapper;
+        this.messageMapper = messageMapper;
         this.userMapper = userMapper;
         this.sessionManager = sessionManager;
+        this.p2pRegistry = p2pRegistry;
+        this.p2pProperties = p2pProperties;
         this.objectMapper = objectMapper;
     }
 
@@ -151,6 +179,27 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
                     // 在线状态：查询指定用户/会话成员的状态，或更新自己的状态
                     handleOnlineStatus(session, senderId, root, seq);
                     break;
+                case CMD_CLIENT_CAPABILITIES:
+                    handleClientCapabilities(session, senderId, root, seq);
+                    break;
+                case CMD_P2P_PEER_STATUS:
+                    handleP2pPeerStatus(session, senderId, root, seq);
+                    break;
+                case CMD_P2P_OFFER_CREATE:
+                    handleP2pOfferCreate(session, senderId, root, seq);
+                    break;
+                case CMD_P2P_SOURCE_REGISTER:
+                    handleP2pSourceRegister(session, senderId, root, seq);
+                    break;
+                case CMD_P2P_TRANSFER_REQUEST:
+                    handleP2pTransferRequest(session, senderId, root, seq);
+                    break;
+                case CMD_P2P_SIGNAL:
+                    handleP2pSignal(session, root, seq);
+                    break;
+                case CMD_P2P_TRANSFER_CANCEL:
+                    handleP2pTransferCancel(session, root, seq);
+                    break;
                 default:
                     log.debug("Unknown command: {}", cmd);
             }
@@ -187,8 +236,27 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        P2pTransferRegistry.CleanupResult cleanup = p2pRegistry.cleanupSession(session);
+        for (P2pTransferRegistry.Route route : cleanup.removedRoutes()) {
+            WebSocketSession peer = route.peerOf(session);
+            if (peer != null && peer.isOpen()) {
+                ObjectNode data = objectMapper.createObjectNode();
+                data.put("routeId", route.routeId());
+                data.put("transferId", route.transferId());
+                data.put("reason", "peer_disconnected");
+                sendCommand(peer, CMD_P2P_TRANSFER_CANCEL, null, data);
+            }
+            if (route.receiverSession().getId().equals(session.getId())
+                    && p2pRegistry.getSource(route.transferId()) != null) {
+                notifyP2pTransferClaim(route.receiverUserId(), route.transferId(), false, session);
+            }
+        }
+
         // removeSession 返回 true 表示这是该用户最后一个活跃 session
         if (!sessionManager.removeSession(userId, session)) {
+            if (cleanup.removedCapability()) {
+                notifyP2pCapabilityChange(userId);
+            }
             log.debug("User still has another active session: userId={}, closedSession={}",
                     userId, session.getId());
             return;
@@ -200,6 +268,9 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
         // 广播离线状态给所有有共同会话的用户
         notifyOnlineStatusChange(userId, PRESENCE_OFFLINE);
+        if (cleanup.removedCapability()) {
+            notifyP2pCapabilityChange(userId);
+        }
     }
 
     /**
@@ -297,6 +368,296 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         messageService.acknowledgeMessage(userId, messageId);
+    }
+
+    private void handleClientCapabilities(WebSocketSession session, Long userId, JsonNode root, String seq) {
+        JsonNode data = root.get("data");
+        int requestedVersion = data != null ? data.path("p2pFileVersion").asInt(0) : 0;
+        int activeVersion = p2pProperties.isEnabled() && requestedVersion >= 1 ? 1 : 0;
+        p2pRegistry.registerCapability(userId, session, activeVersion);
+
+        ObjectNode response = objectMapper.createObjectNode();
+        response.put("ok", true);
+        response.put("enabled", p2pProperties.isEnabled());
+        response.put("p2pFileVersion", activeVersion);
+        sendCommand(session, CMD_CLIENT_CAPABILITIES, seq, response);
+        notifyP2pCapabilityChange(userId);
+    }
+
+    private void handleP2pPeerStatus(WebSocketSession session, Long userId, JsonNode root, String seq) {
+        try {
+            ensureP2pEnabled();
+            Long conversationId = requiredLong(root.path("data"), "conversationId");
+            Long peerId = directPeer(conversationId, userId);
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("ok", true);
+            response.put("conversationId", conversationId);
+            response.put("userId", peerId);
+            response.put("available", p2pRegistry.hasCapableSession(peerId));
+            sendCommand(session, CMD_P2P_PEER_STATUS, seq, response);
+        } catch (BusinessException e) {
+            sendP2pError(session, CMD_P2P_PEER_STATUS, seq, e);
+        }
+    }
+
+    private void handleP2pOfferCreate(WebSocketSession session, Long senderId, JsonNode root, String seq) {
+        try {
+            ensureP2pEnabled();
+            if (!p2pRegistry.isCapable(session)) {
+                throw new BusinessException(403, "P2P file transfer requires a compatible desktop client");
+            }
+            JsonNode data = requiredObject(root, "data");
+            Long conversationId = requiredLong(data, "conversationId");
+            Long recipientId = directPeer(conversationId, senderId);
+            if (!p2pRegistry.hasCapableSession(recipientId)) {
+                throw new BusinessException(409, "The peer desktop client is offline");
+            }
+
+            String kind = requiredText(data, "kind").toLowerCase();
+            if (!"file".equals(kind) && !"folder".equals(kind)) {
+                throw new BusinessException(400, "Invalid P2P attachment kind");
+            }
+            String name = requiredText(data, "name").trim();
+            if (name.length() > 255) {
+                throw new BusinessException(400, "Attachment name is too long");
+            }
+            long totalSize = requiredLong(data, "totalSize");
+            int fileCount = data.path("fileCount").asInt(-1);
+            validateP2pLimits(kind, totalSize, fileCount);
+            String hashField = "file".equals(kind) ? "sha256" : "manifestSha256";
+            String hash = requiredText(data, hashField).toLowerCase();
+            if (!hash.matches("^[0-9a-f]{64}$")) {
+                throw new BusinessException(400, "Invalid attachment checksum");
+            }
+
+            String transferId = "p2p_" + UUID.randomUUID().toString().replace("-", "");
+            ObjectNode content = objectMapper.createObjectNode();
+            content.put("version", 1);
+            content.put("transferMode", "p2p_lan");
+            content.put("transferId", transferId);
+            content.put("kind", kind);
+            content.put("name", name);
+            content.put("totalSize", totalSize);
+            content.put("fileCount", fileCount);
+            content.put(hashField, hash);
+            if ("file".equals(kind)) {
+                content.put("fileName", name);
+                content.put("fileSize", totalSize);
+            } else {
+                content.put("folderName", name);
+            }
+
+            SendMessageRequest request = new SendMessageRequest();
+            request.setConversationId(conversationId);
+            request.setMessageType("file".equals(kind) ? "FILE" : "FOLDER");
+            request.setContent(objectMapper.writeValueAsString(content));
+            request.setClientMsgId(data.path("clientMsgId").asText(null));
+            ImMessage message = messageService.sendP2pMessage(senderId, request);
+
+            P2pMessageMetadata stored = parseStoredP2pMessage(message, senderId);
+            Long storedRecipient = directPeer(message.getConversationId(), senderId);
+            p2pRegistry.registerSource(new P2pTransferRegistry.SourceRegistration(
+                    stored.transferId(), message.getId(), message.getConversationId(), senderId,
+                    storedRecipient, session));
+
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("ok", true);
+            response.put("transferId", stored.transferId());
+            response.put("messageId", message.getId());
+            response.put("conversationId", message.getConversationId());
+            response.put("messageType", message.getMessageType());
+            response.put("content", message.getContent());
+            response.put("clientMsgId", message.getClientMsgId());
+            response.put("status", message.getStatus());
+            response.put("createdAt", message.getCreateTime() != null ? message.getCreateTime().toString() : null);
+            sendCommand(session, CMD_P2P_OFFER_CREATE, seq, response);
+            pushMessageToConversationMembers(message.getConversationId(), senderId, message);
+        } catch (BusinessException e) {
+            sendP2pError(session, CMD_P2P_OFFER_CREATE, seq, e);
+        } catch (Exception e) {
+            log.error("Failed to create P2P offer for userId={}", senderId, e);
+            sendP2pError(session, CMD_P2P_OFFER_CREATE, seq,
+                    new BusinessException(500, "Failed to create P2P offer"));
+        }
+    }
+
+    private void handleP2pSourceRegister(WebSocketSession session, Long senderId, JsonNode root, String seq) {
+        try {
+            ensureP2pEnabled();
+            if (!p2pRegistry.isCapable(session)) {
+                throw new BusinessException(403, "P2P file transfer requires a compatible desktop client");
+            }
+            JsonNode data = requiredObject(root, "data");
+            Long messageId = requiredLong(data, "messageId");
+            String transferId = requiredText(data, "transferId");
+            ImMessage message = messageMapper.selectById(messageId);
+            P2pMessageMetadata metadata = parseStoredP2pMessage(message, senderId);
+            if (!metadata.transferId().equals(transferId)) {
+                throw new BusinessException(403, "Transfer does not belong to this message");
+            }
+            Long recipientId = directPeer(message.getConversationId(), senderId);
+            p2pRegistry.registerSource(new P2pTransferRegistry.SourceRegistration(
+                    transferId, messageId, message.getConversationId(), senderId, recipientId, session));
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("ok", true);
+            response.put("transferId", transferId);
+            sendCommand(session, CMD_P2P_SOURCE_REGISTER, seq, response);
+        } catch (BusinessException e) {
+            sendP2pError(session, CMD_P2P_SOURCE_REGISTER, seq, e);
+        }
+    }
+
+    private void handleP2pTransferRequest(WebSocketSession receiverSession, Long receiverId,
+                                          JsonNode root, String seq) {
+        try {
+            ensureP2pEnabled();
+            if (!p2pRegistry.isCapable(receiverSession)) {
+                throw new BusinessException(403, "P2P file transfer requires a compatible desktop client");
+            }
+            String transferId = requiredText(requiredObject(root, "data"), "transferId");
+            P2pTransferRegistry.SourceRegistration source = p2pRegistry.getSource(transferId);
+            if (source == null) {
+                throw new BusinessException(410, "The source file is no longer available");
+            }
+            P2pTransferRegistry.Route route = p2pRegistry.bindReceiver(source, receiverId, receiverSession);
+            if (route == null) {
+                throw new BusinessException(409, "This transfer is already being received on another device");
+            }
+
+            ObjectNode forwarded = objectMapper.createObjectNode();
+            forwarded.put("transferId", transferId);
+            forwarded.put("routeId", route.routeId());
+            sendCommand(source.sourceSession(), CMD_P2P_TRANSFER_REQUEST, null, forwarded);
+
+            ObjectNode response = forwarded.deepCopy();
+            response.put("ok", true);
+            response.put("state", "routing");
+            sendCommand(receiverSession, CMD_P2P_TRANSFER_REQUEST, seq, response);
+
+            for (WebSocketSession other : p2pRegistry.getCapableSessions(receiverId)) {
+                if (!other.getId().equals(receiverSession.getId())) {
+                    ObjectNode claimed = objectMapper.createObjectNode();
+                    claimed.put("transferId", transferId);
+                    claimed.put("claimed", true);
+                    sendCommand(other, CMD_P2P_TRANSFER_CLAIMED, null, claimed);
+                }
+            }
+        } catch (BusinessException e) {
+            sendP2pError(receiverSession, CMD_P2P_TRANSFER_REQUEST, seq, e);
+        }
+    }
+
+    private void handleP2pSignal(WebSocketSession session, JsonNode root, String seq) {
+        try {
+            ensureP2pEnabled();
+            JsonNode data = requiredObject(root, "data");
+            String routeId = requiredText(data, "routeId");
+            JsonNode signal = data.get("signal");
+            if (signal == null || !signal.isObject()
+                    || objectMapper.writeValueAsBytes(signal).length > p2pProperties.getMaxSignalBytes()) {
+                throw new BusinessException(400, "Invalid or oversized P2P signal");
+            }
+            P2pTransferRegistry.Route route = p2pRegistry.getRoute(routeId);
+            if (route == null || !route.contains(session)) {
+                throw new BusinessException(403, "Invalid P2P route");
+            }
+            validateP2pSignal(route, session, signal);
+            WebSocketSession peer = route.peerOf(session);
+            if (peer == null || !peer.isOpen()) {
+                throw new BusinessException(410, "The peer disconnected");
+            }
+            ObjectNode forwarded = objectMapper.createObjectNode();
+            forwarded.put("routeId", routeId);
+            forwarded.put("transferId", route.transferId());
+            forwarded.put("fromRole", route.roleOf(session));
+            forwarded.set("signal", signal);
+            sendCommand(peer, CMD_P2P_SIGNAL, null, forwarded);
+            if (seq != null) {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("ok", true);
+                response.put("routeId", routeId);
+                sendCommand(session, CMD_P2P_SIGNAL, seq, response);
+            }
+        } catch (BusinessException e) {
+            sendP2pError(session, CMD_P2P_SIGNAL, seq, e);
+        } catch (Exception e) {
+            sendP2pError(session, CMD_P2P_SIGNAL, seq,
+                    new BusinessException(400, "Invalid P2P signal"));
+        }
+    }
+
+    private void handleP2pTransferCancel(WebSocketSession session, JsonNode root, String seq) {
+        try {
+            JsonNode data = requiredObject(root, "data");
+            String routeId = data.path("routeId").asText("");
+            String transferId = data.path("transferId").asText("");
+            String reason = data.path("reason").asText("cancelled");
+            boolean releaseSource = data.path("releaseSource").asBoolean(false);
+            if (reason.length() > 64) {
+                throw new BusinessException(400, "Invalid P2P cancellation reason");
+            }
+            if (!routeId.isBlank()) {
+                P2pTransferRegistry.Route route = p2pRegistry.getRoute(routeId);
+                if (route == null || !route.contains(session)) {
+                    throw new BusinessException(403, "Invalid P2P route");
+                }
+                if (!transferId.isBlank() && !route.transferId().equals(transferId)) {
+                    throw new BusinessException(403, "Transfer does not match the P2P route");
+                }
+                if (releaseSource && !route.sourceSession().getId().equals(session.getId())) {
+                    throw new BusinessException(403, "Only the source session can stop sharing this transfer");
+                }
+                boolean keepRoute = !releaseSource
+                        && ("paused".equals(reason) || "peer_disconnected".equals(reason));
+                if (!keepRoute) {
+                    p2pRegistry.removeRoute(routeId);
+                }
+                if (releaseSource) {
+                    p2pRegistry.unregisterSource(route.transferId(), session);
+                } else if ("completed".equals(reason) && "receiver".equals(route.roleOf(session))) {
+                    p2pRegistry.unregisterSource(route.transferId(), route.sourceSession());
+                }
+                WebSocketSession peer = route.peerOf(session);
+                if (peer != null && peer.isOpen()) {
+                    ObjectNode forwarded = objectMapper.createObjectNode();
+                    forwarded.put("routeId", routeId);
+                    forwarded.put("transferId", route.transferId());
+                    forwarded.put("reason", reason);
+                    sendCommand(peer, CMD_P2P_TRANSFER_CANCEL, null, forwarded);
+                }
+                if (releaseSource) {
+                    notifyP2pTransferUnavailable(route.receiverUserId(), route.transferId(), peer);
+                } else if ("receiver".equals(route.roleOf(session)) && "cancelled".equals(reason)) {
+                    notifyP2pTransferClaim(route.receiverUserId(), route.transferId(), false, session);
+                }
+            } else if (!transferId.isBlank()) {
+                P2pTransferRegistry.SourceRegistration source = p2pRegistry.getSource(transferId);
+                if (source == null || !source.sourceSession().getId().equals(session.getId())
+                        || !p2pRegistry.unregisterSource(transferId, session)) {
+                    throw new BusinessException(403, "Only the source session can stop sharing this transfer");
+                }
+                for (P2pTransferRegistry.Route route : p2pRegistry.removeRoutesForTransfer(transferId)) {
+                    WebSocketSession peer = route.peerOf(session);
+                    if (peer != null && peer.isOpen()) {
+                        ObjectNode forwarded = objectMapper.createObjectNode();
+                        forwarded.put("routeId", route.routeId());
+                        forwarded.put("transferId", transferId);
+                        forwarded.put("reason", reason);
+                        sendCommand(peer, CMD_P2P_TRANSFER_CANCEL, null, forwarded);
+                    }
+                }
+                notifyP2pTransferUnavailable(source.recipientId(), transferId, null);
+            } else {
+                throw new BusinessException(400, "routeId or transferId is required");
+            }
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("ok", true);
+            if (!routeId.isBlank()) response.put("routeId", routeId);
+            if (!transferId.isBlank()) response.put("transferId", transferId);
+            sendCommand(session, CMD_P2P_TRANSFER_CANCEL, seq, response);
+        } catch (BusinessException e) {
+            sendP2pError(session, CMD_P2P_TRANSFER_CANCEL, seq, e);
+        }
     }
 
     /**
@@ -458,6 +819,223 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("Error notifying online status change for userId={}", userId, e);
         }
+    }
+
+    private void notifyP2pCapabilityChange(Long userId) {
+        if (!p2pProperties.isEnabled()) {
+            return;
+        }
+        try {
+            List<ImConversationMember> memberships = conversationMemberMapper.selectList(
+                    new LambdaQueryWrapper<ImConversationMember>()
+                            .eq(ImConversationMember::getUserId, userId));
+            for (ImConversationMember membership : memberships) {
+                ImConversation conversation = conversationMapper.selectById(membership.getConversationId());
+                if (conversation == null || conversation.getType() == null || conversation.getType() != 1) {
+                    continue;
+                }
+                List<ImConversationMember> members = conversationMemberMapper.selectList(
+                        new LambdaQueryWrapper<ImConversationMember>()
+                                .eq(ImConversationMember::getConversationId, conversation.getId()));
+                ObjectNode data = objectMapper.createObjectNode();
+                data.put("conversationId", conversation.getId());
+                data.put("userId", userId);
+                data.put("available", p2pRegistry.hasCapableSession(userId));
+                for (ImConversationMember member : members) {
+                    if (!member.getUserId().equals(userId)) {
+                        for (WebSocketSession target : sessionManager.getSessions(member.getUserId())) {
+                            sendCommand(target, CMD_P2P_PEER_STATUS, null, data);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to publish P2P capability change for userId={}", userId);
+        }
+    }
+
+    private void notifyP2pTransferClaim(Long receiverId, String transferId, boolean claimed,
+                                        WebSocketSession excludedSession) {
+        for (WebSocketSession target : p2pRegistry.getCapableSessions(receiverId)) {
+            if (excludedSession != null && target.getId().equals(excludedSession.getId())) {
+                continue;
+            }
+            ObjectNode data = objectMapper.createObjectNode();
+            data.put("transferId", transferId);
+            data.put("claimed", claimed);
+            sendCommand(target, CMD_P2P_TRANSFER_CLAIMED, null, data);
+        }
+    }
+
+    private void notifyP2pTransferUnavailable(Long receiverId, String transferId,
+                                              WebSocketSession alreadyNotifiedSession) {
+        for (WebSocketSession target : p2pRegistry.getCapableSessions(receiverId)) {
+            if (alreadyNotifiedSession != null && target.getId().equals(alreadyNotifiedSession.getId())) {
+                continue;
+            }
+            ObjectNode data = objectMapper.createObjectNode();
+            data.put("transferId", transferId);
+            data.put("reason", "source_cancelled");
+            sendCommand(target, CMD_P2P_TRANSFER_CANCEL, null, data);
+        }
+    }
+
+    private Long directPeer(Long conversationId, Long userId) {
+        ImConversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null || conversation.getType() == null || conversation.getType() != 1) {
+            throw new BusinessException(400, "P2P attachments are only supported in direct conversations");
+        }
+        List<ImConversationMember> members = conversationMemberMapper.selectList(
+                new LambdaQueryWrapper<ImConversationMember>()
+                        .eq(ImConversationMember::getConversationId, conversationId));
+        if (members.size() != 2) {
+            throw new BusinessException(409, "Direct conversation must contain exactly two members");
+        }
+        boolean member = members.stream().anyMatch(item -> item.getUserId().equals(userId));
+        if (!member) {
+            throw new BusinessException(403, "Not a member of this conversation");
+        }
+        return members.stream()
+                .map(ImConversationMember::getUserId)
+                .filter(id -> !id.equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(409, "Direct conversation has no peer"));
+    }
+
+    private void validateP2pLimits(String kind, long totalSize, int fileCount) {
+        if (totalSize <= 0 || fileCount <= 0) {
+            throw new BusinessException(400, "P2P attachment is empty");
+        }
+        if ("file".equals(kind)) {
+            if (fileCount != 1 || totalSize > p2pProperties.getMaxFileSize()) {
+                throw new BusinessException(413, "P2P file exceeds the size limit");
+            }
+            return;
+        }
+        if (fileCount > p2pProperties.getMaxFolderFiles()
+                || totalSize > p2pProperties.getMaxFolderSize()) {
+            throw new BusinessException(413, "P2P folder exceeds the transfer limit");
+        }
+    }
+
+    private void validateP2pSignal(P2pTransferRegistry.Route route, WebSocketSession session,
+                                   JsonNode signal) {
+        if (signal.size() != 1) {
+            throw new BusinessException(400, "P2P signal must contain exactly one payload");
+        }
+        if (signal.has("description")) {
+            JsonNode description = signal.get("description");
+            String type = description != null ? description.path("type").asText("") : "";
+            String expectedType = "source".equals(route.roleOf(session)) ? "offer" : "answer";
+            if (description == null || !description.isObject()
+                    || !expectedType.equals(type) || !description.path("sdp").isTextual()
+                    || !hasOnlyFields(description, Set.of("type", "sdp"))) {
+                throw new BusinessException(400, "Invalid P2P session description");
+            }
+            return;
+        }
+        if (signal.has("candidate")) {
+            JsonNode candidate = signal.get("candidate");
+            if (candidate == null || !candidate.isObject() || !candidate.path("candidate").isTextual()
+                    || !hasOnlyFields(candidate,
+                    Set.of("candidate", "sdpMid", "sdpMLineIndex", "usernameFragment"))) {
+                throw new BusinessException(400, "Invalid P2P ICE candidate");
+            }
+            return;
+        }
+        if (signal.has("control")) {
+            JsonNode control = signal.get("control");
+            if (!"source".equals(route.roleOf(session)) || control == null || !control.isObject()
+                    || !"queued".equals(control.path("type").asText())
+                    || !hasOnlyFields(control, Set.of("type"))) {
+                throw new BusinessException(400, "Invalid P2P control signal");
+            }
+            return;
+        }
+        throw new BusinessException(400, "Unsupported P2P signal payload");
+    }
+
+    private boolean hasOnlyFields(JsonNode object, Set<String> allowedFields) {
+        Iterator<String> fields = object.fieldNames();
+        while (fields.hasNext()) {
+            if (!allowedFields.contains(fields.next())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private P2pMessageMetadata parseStoredP2pMessage(ImMessage message, Long senderId) {
+        if (message == null || !senderId.equals(message.getSenderId())) {
+            throw new BusinessException(404, "P2P attachment message not found");
+        }
+        try {
+            JsonNode content = objectMapper.readTree(message.getContent());
+            if (!"p2p_lan".equals(content.path("transferMode").asText())) {
+                throw new BusinessException(400, "Message is not a P2P attachment");
+            }
+            String transferId = requiredText(content, "transferId");
+            return new P2pMessageMetadata(transferId);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException(400, "Invalid P2P attachment message");
+        }
+    }
+
+    private void ensureP2pEnabled() {
+        if (!p2pProperties.isEnabled()) {
+            throw new BusinessException(503, "P2P file transfer is disabled");
+        }
+    }
+
+    private JsonNode requiredObject(JsonNode root, String field) {
+        JsonNode value = root != null ? root.get(field) : null;
+        if (value == null || !value.isObject()) {
+            throw new BusinessException(400, field + " is required");
+        }
+        return value;
+    }
+
+    private String requiredText(JsonNode root, String field) {
+        String value = root != null ? root.path(field).asText("").trim() : "";
+        if (value.isBlank()) {
+            throw new BusinessException(400, field + " is required");
+        }
+        return value;
+    }
+
+    private Long requiredLong(JsonNode root, String field) {
+        JsonNode value = root != null ? root.get(field) : null;
+        if (value == null || !value.canConvertToLong()) {
+            throw new BusinessException(400, field + " is required");
+        }
+        return value.asLong();
+    }
+
+    private void sendP2pError(WebSocketSession session, String command, String seq, BusinessException error) {
+        ObjectNode response = objectMapper.createObjectNode();
+        response.put("ok", false);
+        response.put("code", error.getCode());
+        response.put("message", error.getMessage());
+        sendCommand(session, command, seq, response);
+    }
+
+    private void sendCommand(WebSocketSession session, String command, String seq, ObjectNode data) {
+        try {
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("cmd", command);
+            if (seq != null) {
+                response.put("seq", seq);
+            }
+            response.set("data", data);
+            sessionManager.sendToSession(session, objectMapper.writeValueAsString(response));
+        } catch (Exception e) {
+            log.warn("Failed to send WebSocket command {} to session={}", command, session.getId());
+        }
+    }
+
+    private record P2pMessageMetadata(String transferId) {
     }
 
     /**

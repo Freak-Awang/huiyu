@@ -3,6 +3,7 @@
  * 同时提供后端原始消息到前端标准 Message 类型的规范化转换，以及文本消息内容的构建与解析。
  */
 import http from './index'
+import type { P2pAttachmentContent } from '../utils/p2pProtocol'
 import { toServerUrl } from '../config/runtime'
 
 /**
@@ -45,6 +46,14 @@ export interface Message {
   readStatus: number
   /** 已读时间 */
   readTime?: string
+}
+
+/** 会话列表等轻量视图生成消息摘要时所需的最小字段集合。 */
+export interface MessagePreviewSource {
+  messageType?: string | null
+  content?: string | null
+  displayContent?: string | null
+  status?: string | null
 }
 
 /** 消息状态：已发送 / 发送中 / 发送失败 / 已撤回 */
@@ -171,13 +180,17 @@ export function normalizeMessage(raw: RawMessage): Message {
     senderSignature: raw.senderSignature || '',
     messageType,
     content,
-    displayContent: messageType === 'STICKER'
-      ? parseStickerDisplayName(content)
-      : messageType === 'FILE'
-        ? parseFileDisplayName(content)
-        : messageType === 'FOLDER'
-          ? parseFolderDisplayName(content)
-          : parsedText.text,
+    displayContent: messageType === 'IMAGE'
+      ? '[图片]'
+      : messageType === 'STICKER'
+        ? parseStickerDisplayName(content)
+        : messageType === 'FILE'
+          ? parseFileDisplayName(content)
+          : messageType === 'FOLDER'
+            ? parseFolderDisplayName(content)
+            : messageType === 'SHAKE'
+              ? '[窗口抖动]'
+              : parsedText.text,
     mentions: parsedText.mentions,
     clientMsgId: raw.clientMsgId || undefined,
     createdAt: timestamp,
@@ -220,8 +233,9 @@ function parseStickerDisplayName(content: string): string {
 function parseFileDisplayName(content: string): string {
   try {
     const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object' && typeof parsed.fileName === 'string') {
-      return `[文件] ${parsed.fileName}`
+    if (parsed && typeof parsed === 'object') {
+      const name = parsed.transferMode === 'p2p_lan' ? parsed.name : parsed.fileName
+      if (typeof name === 'string') return `[文件] ${name}`
     }
   } catch {
     // Old or malformed file messages fall back to the raw payload.
@@ -247,6 +261,17 @@ export interface FolderMessageContent {
   files: FolderMessageFile[]
 }
 
+/** 旧版服务端存储附件与新版局域网 P2P 附件的联合消息类型。 */
+export type AttachmentMessageContent = FolderMessageContent | P2pAttachmentContent | {
+  fileId: number | string
+  fileName: string
+  fileSize: number
+  transferMode?: 'object_storage' | string
+  contentType?: string
+  downloadUrl?: string
+  url?: string
+}
+
 /**
  * 解析文件夹消息内容；内容非法时返回 null
  * @param content 消息内容（JSON 字符串）
@@ -270,8 +295,42 @@ export function parseFolderMessageContent(content: string): FolderMessageContent
 }
 
 function parseFolderDisplayName(content: string): string {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed?.transferMode === 'p2p_lan' && typeof parsed.name === 'string') {
+      return `[文件夹] ${parsed.name}`
+    }
+  } catch {
+    // Fall through to the legacy folder parser.
+  }
   const folder = parseFolderMessageContent(content)
   return folder ? `[文件夹] ${folder.folderName}` : '[文件夹]'
+}
+
+/**
+ * 将任意消息转换为适合会话列表展示的简短文本，避免图片、附件等 JSON 内容直接露出。
+ */
+export function getMessagePreviewContent(message?: MessagePreviewSource | null): string {
+  if (!message) return ''
+  if (message.status === 'RECALLED') return '消息已撤回'
+
+  const content = message.content || ''
+  switch ((message.messageType || 'TEXT').toUpperCase()) {
+    case 'IMAGE':
+      return '[图片]'
+    case 'FILE':
+      return message.displayContent || parseFileDisplayName(content)
+    case 'FOLDER':
+      return message.displayContent || parseFolderDisplayName(content)
+    case 'STICKER':
+      return message.displayContent || parseStickerDisplayName(content)
+    case 'SHAKE':
+      return '[窗口抖动]'
+    case 'TEXT':
+      return message.displayContent || parseTextContent('TEXT', content).text
+    default:
+      return message.displayContent || content
+  }
 }
 
 /**

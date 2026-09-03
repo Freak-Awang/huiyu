@@ -164,6 +164,30 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    @Test
+    void p2pMessageCannotBeCreatedThroughTheGenericMessagePath() {
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
+
+        assertThatThrownBy(() -> messageService.sendMessage(10L, validP2pFileMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("P2P attachments must be created through the P2P offer channel")
+                .extracting("code")
+                .isEqualTo(403);
+        verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void authenticatedP2pOfferCanPersistAFileSummaryWithoutFileMetadata() {
+        arrangeSend("member", 1);
+
+        ImMessage message = messageService.sendP2pMessage(10L, validP2pFileMessageRequest());
+
+        assertThat(message.getMessageType()).isEqualTo("FILE");
+        assertThat(message.getContent()).contains("\"transferMode\":\"p2p_lan\"");
+        verifyNoInteractions(fileMetadataService);
+        verify(messageMapper).insert(any(ImMessage.class));
+    }
+
     /**
      * 验证合法的图片消息（含 fileId/url/fileName/fileSize/contentType）发送成功。
      */
@@ -261,6 +285,17 @@ class MessageServiceImplTest {
         request.setConversationId(1L);
         request.setMessageType("FILE");
         request.setContent("{\"fileId\":1,\"fileName\":\"report.pdf\",\"fileSize\":5,\"transferMode\":\"object_storage\"}");
+        return request;
+    }
+
+    private SendMessageRequest validP2pFileMessageRequest() {
+        SendMessageRequest request = new SendMessageRequest();
+        request.setConversationId(1L);
+        request.setMessageType("FILE");
+        request.setContent("{\"version\":1,\"transferMode\":\"p2p_lan\","
+                + "\"transferId\":\"p2p_abc123\",\"kind\":\"file\","
+                + "\"name\":\"report.pdf\",\"totalSize\":5,\"fileCount\":1,"
+                + "\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}");
         return request;
     }
 

@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia'
 import { markRaw, ref } from 'vue'
 import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
+import { P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
 
 /** 附件类型：图片、普通文件或文件夹 */
 export type AttachmentDraftKind = 'image' | 'file' | 'folder'
@@ -213,6 +214,14 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     const errors: string[] = []
     const name = folder.name || 'folder'
 
+    if (folder.files.length > P2P_MAX_FOLDER_FILES) {
+      return {
+        added: [],
+        duplicateCount: 0,
+        errors: [`${name}：文件数量不能超过 ${P2P_MAX_FOLDER_FILES.toLocaleString()}`],
+      }
+    }
+
     const validFiles = folder.files.filter(({ path, file }) => {
       if (file.size <= 0) {
         errors.push(`${path}：文件为空`)
@@ -230,6 +239,13 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     }
 
     const totalSize = validFiles.reduce((sum, { file }) => sum + file.size, 0)
+    if (totalSize > P2P_MAX_FOLDER_SIZE) {
+      return {
+        added: [],
+        duplicateCount: 0,
+        errors: [`${name}：总大小不能超过 ${formatLimit(P2P_MAX_FOLDER_SIZE)}`],
+      }
+    }
     const probe: AttachmentDraft = {
       id: '',
       conversationId,

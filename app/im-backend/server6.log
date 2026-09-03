@@ -204,3 +204,4 @@ Caused by: java.net.ConnectException: Connection refused: getsockopt
 	at io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30) ~[netty-common-4.1.124.Final.jar:4.1.124.Final]
 	at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
 
+^C

@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
+import { P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
 import { useAttachmentDraftStore } from './attachmentDrafts'
 
 vi.mock('../api/index', () => ({ default: {} }))
@@ -146,5 +147,27 @@ describe('AttachmentDraftStore', () => {
     expect(result.added).toHaveLength(1)
     expect(result.errors).toHaveLength(2)
     expect(result.added[0].folderFiles?.map((item) => item.path)).toEqual(['ok.txt'])
+  })
+
+  it('enforces the shared P2P folder count and aggregate size limits', () => {
+    const store = useAttachmentDraftStore()
+    const tooMany = store.addFolder('conversation-1', {
+      name: 'many',
+      files: Array.from({ length: P2P_MAX_FOLDER_FILES + 1 }, (_, index) => ({
+        path: `${index}.txt`, file: file(`${index}.txt`, 1),
+      })),
+    })
+    expect(tooMany.added).toEqual([])
+    expect(tooMany.errors[0]).toContain(P2P_MAX_FOLDER_FILES.toLocaleString())
+
+    const perFileSize = FILE_UPLOAD_MAX_SIZE
+    const tooLarge = store.addFolder('conversation-1', {
+      name: 'large',
+      files: Array.from({ length: Math.floor(P2P_MAX_FOLDER_SIZE / perFileSize) + 1 }, (_, index) => ({
+        path: `${index}.bin`, file: file(`${index}.bin`, perFileSize),
+      })),
+    })
+    expect(tooLarge.added).toEqual([])
+    expect(tooLarge.errors[0]).toContain('20GB')
   })
 })

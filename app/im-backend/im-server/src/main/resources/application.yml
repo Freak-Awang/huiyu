@@ -74,3 +74,11 @@ file:
     bucket: ${MINIO_BUCKET:im-files}
     access-key: ${MINIO_ACCESS_KEY:}
     secret-key: ${MINIO_SECRET_KEY:}
+
+p2p:
+  file-transfer:
+    enabled: ${P2P_FILE_TRANSFER_ENABLED:false}
+    max-file-size: ${P2P_MAX_FILE_SIZE:2147483648}
+    max-folder-size: ${P2P_MAX_FOLDER_SIZE:21474836480}
+    max-folder-files: ${P2P_MAX_FOLDER_FILES:10000}
+    max-signal-bytes: ${P2P_MAX_SIGNAL_BYTES:65536}

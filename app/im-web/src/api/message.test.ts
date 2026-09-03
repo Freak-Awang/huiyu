@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./index', () => ({ default: {} }))
 
-import { normalizeMessage } from './message'
+import { getMessagePreviewContent, normalizeMessage } from './message'
 
 describe('message API normalization', () => {
   afterEach(() => vi.unstubAllEnvs())
@@ -23,5 +23,35 @@ describe('message API normalization', () => {
     })
 
     expect(message.senderAvatar).toBe('http://im.example.test/api/files/download/12')
+  })
+
+  it('uses a readable preview instead of exposing image JSON', () => {
+    const content = JSON.stringify({ fileId: '60', url: '/api/files/download/60' })
+    const message = normalizeMessage({
+      messageId: 1,
+      conversationId: 2,
+      senderId: 3,
+      messageType: 'IMAGE',
+      content,
+    })
+
+    expect(message.displayContent).toBe('[图片]')
+    expect(getMessagePreviewContent(message)).toBe('[图片]')
+    expect(getMessagePreviewContent({ messageType: 'IMAGE', content })).toBe('[图片]')
+  })
+
+  it('creates readable previews for structured text and attachments', () => {
+    expect(getMessagePreviewContent({
+      messageType: 'TEXT',
+      content: JSON.stringify({ text: '你好', mentions: [] }),
+    })).toBe('你好')
+    expect(getMessagePreviewContent({
+      messageType: 'FILE',
+      content: JSON.stringify({ fileName: '说明.pdf' }),
+    })).toBe('[文件] 说明.pdf')
+    expect(getMessagePreviewContent({
+      messageType: 'FOLDER',
+      content: JSON.stringify({ transferMode: 'p2p_lan', name: '项目资料' }),
+    })).toBe('[文件夹] 项目资料')
   })
 })

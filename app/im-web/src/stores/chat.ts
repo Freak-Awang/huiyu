@@ -14,6 +14,7 @@ import {
   acknowledgeMessage,
   getMessages,
   getPendingMessages,
+  getMessagePreviewContent,
   markRead,
   isAllMention,
   type Message,
@@ -230,11 +231,6 @@ export const useChatStore = defineStore('chat', () => {
       })
       messages.value.set(convId, nextMessages)
     }
-  }
-
-  function getMessagePreviewContent(msg: Message): string {
-    if (msg.status === 'RECALLED') return '消息已撤回'
-    return msg.displayContent || msg.content
   }
 
   /** 拉取离线待收消息并逐条确认接收（ACK） */

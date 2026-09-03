@@ -63,7 +63,7 @@
         :class="{ 'is-visible': draft.status !== 'waiting' }"
       >
         <button
-          v-if="draft.kind !== 'image' && (draft.status === 'hashing' || draft.status === 'uploading')"
+          v-if="draft.kind !== 'image' && draft.status === 'hashing' && draft.progress < 1"
           type="button"
           class="attachment-draft-action"
           @click="$emit('pause', draft)"

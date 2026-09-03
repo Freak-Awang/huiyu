@@ -92,6 +92,19 @@ async function walkEntry(
   }
 }
 
+async function walkRootDirectory(
+  entry: FileSystemEntryLike,
+  output: { path: string; file: File }[],
+) {
+  if (!entry.createReader) return
+  const reader = entry.createReader()
+  let batch: FileSystemEntryLike[]
+  do {
+    batch = await readEntryBatch(reader)
+    for (const child of batch) await walkEntry(child, output, '')
+  } while (batch.length > 0)
+}
+
 /**
  * 收集拖放载荷，区分顶层散文件与文件夹（文件夹递归展开并保留相对路径）
  *
@@ -112,7 +125,7 @@ export async function collectDroppedItems(dataTransfer?: DataTransfer | null): P
   for (const entry of entries) {
     if (entry.isDirectory) {
       const folder: DroppedFolder = { name: entry.name, files: [] }
-      await walkEntry(entry, folder.files, '')
+      await walkRootDirectory(entry, folder.files)
       result.folders.push(folder)
     } else if (entry.isFile && entry.file) {
       const file = await readEntryFile(entry)

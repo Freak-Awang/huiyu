@@ -20,6 +20,12 @@ type MessageHandler = (msg: WsMessage) => void
 type ConnectionHandler = (connected: boolean) => void
 type TicketProvider = () => Promise<string>
 
+interface PendingRequest {
+  resolve: (data: any) => void
+  reject: (error: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 export class WebSocketManager {
   private ws: WebSocket | null = null
   private readonly ticketProvider: TicketProvider
@@ -34,6 +40,9 @@ export class WebSocketManager {
   private readonly reconnectMaxDelay = 30000    // 重连最大延迟 30 秒
   private intentionalClose = false              // 是否主动断开（主动断开不重连）
   private generation = 0                        // 连接代际，防止过期连接回调
+  private readonly subscribers = new Map<string, Set<MessageHandler>>()
+  private readonly connectionSubscribers = new Set<ConnectionHandler>()
+  private readonly pendingRequests = new Map<number, PendingRequest>()
 
   /**
    * @param ticketProvider - 异步获取认证 ticket 的函数
@@ -76,6 +85,7 @@ export class WebSocketManager {
         if (socket !== this.ws) return // 代际检查：忽略过期 socket
         this.reconnectCount = 0
         this.connectionHandler?.(true)
+        this.connectionSubscribers.forEach((handler) => handler(true))
         this.startHeartbeat()
       }
 
@@ -85,6 +95,19 @@ export class WebSocketManager {
           if (msg.cmd === 'PONG') {
             this.clearPongTimer()
           }
+          const pending = this.pendingRequests.get(Number(msg.seq))
+          if (pending) {
+            globalThis.clearTimeout(pending.timer)
+            this.pendingRequests.delete(Number(msg.seq))
+            if (msg.data?.ok === false) {
+              const error = new Error(msg.data.message || '请求失败') as Error & { code?: number }
+              error.code = Number(msg.data.code || 0)
+              pending.reject(error)
+            } else {
+              pending.resolve(msg.data)
+            }
+          }
+          this.subscribers.get(msg.cmd)?.forEach((handler) => handler(msg))
           this.messageHandler(msg)
         } catch (e) {
           console.error('WebSocket 消息解析失败:', e)
@@ -96,6 +119,8 @@ export class WebSocketManager {
         this.ws = null
         this.stopHeartbeat()
         this.connectionHandler?.(false)
+        this.connectionSubscribers.forEach((handler) => handler(false))
+        this.rejectPendingRequests(new Error('WebSocket 已断开'))
         if (!this.intentionalClose) this.scheduleReconnect()
       }
 
@@ -120,6 +145,8 @@ export class WebSocketManager {
     this.clearReconnectTimer()
     this.disposeSocket()
     this.connectionHandler?.(false)
+    this.connectionSubscribers.forEach((handler) => handler(false))
+    this.rejectPendingRequests(new Error('WebSocket 已关闭'))
   }
 
   /**
@@ -133,6 +160,45 @@ export class WebSocketManager {
     const seq = ++this.seqCounter
     this.ws.send(JSON.stringify({ cmd, seq, data }))
     return true
+  }
+
+  /** 发送带 seq 的请求，并等待服务端返回同 seq 响应。 */
+  request<T = any>(cmd: string, data: any, timeoutMs = 15000): Promise<T> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('WebSocket 未连接'))
+    }
+    const seq = ++this.seqCounter
+    return new Promise<T>((resolve, reject) => {
+      const timer = globalThis.setTimeout(() => {
+        this.pendingRequests.delete(seq)
+        reject(new Error(`${cmd} 请求超时`))
+      }, timeoutMs)
+      this.pendingRequests.set(seq, { resolve, reject, timer })
+      try {
+        this.ws!.send(JSON.stringify({ cmd, seq, data }))
+      } catch (error) {
+        globalThis.clearTimeout(timer)
+        this.pendingRequests.delete(seq)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+  }
+
+  /** 订阅指定命令；返回取消订阅函数。 */
+  subscribe(cmd: string, handler: MessageHandler) {
+    const handlers = this.subscribers.get(cmd) || new Set<MessageHandler>()
+    handlers.add(handler)
+    this.subscribers.set(cmd, handlers)
+    return () => {
+      handlers.delete(handler)
+      if (!handlers.size) this.subscribers.delete(cmd)
+    }
+  }
+
+  /** 订阅连接状态变化；返回取消订阅函数。 */
+  onConnectionChange(handler: ConnectionHandler) {
+    this.connectionSubscribers.add(handler)
+    return () => this.connectionSubscribers.delete(handler)
   }
 
   /** 判断当前是否已连接 */
@@ -194,6 +260,14 @@ export class WebSocketManager {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+  }
+
+  private rejectPendingRequests(error: Error) {
+    for (const pending of this.pendingRequests.values()) {
+      globalThis.clearTimeout(pending.timer)
+      pending.reject(error)
+    }
+    this.pendingRequests.clear()
   }
 
   /** 释放当前 socket 连接，清理所有事件监听 */

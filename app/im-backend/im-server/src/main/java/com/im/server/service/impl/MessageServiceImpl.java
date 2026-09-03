@@ -145,6 +145,16 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public ImMessage sendMessage(Long senderId, SendMessageRequest request) {
+        return sendMessageInternal(senderId, request, false);
+    }
+
+    @Override
+    @Transactional
+    public ImMessage sendP2pMessage(Long senderId, SendMessageRequest request) {
+        return sendMessageInternal(senderId, request, true);
+    }
+
+    private ImMessage sendMessageInternal(Long senderId, SendMessageRequest request, boolean allowP2p) {
         validateSendRequest(request);
         // 发送消息的核心边界：先确认成员身份和业务权限，再写消息与 delivery rows，保证离线同步有数据可拉取。
         LambdaQueryWrapper<ImConversationMember> memberWrapper = new LambdaQueryWrapper<>();
@@ -155,7 +165,7 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException(403, "Not a member of this conversation");
         }
         validateSupportedMessageType(request);
-        validateMediaMessage(request);
+        validateMediaMessage(request, allowP2p);
         validateAllMentionPermission(request, member);
 
         if (StringUtils.hasText(request.getClientMsgId())) {
@@ -658,18 +668,22 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void validateMediaMessage(SendMessageRequest request) {
+    private void validateMediaMessage(SendMessageRequest request, boolean allowP2p) {
         boolean isFile = MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType());
         boolean isImage = MESSAGE_TYPE_IMAGE.equalsIgnoreCase(request.getMessageType());
         if (!isFile && !isImage) {
             if (MESSAGE_TYPE_FOLDER.equalsIgnoreCase(request.getMessageType())) {
-                validateFolderMessage(request);
+                validateFolderMessage(request, allowP2p);
             }
             return;
         }
         String invalidContentMessage = isFile ? "Invalid file message content" : "Invalid image message content";
         try {
             JsonNode root = objectMapper.readTree(request.getContent());
+            if (isFile && "p2p_lan".equals(root.path("transferMode").asText())) {
+                validateP2pAttachment(root, "file", allowP2p, invalidContentMessage);
+                return;
+            }
             JsonNode fileIdNode = root.get("fileId");
             if (fileIdNode == null || fileIdNode.asText().isBlank()) {
                 throw new BusinessException(400, "fileId is required");
@@ -696,10 +710,14 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void validateFolderMessage(SendMessageRequest request) {
+    private void validateFolderMessage(SendMessageRequest request, boolean allowP2p) {
         String invalidContentMessage = "Invalid folder message content";
         try {
             JsonNode root = objectMapper.readTree(request.getContent());
+            if ("p2p_lan".equals(root.path("transferMode").asText())) {
+                validateP2pAttachment(root, "folder", allowP2p, invalidContentMessage);
+                return;
+            }
             JsonNode folderNameNode = root.get("folderName");
             if (folderNameNode == null || folderNameNode.asText().isBlank()) {
                 throw new BusinessException(400, invalidContentMessage);
@@ -726,6 +744,30 @@ public class MessageServiceImpl implements MessageService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
+            throw new BusinessException(400, invalidContentMessage);
+        }
+    }
+
+    private void validateP2pAttachment(JsonNode root, String expectedKind,
+                                       boolean allowP2p, String invalidContentMessage) {
+        if (!allowP2p) {
+            throw new BusinessException(403, "P2P attachments must be created through the P2P offer channel");
+        }
+        String transferId = root.path("transferId").asText();
+        String name = root.path("name").asText();
+        String kind = root.path("kind").asText();
+        long totalSize = root.path("totalSize").asLong(-1);
+        int fileCount = root.path("fileCount").asInt(-1);
+        String hash = "file".equals(expectedKind)
+                ? root.path("sha256").asText()
+                : root.path("manifestSha256").asText();
+        if (root.path("version").asInt() != 1
+                || !transferId.startsWith("p2p_")
+                || transferId.length() > 64
+                || name.isBlank() || name.length() > 255
+                || !expectedKind.equals(kind)
+                || totalSize <= 0 || fileCount <= 0
+                || !hash.matches("(?i)^[0-9a-f]{64}$")) {
             throw new BusinessException(400, invalidContentMessage);
         }
     }

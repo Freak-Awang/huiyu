@@ -74,6 +74,43 @@ declare global {
         state: string
         error?: string
       }) => void) => () => void
+      startP2pReceive?: (payload: {
+        transferId: string
+        kind: 'file' | 'folder'
+        name: string
+        totalSize: number
+        fileCount: number
+      }) => Promise<{
+        canceled: boolean
+        success: boolean
+        receiveId?: string
+        finalPath?: string
+        error?: string
+      }>
+      prepareP2pReceive?: (receiveId: string, entries: Array<{
+        index: number
+        path: string
+        name: string
+        size: number
+        contentType: string
+        sha256: string
+      }>) => Promise<{ offsets: Record<string, number>; finalPath: string }>
+      writeP2pChunk?: (
+        receiveId: string,
+        fileIndex: number,
+        offset: number,
+        data: ArrayBuffer,
+      ) => Promise<{ offset: number }>
+      finishP2pFile?: (
+        receiveId: string,
+        fileIndex: number,
+      ) => Promise<{ success: boolean; offset: number; sha256: string }>
+      commitP2pReceive?: (
+        receiveId: string,
+      ) => Promise<{ success: boolean; path: string; transferId: string }>
+      abortP2pReceive?: (receiveId: string) => Promise<boolean>
+      openP2pResult?: (transferId: string) => Promise<{ success: boolean; path?: string; error?: string }>
+      revealP2pResult?: (transferId: string) => Promise<{ success: boolean; path?: string; error?: string }>
       initUpdate?: (payload: {
         serverOrigin: string
         token: string

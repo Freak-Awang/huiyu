@@ -7,6 +7,43 @@
  * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载）
  */
 import { contextBridge, ipcRenderer } from 'electron'
+import { randomUUID } from 'node:crypto'
+
+const p2pPorts = new Map<string, MessagePort>()
+const p2pWritePending = new Map<string, {
+  receiveId: string
+  resolve: (value: { offset: number }) => void
+  reject: (error: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}>()
+
+ipcRenderer.on('p2p:receive-port', (event, payload: { receiveId?: string }) => {
+  const receiveId = String(payload?.receiveId || '')
+  const port = event.ports[0]
+  if (!receiveId || !port) return
+  port.onmessage = (message) => {
+    const data = message.data as { requestId?: string; ok?: boolean; offset?: number; error?: string }
+    const pending = data.requestId ? p2pWritePending.get(data.requestId) : undefined
+    if (!pending || !data.requestId) return
+    clearTimeout(pending.timer)
+    p2pWritePending.delete(data.requestId)
+    if (data.ok) pending.resolve({ offset: Number(data.offset || 0) })
+    else pending.reject(new Error(data.error || 'P2P 写入失败'))
+  }
+  port.start()
+  p2pPorts.set(receiveId, port)
+})
+
+function closeP2pPort(receiveId: string) {
+  p2pPorts.get(receiveId)?.close()
+  p2pPorts.delete(receiveId)
+  for (const [requestId, pending] of p2pWritePending) {
+    if (pending.receiveId !== receiveId) continue
+    clearTimeout(pending.timer)
+    pending.reject(new Error('P2P 接收任务已关闭'))
+    p2pWritePending.delete(requestId)
+  }
+}
 
 contextBridge.exposeInMainWorld('imDesktop', {
   /** 获取应用版本号 */
@@ -104,6 +141,78 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.on('files:download-progress', listener)
     return () => ipcRenderer.removeListener('files:download-progress', listener)
   },
+
+  /** 选择 P2P 附件保存位置并创建受约束的主进程接收会话。 */
+  startP2pReceive: (payload: {
+    transferId: string
+    kind: 'file' | 'folder'
+    name: string
+    totalSize: number
+    fileCount: number
+  }) => ipcRenderer.invoke('p2p:receive-start', payload) as Promise<{
+    canceled: boolean
+    success: boolean
+    receiveId?: string
+    finalPath?: string
+    error?: string
+  }>,
+
+  prepareP2pReceive: (receiveId: string, entries: unknown[]) =>
+    ipcRenderer.invoke('p2p:receive-prepare', receiveId, entries) as Promise<{
+      offsets: Record<string, number>
+      finalPath: string
+    }>,
+
+  writeP2pChunk: (receiveId: string, fileIndex: number, offset: number, data: ArrayBuffer) => {
+    const port = p2pPorts.get(receiveId)
+    if (!port) return Promise.reject(new Error('P2P 接收通道不可用'))
+    const requestId = randomUUID()
+    return new Promise<{ offset: number }>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        p2pWritePending.delete(requestId)
+        reject(new Error('P2P 写入超时'))
+      }, 30_000)
+      p2pWritePending.set(requestId, { receiveId, resolve, reject, timer })
+      port.postMessage({ type: 'write', requestId, fileIndex, offset, data }, [data])
+    })
+  },
+
+  finishP2pFile: (receiveId: string, fileIndex: number) =>
+    ipcRenderer.invoke('p2p:receive-finish-file', receiveId, fileIndex) as Promise<{
+      success: boolean
+      offset: number
+      sha256: string
+    }>,
+
+  commitP2pReceive: async (receiveId: string) => {
+    const result = await ipcRenderer.invoke('p2p:receive-commit', receiveId) as {
+      success: boolean
+      path: string
+      transferId: string
+    }
+    closeP2pPort(receiveId)
+    return result
+  },
+
+  abortP2pReceive: async (receiveId: string) => {
+    const result = await ipcRenderer.invoke('p2p:receive-abort', receiveId) as boolean
+    closeP2pPort(receiveId)
+    return result
+  },
+
+  openP2pResult: (transferId: string) =>
+    ipcRenderer.invoke('p2p:open-result', transferId) as Promise<{
+      success: boolean
+      path?: string
+      error?: string
+    }>,
+
+  revealP2pResult: (transferId: string) =>
+    ipcRenderer.invoke('p2p:reveal-result', transferId) as Promise<{
+      success: boolean
+      path?: string
+      error?: string
+    }>,
 
   /** 初始化在线更新（登录成功后调用，启动 30 秒后首次检测） */
   initUpdate: (payload: { serverOrigin: string; token: string; channel?: string }) =>

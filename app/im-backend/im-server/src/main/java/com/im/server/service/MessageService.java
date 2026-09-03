@@ -43,6 +43,12 @@ public interface MessageService {
     ImMessage sendMessage(Long senderId, SendMessageRequest request);
 
     /**
+     * 由受鉴权的 WebSocket P2P offer 流程创建附件消息。
+     * 普通消息接口不能直接伪造 {@code p2p_lan} 内容。
+     */
+    ImMessage sendP2pMessage(Long senderId, SendMessageRequest request);
+
+    /**
      * 撤回消息（仅限发送者，且有时间窗口限制）。
      *
      * @param userId 操作用户 ID
