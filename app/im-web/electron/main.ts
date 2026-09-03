@@ -26,6 +26,7 @@ import {
 } from './localMessages.js'
 import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
 import { assertP2pWriteBounds, resolveP2pEntryPath, safeP2pRelativePath } from './p2pReceiveSafety.js'
+import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -967,6 +968,18 @@ ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
 app.setAppUserModelId('com.im.desktop')
 
 app.whenReady().then(async () => {
+  try {
+    configureInternalCertificateTrust()
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    dialog.showErrorBox(
+      '内部证书初始化失败',
+      `绘语无法安全连接公司服务器，应用将退出。\n\n${reason}`,
+    )
+    app.quit()
+    return
+  }
+
   await cleanupP2pOrphans().catch(() => undefined)
   createMainWindow()
   createTray()

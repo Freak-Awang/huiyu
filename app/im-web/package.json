@@ -48,6 +48,12 @@
       "dist-electron/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/huiyu-root-ca.crt",
+        "to": "certs/huiyu-root-ca.crt"
+      }
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [
