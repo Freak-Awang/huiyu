@@ -47,11 +47,22 @@ describe('message API normalization', () => {
     })).toBe('你好')
     expect(getMessagePreviewContent({
       messageType: 'FILE',
-      content: JSON.stringify({ fileName: '说明.pdf' }),
+      content: JSON.stringify({ transferMode: 'p2p_lan', name: '说明.pdf' }),
     })).toBe('[文件] 说明.pdf')
     expect(getMessagePreviewContent({
       messageType: 'FOLDER',
       content: JSON.stringify({ transferMode: 'p2p_lan', name: '项目资料' }),
     })).toBe('[文件夹] 项目资料')
+  })
+
+  it('does not expose legacy object-storage attachment metadata', () => {
+    expect(getMessagePreviewContent({
+      messageType: 'FILE',
+      content: JSON.stringify({ transferMode: 'object_storage', fileName: '旧文件.pdf' }),
+    })).toBe('[文件]')
+    expect(getMessagePreviewContent({
+      messageType: 'FOLDER',
+      content: JSON.stringify({ folderName: '旧文件夹', files: [] }),
+    })).toBe('[文件夹]')
   })
 })

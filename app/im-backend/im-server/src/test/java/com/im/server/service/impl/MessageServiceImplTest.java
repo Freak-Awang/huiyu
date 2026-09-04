@@ -32,7 +32,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 消息服务测试，验证消息发送权限（@所有人）、文件/图片消息校验、消息列表查询。
+ * 消息服务测试，验证消息发送权限、P2P-only 附件边界、图片消息校验和消息列表查询。
  *
  * <p>测试范围：MessageServiceImpl 的 sendMessage（@所有人权限、文件消息校验、图片消息校验）
  * 和 getMessages（发送者签名填充）。</p>
@@ -135,7 +135,7 @@ class MessageServiceImplTest {
     }
 
     /**
-     * 验证格式错误的文件消息（缺少必要字段）被拒绝，返回 400。
+     * 验证通用消息入口不能创建任何 FILE 消息。
      */
     @Test
     void malformedFileMessageIsRejected() {
@@ -143,25 +143,25 @@ class MessageServiceImplTest {
 
         assertThatThrownBy(() -> messageService.sendMessage(10L, fileMessageRequest()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("Invalid file message content")
+                .hasMessage("FILE and FOLDER messages must be created through the P2P offer channel")
                 .extracting("code")
-                .isEqualTo(400);
+                .isEqualTo(403);
         verifyNoInteractions(messageMapper);
     }
 
     /**
-     * 验证合法的文件消息（含 fileId/fileName/fileSize/transferMode）发送成功。
+     * 验证旧 object_storage 文件消息即使格式完整也被拒绝。
      */
     @Test
-    void validFileMessageIsSent() {
-        arrangeSend("member", 2);
-        when(fileMetadataService.getById(1L)).thenReturn(file(1L, 1L)); // 文件存在
+    void legacyObjectStorageFileMessageIsRejected() {
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
 
-        ImMessage message = messageService.sendMessage(10L, validFileMessageRequest());
-
-        assertThat(message.getMessageType()).isEqualTo("FILE");
-        assertThat(message.getContent()).contains("\"fileName\":\"report.pdf\"");
-        verify(messageMapper).insert(any(ImMessage.class));
+        assertThatThrownBy(() -> messageService.sendMessage(10L, validFileMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("FILE and FOLDER messages must be created through the P2P offer channel")
+                .extracting("code")
+                .isEqualTo(403);
+        verifyNoInteractions(fileMetadataService, messageMapper);
     }
 
     @Test
@@ -170,7 +170,7 @@ class MessageServiceImplTest {
 
         assertThatThrownBy(() -> messageService.sendMessage(10L, validP2pFileMessageRequest()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("P2P attachments must be created through the P2P offer channel")
+                .hasMessage("FILE and FOLDER messages must be created through the P2P offer channel")
                 .extracting("code")
                 .isEqualTo(403);
         verifyNoInteractions(messageMapper);

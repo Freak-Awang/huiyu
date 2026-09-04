@@ -1,9 +1,6 @@
 package com.im.server.controller;
 
 import com.im.common.dto.FileVO;
-import com.im.common.dto.FileUploadCompleteRequest;
-import com.im.common.dto.FileUploadTaskCreateRequest;
-import com.im.common.dto.FileUploadTaskVO;
 import com.im.common.entity.ImFile;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.Result;
@@ -11,7 +8,6 @@ import com.im.server.service.FileDownloadService;
 import com.im.server.service.FileMetadataService;
 import com.im.server.service.ImageTypeDetector;
 import com.im.server.service.FileUploadService;
-import com.im.server.service.FileUploadTaskService;
 import com.im.server.service.UserService;
 import com.im.server.service.storage.StoredObject;
 import org.springframework.core.io.InputStreamResource;
@@ -22,10 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,8 +32,8 @@ import java.nio.charset.StandardCharsets;
 /**
  * 文件控制器。
  * <p>
- * 提供文件上传（单文件/分片）、下载、头像上传等接口，
- * URL 前缀为 {@code /api/files}。下载接口支持 Range 断点续传。
+ * 仅提供聊天图片、头像等媒体资源的上传和读取。
+ * 普通 FILE/FOLDER 附件只允许通过 P2P DataChannel 传输。
  * </p>
  */
 @RestController
@@ -47,46 +41,36 @@ import java.nio.charset.StandardCharsets;
 public class FileController {
 
     private final FileUploadService fileUploadService;
-    private final FileUploadTaskService fileUploadTaskService;
     private final FileDownloadService fileDownloadService;
     private final FileMetadataService fileMetadataService;
     private final UserService userService;
 
     public FileController(
             FileUploadService fileUploadService,
-            FileUploadTaskService fileUploadTaskService,
             FileDownloadService fileDownloadService,
             FileMetadataService fileMetadataService,
             UserService userService) {
         this.fileUploadService = fileUploadService;
-        this.fileUploadTaskService = fileUploadTaskService;
         this.fileDownloadService = fileDownloadService;
         this.fileMetadataService = fileMetadataService;
         this.userService = userService;
     }
 
     /**
-     * 上传文件（单文件）。
+     * 上传聊天图片。普通文件不得使用该接口。
      *
      * @param file           上传的文件
      * @param conversationId 关联会话 ID（可选）
-     * @param category       文件分类，默认为 file，可选 image
      * @return 文件信息
      */
-    @PostMapping("/upload")
-    public Result<FileVO> upload(
+    @PostMapping("/upload/image")
+    public Result<FileVO> uploadImage(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "conversationId", required = false) Long conversationId,
-            @RequestParam(value = "category", required = false, defaultValue = "file") String category) {
+            @RequestParam(value = "conversationId", required = false) Long conversationId) {
         Long userId = getCurrentUserId();
-        ImFile result;
-        if ("image".equalsIgnoreCase(category)) {
-            result = conversationId != null
-                    ? fileUploadService.uploadConversationImage(file, userId, conversationId)
-                    : fileUploadService.uploadStandaloneImage(file, userId);
-        } else {
-            result = fileUploadService.uploadConversationFile(file, userId, conversationId);
-        }
+        ImFile result = conversationId != null
+                ? fileUploadService.uploadConversationImage(file, userId, conversationId)
+                : fileUploadService.uploadStandaloneImage(file, userId);
         return Result.success(toFileVO(result));
     }
 
@@ -107,72 +91,7 @@ public class FileController {
     }
 
     /**
-     * 创建分片上传任务。
-     *
-     * @param request 上传任务创建请求
-     * @return 上传任务信息
-     */
-    @PostMapping("/upload/tasks")
-    public Result<FileUploadTaskVO> createUploadTask(@RequestBody FileUploadTaskCreateRequest request) {
-        return Result.success(fileUploadTaskService.createTask(request, getCurrentUserId()));
-    }
-
-    /**
-     * 上传分片。
-     *
-     * @param uploadId   上传任务 ID
-     * @param partNumber 分片序号
-     * @param file       分片文件
-     * @return 上传任务信息
-     */
-    @PostMapping("/upload/tasks/{uploadId}/parts/{partNumber}")
-    public Result<FileUploadTaskVO> uploadPart(
-            @PathVariable String uploadId,
-            @PathVariable Integer partNumber,
-            @RequestParam("file") MultipartFile file) {
-        return Result.success(fileUploadTaskService.uploadPart(uploadId, partNumber, file, getCurrentUserId()));
-    }
-
-    /**
-     * 查询已上传的分片列表。
-     *
-     * @param uploadId 上传任务 ID
-     * @return 上传任务信息
-     */
-    @GetMapping("/upload/tasks/{uploadId}/parts")
-    public Result<FileUploadTaskVO> getUploadParts(@PathVariable String uploadId) {
-        return Result.success(fileUploadTaskService.getTaskParts(uploadId, getCurrentUserId()));
-    }
-
-    /**
-     * 完成分片上传任务。
-     *
-     * @param uploadId 上传任务 ID
-     * @param request  完成请求（可选）
-     * @return 文件信息
-     */
-    @PostMapping("/upload/tasks/{uploadId}/complete")
-    public Result<FileVO> completeUploadTask(
-            @PathVariable String uploadId,
-            @RequestBody(required = false) FileUploadCompleteRequest request) {
-        ImFile result = fileUploadTaskService.completeTask(uploadId, request, getCurrentUserId());
-        return Result.success(toFileVO(result));
-    }
-
-    /**
-     * 取消分片上传任务。
-     *
-     * @param uploadId 上传任务 ID
-     * @return 操作结果
-     */
-    @DeleteMapping("/upload/tasks/{uploadId}")
-    public Result<Void> cancelUploadTask(@PathVariable String uploadId) {
-        fileUploadTaskService.cancelTask(uploadId, getCurrentUserId());
-        return Result.success(null);
-    }
-
-    /**
-     * 下载文件，支持 Range 断点续传。
+     * 读取图片媒体，支持 HTTP Range。
      *
      * @param fileId      文件 ID
      * @param rangeHeader Range 请求头（可选）
@@ -184,6 +103,9 @@ public class FileController {
             @RequestHeader(value = "Range", required = false) String rangeHeader) {
         try {
             ImFile imFile = fileDownloadService.getDownloadableFile(getOptionalCurrentUserId(), fileId);
+            if (!ImageTypeDetector.isSafeInlineType(imFile.getContentType())) {
+                throw new BusinessException(410, "Server-backed file attachments are no longer available");
+            }
             Range range = parseRange(rangeHeader, imFile.getFileSize());
             StoredObject object = fileDownloadService.openFile(imFile, range.start, range.length);
             fileDownloadService.incrementDownloadCount(fileId);

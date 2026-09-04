@@ -233,66 +233,17 @@ function parseStickerDisplayName(content: string): string {
 function parseFileDisplayName(content: string): string {
   try {
     const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object') {
-      const name = parsed.transferMode === 'p2p_lan' ? parsed.name : parsed.fileName
-      if (typeof name === 'string') return `[文件] ${name}`
+    if (parsed?.transferMode === 'p2p_lan' && typeof parsed.name === 'string') {
+      return `[文件] ${parsed.name}`
     }
   } catch {
-    // Old or malformed file messages fall back to the raw payload.
+    // Malformed P2P summaries fall through to a generic label.
   }
   return '[文件]'
 }
 
-/** 文件夹消息中的单个文件条目 */
-export interface FolderMessageFile {
-  fileId: number | string
-  path: string
-  fileName: string
-  fileSize: number
-  contentType?: string
-  downloadUrl?: string
-}
-
-/** 文件夹消息内容 */
-export interface FolderMessageContent {
-  folderName: string
-  fileCount: number
-  totalSize: number
-  files: FolderMessageFile[]
-}
-
-/** 旧版服务端存储附件与新版局域网 P2P 附件的联合消息类型。 */
-export type AttachmentMessageContent = FolderMessageContent | P2pAttachmentContent | {
-  fileId: number | string
-  fileName: string
-  fileSize: number
-  transferMode?: 'object_storage' | string
-  contentType?: string
-  downloadUrl?: string
-  url?: string
-}
-
-/**
- * 解析文件夹消息内容；内容非法时返回 null
- * @param content 消息内容（JSON 字符串）
- */
-export function parseFolderMessageContent(content: string): FolderMessageContent | null {
-  try {
-    const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object' && typeof parsed.folderName === 'string'
-        && Array.isArray(parsed.files)) {
-      return {
-        folderName: parsed.folderName,
-        fileCount: Number(parsed.fileCount ?? parsed.files.length),
-        totalSize: Number(parsed.totalSize || 0),
-        files: parsed.files as FolderMessageFile[],
-      }
-    }
-  } catch {
-    // Malformed folder messages fall through to null.
-  }
-  return null
-}
+/** FILE/FOLDER 消息仅允许使用局域网 P2P v1 摘要。 */
+export type AttachmentMessageContent = P2pAttachmentContent
 
 function parseFolderDisplayName(content: string): string {
   try {
@@ -301,10 +252,9 @@ function parseFolderDisplayName(content: string): string {
       return `[文件夹] ${parsed.name}`
     }
   } catch {
-    // Fall through to the legacy folder parser.
+    // Malformed P2P summaries fall through to a generic label.
   }
-  const folder = parseFolderMessageContent(content)
-  return folder ? `[文件夹] ${folder.folderName}` : '[文件夹]'
+  return '[文件夹]'
 }
 
 /**

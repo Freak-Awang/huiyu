@@ -4,8 +4,8 @@
  */
 import { defineStore } from 'pinia'
 import { markRaw, ref } from 'vue'
-import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
-import { P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
+import { DIRECT_UPLOAD_MAX_SIZE } from '../api/file'
+import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
 
 /** 附件类型：图片、普通文件或文件夹 */
 export type AttachmentDraftKind = 'image' | 'file' | 'folder'
@@ -161,7 +161,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     for (const file of files) {
       const name = file.name || 'file'
       const kind = resolveDraftKind(file, classification)
-      const maxSize = kind === 'image' ? DIRECT_UPLOAD_MAX_SIZE : FILE_UPLOAD_MAX_SIZE
+      const maxSize = kind === 'image' ? DIRECT_UPLOAD_MAX_SIZE : P2P_MAX_FILE_SIZE
       if (file.size <= 0) {
         errors.push(`${name}：文件为空`)
         continue
@@ -227,8 +227,8 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
         errors.push(`${path}：文件为空`)
         return false
       }
-      if (file.size > FILE_UPLOAD_MAX_SIZE) {
-        errors.push(`${path}：不能超过 ${formatLimit(FILE_UPLOAD_MAX_SIZE)}`)
+      if (file.size > P2P_MAX_FILE_SIZE) {
+        errors.push(`${path}：不能超过 ${formatLimit(P2P_MAX_FILE_SIZE)}`)
         return false
       }
       return true

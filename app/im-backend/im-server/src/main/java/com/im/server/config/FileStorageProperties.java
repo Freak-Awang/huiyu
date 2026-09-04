@@ -7,19 +7,15 @@ import org.springframework.stereotype.Component;
  * 文件存储属性配置。
  * <p>
  * 绑定 {@code file.*} 前缀的配置项，涵盖存储策略（local/minio）、
- * 文件大小限制、用户配额、分片大小、保留策略、上传路径及 MinIO 连接参数。
+ * 媒体大小限制、用户配额、保留策略、上传路径及 MinIO 连接参数。
  * </p>
  */
 @Component
 @ConfigurationProperties(prefix = "file")
 public class FileStorageProperties {
     private String storage = "local";
-    private Long maxSize = 2147483648L;
     private Long smallFileMaxSize = 104857600L;
     private Long userQuotaBytes = 10737418240L;
-    private Long chunkSize = 67108864L;
-    private Integer retentionDays = 7;
-    private Integer uploadRetentionHours = 24;
     private String uploadPath = "./upload";
     private Minio minio = new Minio();
 
@@ -29,14 +25,6 @@ public class FileStorageProperties {
 
     public void setStorage(String storage) {
         this.storage = storage;
-    }
-
-    public Long getMaxSize() {
-        return maxSize;
-    }
-
-    public void setMaxSize(Long maxSize) {
-        this.maxSize = maxSize;
     }
 
     public Long getSmallFileMaxSize() {
@@ -53,30 +41,6 @@ public class FileStorageProperties {
 
     public void setUserQuotaBytes(Long userQuotaBytes) {
         this.userQuotaBytes = userQuotaBytes;
-    }
-
-    public Long getChunkSize() {
-        return chunkSize;
-    }
-
-    public void setChunkSize(Long chunkSize) {
-        this.chunkSize = chunkSize;
-    }
-
-    public Integer getRetentionDays() {
-        return retentionDays;
-    }
-
-    public void setRetentionDays(Integer retentionDays) {
-        this.retentionDays = retentionDays;
-    }
-
-    public Integer getUploadRetentionHours() {
-        return uploadRetentionHours;
-    }
-
-    public void setUploadRetentionHours(Integer uploadRetentionHours) {
-        this.uploadRetentionHours = uploadRetentionHours;
     }
 
     public String getUploadPath() {

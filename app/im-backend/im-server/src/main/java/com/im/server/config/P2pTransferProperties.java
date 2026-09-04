@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "p2p.file-transfer")
 public class P2pTransferProperties {
 
-    private boolean enabled = false;
+    private boolean enabled = true;
     private long maxFileSize = 2_147_483_648L;
     private long maxFolderSize = 21_474_836_480L;
     private int maxFolderFiles = 10_000;

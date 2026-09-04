@@ -17,7 +17,7 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 /**
- * 文件上传服务：处理聊天附件、图片、头像等小文件的直接上传。
+ * 媒体上传服务：仅处理聊天图片和头像。
  */
 @Service
 public class FileUploadService {
@@ -49,24 +49,7 @@ public class FileUploadService {
      */
     @Transactional
     public ImFile uploadStandaloneImage(MultipartFile file, Long uploaderId) {
-        return uploadImage(file, uploaderId, null, false);
-    }
-
-    /**
-     * 上传会话文件附件。
-     *
-     * @param file 文件
-     * @param uploaderId 上传者 ID
-     * @param conversationId 会话 ID
-     * @return 文件元数据
-     */
-    @Transactional
-    public ImFile uploadConversationFile(MultipartFile file, Long uploaderId, Long conversationId) {
-        if (conversationId == null) {
-            throw new BusinessException(400, "conversationId is required");
-        }
-        metadataService.assertConversationMember(uploaderId, conversationId);
-        return uploadFile(file, uploaderId, conversationId, false);
+        return uploadImage(file, uploaderId, null, properties.getSmallFileMaxSize());
     }
 
     /**
@@ -83,7 +66,7 @@ public class FileUploadService {
             throw new BusinessException(400, "conversationId is required");
         }
         metadataService.assertConversationMember(uploaderId, conversationId);
-        return uploadImage(file, uploaderId, conversationId, false);
+        return uploadImage(file, uploaderId, conversationId, properties.getSmallFileMaxSize());
     }
 
     /**
@@ -95,7 +78,7 @@ public class FileUploadService {
      */
     @Transactional
     public ImFile uploadAvatarFile(MultipartFile file, Long uploaderId) {
-        return uploadImage(file, uploaderId, null, false, AVATAR_MAX_SIZE);
+        return uploadImage(file, uploaderId, null, AVATAR_MAX_SIZE);
     }
 
     /**
@@ -111,7 +94,7 @@ public class FileUploadService {
         if (conversationId == null) {
             throw new BusinessException(400, "conversationId is required");
         }
-        return uploadImage(file, uploaderId, conversationId, false, AVATAR_MAX_SIZE);
+        return uploadImage(file, uploaderId, conversationId, AVATAR_MAX_SIZE);
     }
 
     /**
@@ -127,25 +110,14 @@ public class FileUploadService {
         storageClient.deleteQuietly(file.getObjectKey());
     }
 
-    private ImFile uploadImage(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
-        return uploadImage(file, uploaderId, conversationId, temporary, properties.getSmallFileMaxSize());
-    }
-
     private ImFile uploadImage(
             MultipartFile file,
             Long uploaderId,
             Long conversationId,
-            boolean temporary,
             long maxSize) {
         String detectedContentType = validateImageUpload(file, maxSize);
         quotaService.assertCanStore(uploaderId, file.getSize());
-        return storeFile(file, uploaderId, conversationId, temporary, true, detectedContentType);
-    }
-
-    private ImFile uploadFile(MultipartFile file, Long uploaderId, Long conversationId, boolean temporary) {
-        validateFileUpload(file);
-        quotaService.assertCanStore(uploaderId, file.getSize());
-        return storeFile(file, uploaderId, conversationId, temporary, false, file.getContentType());
+        return storeImage(file, uploaderId, conversationId, detectedContentType);
     }
 
     /**
@@ -153,12 +125,10 @@ public class FileUploadService {
      * <p>
      * 先写存储再写数据库；若数据库写入失败则删除已存储对象，避免产生孤儿文件。
      */
-    private ImFile storeFile(
+    private ImFile storeImage(
             MultipartFile file,
             Long uploaderId,
             Long conversationId,
-            boolean temporary,
-            boolean imageOnly,
             String contentType) {
         FileStorageClient storageClient = storageRouter.defaultClient();
         String originalName = safeName(file.getOriginalFilename());
@@ -177,9 +147,7 @@ public class FileUploadService {
                     conversationId,
                     sha256,
                     storageClient.storageType(),
-                    storageClient.bucket(),
-                    temporary,
-                    temporary ? LocalDateTime.now().plusDays(properties.getRetentionDays()) : null);
+                    storageClient.bucket());
         } catch (Exception e) {
             if (stored) {
                 storageClient.deleteQuietly(objectKey);
@@ -189,7 +157,7 @@ public class FileUploadService {
             }
             throw new BusinessException(
                     500,
-                    "Failed to upload " + (imageOnly ? "image" : "file"),
+                    "Failed to upload image",
                     e);
         }
     }
@@ -207,10 +175,6 @@ public class FileUploadService {
         } catch (Exception e) {
             throw new BusinessException(415, "Only image uploads are supported");
         }
-    }
-
-    private void validateFileUpload(MultipartFile file) {
-        validateUploadSize(file.getSize(), properties.getSmallFileMaxSize(), "File must use multipart upload");
     }
 
     private void validateUploadSize(long size, long maxSize, String message) {

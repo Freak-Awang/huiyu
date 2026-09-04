@@ -4,7 +4,7 @@
  * 在渲染进程沙箱隔离的前提下，通过 contextBridge 向 window 注入类型化的桌面桥接 API。
  * 所有 native 能力通过 ipcRenderer.invoke 调用主进程的 IPC handler，保持安全边界。
  * 暴露两个全局对象：
- * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、文件下载）
+ * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、P2P 接收）
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -115,37 +115,6 @@ contextBridge.exposeInMainWorld('imDesktop', {
   /** 清空指定会话的本地消息缓存 */
   clearConversationMessages: (userId: string, conversationId: string) =>
     ipcRenderer.invoke('messages:clear-conversation', userId, conversationId) as Promise<boolean>,
-
-  /** 通过 Electron 原生对话框下载文件，支持进度回传和取消 */
-  downloadFile: (payload: {
-    downloadId: string
-    fileId: string
-    serverOrigin: string
-    token: string
-    suggestedName: string
-  }) => ipcRenderer.invoke('files:download', payload) as Promise<{
-    canceled: boolean
-    success: boolean
-    path?: string
-    error?: string
-  }>,
-
-  /** 取消文件下载 */
-  cancelFileDownload: (downloadId: string) =>
-    ipcRenderer.invoke('files:cancel-download', downloadId) as Promise<boolean>,
-
-  /** 监听文件下载进度，返回取消监听的函数 */
-  onFileDownloadProgress: (handler: (progress: {
-    downloadId: string
-    received: number
-    total: number
-    state: string
-    error?: string
-  }) => void) => {
-    const listener = (_event: unknown, progress: Parameters<typeof handler>[0]) => handler(progress)
-    ipcRenderer.on('files:download-progress', listener)
-    return () => ipcRenderer.removeListener('files:download-progress', listener)
-  },
 
   /** 选择 P2P 附件保存位置并创建受约束的主进程接收会话。 */
   startP2pReceive: (payload: {

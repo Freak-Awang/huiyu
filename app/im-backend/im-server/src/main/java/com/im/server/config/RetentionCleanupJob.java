@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /**
  * 文件保留策略清理定时任务。
  * <p>
- * 按 Cron 表达式定时执行，清理过期的临时文件和上传任务。
+ * 按 Cron 表达式定时执行，清理过期的临时媒体文件。
  * 清理失败仅记录日志，不影响应用正常运行。
  * </p>
  */
@@ -25,7 +25,7 @@ public class RetentionCleanupJob {
     }
 
     /**
-     * 定时清理过期文件和上传任务。
+     * 定时清理过期媒体文件。
      * <p>
      * 默认每天凌晨 3:15 执行，可通过 {@code retention.cleanup.cron} 配置。
      * 清理失败仅记录日志，不影响应用正常运行。
@@ -36,7 +36,6 @@ public class RetentionCleanupJob {
         try {
             // Temporary standalone files expire by policy; scheduled failure is logged but never blocks the app.
             fileRetentionService.cleanupExpiredTemporaryFiles();
-            fileRetentionService.cleanupExpiredUploadTasks();
         } catch (Exception e) {
             log.error("Retention cleanup failed", e);
         }

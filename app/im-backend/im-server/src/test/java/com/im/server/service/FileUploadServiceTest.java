@@ -20,10 +20,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 文件上传服务测试，验证会话图片/文件上传、头像上传、群头像上传及各种拒绝场景。
+ * 媒体上传服务测试，验证会话图片、头像、群头像上传及各种拒绝场景。
  *
- * <p>测试范围：FileUploadService 的 uploadConversationImage、uploadConversationFile、
- * uploadAvatarFile、uploadGroupAvatarFile 方法。</p>
+ * <p>测试范围：FileUploadService 的 uploadConversationImage、uploadAvatarFile、
+ * uploadGroupAvatarFile 方法。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class FileUploadServiceTest {
@@ -67,9 +67,7 @@ class FileUploadServiceTest {
                 eq(20L), // conversationId 不为空
                 anyString(),
                 eq("minio"),
-                eq("im-files"),
-                eq(false),
-                isNull());
+                eq("im-files"));
     }
 
     /**
@@ -91,9 +89,7 @@ class FileUploadServiceTest {
                 isNull(), // avatar 无 conversationId
                 anyString(),
                 eq("minio"),
-                eq("im-files"),
-                eq(false),
-                isNull());
+                eq("im-files"));
     }
 
     /**
@@ -115,9 +111,7 @@ class FileUploadServiceTest {
                 eq(20L),
                 anyString(),
                 eq("minio"),
-                eq("im-files"),
-                eq(false),
-                isNull());
+                eq("im-files"));
     }
 
     /**
@@ -133,34 +127,6 @@ class FileUploadServiceTest {
                 .hasMessage("Image exceeds upload size limit")
                 .extracting("code")
                 .isEqualTo(413);
-    }
-
-    /**
-     * 验证会话文件上传接受非图片文件（如 PDF），正常存储并创建元数据。
-     */
-    @Test
-    void conversationFileUploadAcceptsNonImageFile() throws Exception {
-        when(properties.getSmallFileMaxSize()).thenReturn(104857600L);
-        when(storageRouter.defaultClient()).thenReturn(storageClient);
-        when(storageClient.storageType()).thenReturn("minio");
-        when(storageClient.bucket()).thenReturn("im-files");
-
-        fileUploadService.uploadConversationFile(file("report.pdf"), 10L, 20L);
-
-        verify(metadataService).assertConversationMember(10L, 20L);
-        verify(storageClient).save(anyString(), any());
-        verify(metadataService).createAvailableFile(
-                eq("report.pdf"),
-                anyString(),
-                eq(5L),
-                eq("application/pdf"),
-                eq(10L),
-                eq(20L),
-                anyString(),
-                eq("minio"),
-                eq("im-files"),
-                eq(false),
-                isNull());
     }
 
     /**

@@ -3,7 +3,6 @@ package com.im.server.service;
 import com.im.common.exception.BusinessException;
 import com.im.server.config.FileStorageProperties;
 import com.im.server.mapper.FileMapper;
-import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 /**
- * 文件配额服务测试，验证用户上传配额计算（已存储 + 上传中）和超限拒绝。
+ * 媒体配额服务测试，验证用户已存储图片和头像的配额计算。
  *
  * <p>测试范围：FileQuotaService 的 assertCanStore 方法，覆盖锁用户→计算配额→超限校验流程。</p>
  */
@@ -27,9 +26,6 @@ class FileQuotaServiceTest {
     private FileMapper fileMapper;
 
     @Mock
-    private FileUploadMapper uploadMapper;
-
-    @Mock
     private UserMapper userMapper;
 
     private FileQuotaService quotaService;
@@ -38,35 +34,32 @@ class FileQuotaServiceTest {
     void setUp() {
         FileStorageProperties properties = new FileStorageProperties();
         properties.setUserQuotaBytes(100L);
-        quotaService = new FileQuotaService(fileMapper, uploadMapper, userMapper, properties);
+        quotaService = new FileQuotaService(fileMapper, userMapper, properties);
         when(userMapper.lockById(7L)).thenReturn(7L);
     }
 
     /**
-     * 验证配额检查先锁定用户行（防止并发），再依次查询已存储和上传中的字节数，
+     * 验证配额检查先锁定用户行（防止并发），再查询已存储媒体字节数，
      * 保证调用顺序正确。
      */
     @Test
-    void locksUserBeforeCalculatingReservedAndStoredBytes() {
+    void locksUserBeforeCalculatingStoredBytes() {
         when(fileMapper.sumAvailableBytesByUploader(7L)).thenReturn(40L);
-        when(uploadMapper.sumActiveBytesByUploader(7L)).thenReturn(20L);
 
         quotaService.assertCanStore(7L, 40L);
 
-        var order = inOrder(userMapper, fileMapper, uploadMapper);
+        var order = inOrder(userMapper, fileMapper);
         order.verify(userMapper).lockById(7L); // 先锁行
         order.verify(fileMapper).sumAvailableBytesByUploader(7L); // 再查已存储
-        order.verify(uploadMapper).sumActiveBytesByUploader(7L); // 最后查上传中
     }
 
     /**
-     * 验证已存储(60) + 上传中(30) + 新上传(20) = 110 > 配额100 时，
+     * 验证已存储(90) + 新媒体(20) = 110 > 配额100 时，
      * 抛出 BusinessException(413)。
      */
     @Test
-    void rejectsUploadThatWouldExceedCombinedQuota() {
-        when(fileMapper.sumAvailableBytesByUploader(7L)).thenReturn(60L);
-        when(uploadMapper.sumActiveBytesByUploader(7L)).thenReturn(30L);
+    void rejectsMediaThatWouldExceedQuota() {
+        when(fileMapper.sumAvailableBytesByUploader(7L)).thenReturn(90L);
 
         assertThatThrownBy(() -> quotaService.assertCanStore(7L, 20L))
                 .isInstanceOf(BusinessException.class)

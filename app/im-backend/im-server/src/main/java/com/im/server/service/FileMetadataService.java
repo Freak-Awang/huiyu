@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
 /**
- * 文件元数据服务：负责文件元数据的持久化、查询、秒传复用及文件抽屉展示。
+ * 媒体元数据服务：负责聊天图片和头像元数据的持久化与查询。
  */
 @Service
 public class FileMetadataService {
@@ -57,8 +57,6 @@ public class FileMetadataService {
      * @param sha256 文件 SHA-256 哈希
      * @param storageType 存储类型
      * @param bucket 存储桶
-     * @param temporary 是否临时文件
-     * @param expiresAt 过期时间，临时文件必填
      * @return 创建后的文件实体
      */
     public ImFile createAvailableFile(
@@ -70,9 +68,7 @@ public class FileMetadataService {
             Long conversationId,
             String sha256,
             String storageType,
-            String bucket,
-            boolean temporary,
-            LocalDateTime expiresAt) {
+            String bucket) {
         ImFile imFile = new ImFile();
         imFile.setOriginalName(originalName);
         imFile.setStoredName(objectKey.substring(objectKey.lastIndexOf('/') + 1));
@@ -88,8 +84,8 @@ public class FileMetadataService {
         imFile.setStatus(STATUS_AVAILABLE);
         imFile.setDownloadCount(0);
         imFile.setCreateTime(LocalDateTime.now());
-        imFile.setTemporary(temporary ? 1 : 0);
-        imFile.setExpiresAt(expiresAt);
+        imFile.setTemporary(0);
+        imFile.setExpiresAt(null);
         fileMapper.insert(imFile);
         return imFile;
     }
@@ -154,7 +150,6 @@ public class FileMetadataService {
         vo.setStatus(file.getStatus());
         vo.setUrl("/api/files/download/" + file.getId());
         vo.setDownloadUrl(vo.getUrl());
-        vo.setTransferMode("object_storage");
         vo.setConversationId(file.getConversationId());
         vo.setUploaderId(file.getUploaderId());
         SysUser uploader = userMapper.selectById(file.getUploaderId());

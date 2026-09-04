@@ -14,14 +14,12 @@ import com.im.common.dto.UpdateMemberRoleRequest;
 import com.im.common.entity.ImConversation;
 import com.im.common.entity.ImConversationMember;
 import com.im.common.entity.ImFile;
-import com.im.common.entity.ImFileUpload;
 import com.im.common.entity.ImMessage;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.FileMapper;
-import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.ConversationService;
@@ -74,9 +72,6 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Autowired
     private FileMapper fileMapper;
-
-    @Autowired
-    private FileUploadMapper fileUploadMapper;
 
     @Autowired
     private UserMapper userMapper;
@@ -416,11 +411,7 @@ public class ConversationServiceImpl implements ConversationService {
             throw new BusinessException(403, "Only the group owner can dissolve the group");
         }
 
-        // Clear references guarded by RESTRICT foreign keys first. File records are
-        // retained as standalone files; upload-task bookkeeping belongs to the group.
-        fileUploadMapper.delete(
-                new LambdaQueryWrapper<ImFileUpload>()
-                        .eq(ImFileUpload::getConversationId, conversationId));
+        // Media records are retained as standalone files. P2P attachments have no server file rows.
         fileMapper.update(null,
                 new UpdateWrapper<ImFile>()
                         .eq("conversation_id", conversationId)

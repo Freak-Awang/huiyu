@@ -593,8 +593,8 @@ public class MessageServiceImpl implements MessageService {
                 case MESSAGE_TYPE_IMAGE:
                     return "[图片]";
                 case MESSAGE_TYPE_FILE:
-                    if (node.has("fileName")) {
-                        return "[文件] " + node.get("fileName").asText();
+                    if (node.has("name")) {
+                        return "[文件] " + node.get("name").asText();
                     }
                     return "[文件]";
                 case MESSAGE_TYPE_STICKER:
@@ -603,8 +603,8 @@ public class MessageServiceImpl implements MessageService {
                     }
                     return "[表情]";
                 case MESSAGE_TYPE_FOLDER:
-                    if (node.has("folderName")) {
-                        return "[文件夹] " + node.get("folderName").asText();
+                    if (node.has("name")) {
+                        return "[文件夹] " + node.get("name").asText();
                     }
                     return "[文件夹]";
                 default:
@@ -670,18 +670,24 @@ public class MessageServiceImpl implements MessageService {
 
     private void validateMediaMessage(SendMessageRequest request, boolean allowP2p) {
         boolean isFile = MESSAGE_TYPE_FILE.equalsIgnoreCase(request.getMessageType());
+        boolean isFolder = MESSAGE_TYPE_FOLDER.equalsIgnoreCase(request.getMessageType());
         boolean isImage = MESSAGE_TYPE_IMAGE.equalsIgnoreCase(request.getMessageType());
-        if (!isFile && !isImage) {
-            if (MESSAGE_TYPE_FOLDER.equalsIgnoreCase(request.getMessageType())) {
-                validateFolderMessage(request, allowP2p);
-            }
+        if (!isFile && !isFolder && !isImage) {
             return;
         }
-        String invalidContentMessage = isFile ? "Invalid file message content" : "Invalid image message content";
+        if ((isFile || isFolder) && !allowP2p) {
+            throw new BusinessException(403, "FILE and FOLDER messages must be created through the P2P offer channel");
+        }
+        String invalidContentMessage = isFile
+                ? "Invalid P2P file message content"
+                : isFolder ? "Invalid P2P folder message content" : "Invalid image message content";
         try {
             JsonNode root = objectMapper.readTree(request.getContent());
-            if (isFile && "p2p_lan".equals(root.path("transferMode").asText())) {
-                validateP2pAttachment(root, "file", allowP2p, invalidContentMessage);
+            if (isFile || isFolder) {
+                if (!"p2p_lan".equals(root.path("transferMode").asText())) {
+                    throw new BusinessException(400, invalidContentMessage);
+                }
+                validateP2pAttachment(root, isFile ? "file" : "folder", invalidContentMessage);
                 return;
             }
             JsonNode fileIdNode = root.get("fileId");
@@ -689,8 +695,7 @@ public class MessageServiceImpl implements MessageService {
                 throw new BusinessException(400, "fileId is required");
             }
             boolean hasCommonMetadata = root.hasNonNull("fileName") && root.hasNonNull("fileSize");
-            if (!hasCommonMetadata || (isFile && !root.hasNonNull("transferMode"))
-                    || (isImage && (!root.hasNonNull("url") || !root.hasNonNull("contentType")))) {
+            if (!hasCommonMetadata || !root.hasNonNull("url") || !root.hasNonNull("contentType")) {
                 throw new BusinessException(400, invalidContentMessage);
             }
             ImFile file = fileMetadataService.getById(Long.parseLong(fileIdNode.asText()));
@@ -700,7 +705,7 @@ public class MessageServiceImpl implements MessageService {
             if (file.getConversationId() == null || !file.getConversationId().equals(request.getConversationId())) {
                 throw new BusinessException(403, "File does not belong to this conversation");
             }
-            if (isImage && !ImageTypeDetector.isSafeInlineType(file.getContentType())) {
+            if (!ImageTypeDetector.isSafeInlineType(file.getContentType())) {
                 throw new BusinessException(415, "Image message must reference an image file");
             }
         } catch (BusinessException e) {
@@ -710,49 +715,7 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void validateFolderMessage(SendMessageRequest request, boolean allowP2p) {
-        String invalidContentMessage = "Invalid folder message content";
-        try {
-            JsonNode root = objectMapper.readTree(request.getContent());
-            if ("p2p_lan".equals(root.path("transferMode").asText())) {
-                validateP2pAttachment(root, "folder", allowP2p, invalidContentMessage);
-                return;
-            }
-            JsonNode folderNameNode = root.get("folderName");
-            if (folderNameNode == null || folderNameNode.asText().isBlank()) {
-                throw new BusinessException(400, invalidContentMessage);
-            }
-            JsonNode filesNode = root.get("files");
-            if (filesNode == null || !filesNode.isArray() || filesNode.isEmpty()) {
-                throw new BusinessException(400, invalidContentMessage);
-            }
-            for (JsonNode fileNode : filesNode) {
-                JsonNode fileIdNode = fileNode.get("fileId");
-                if (fileIdNode == null || fileIdNode.asText().isBlank()
-                        || !fileNode.hasNonNull("fileName") || !fileNode.hasNonNull("fileSize")) {
-                    throw new BusinessException(400, invalidContentMessage);
-                }
-                ImFile file = fileMetadataService.getById(Long.parseLong(fileIdNode.asText()));
-                if (file == null || !FileMetadataService.STATUS_AVAILABLE.equals(file.getStatus())) {
-                    throw new BusinessException(404, "File not found");
-                }
-                if (file.getConversationId() == null
-                        || !file.getConversationId().equals(request.getConversationId())) {
-                    throw new BusinessException(403, "File does not belong to this conversation");
-                }
-            }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException(400, invalidContentMessage);
-        }
-    }
-
-    private void validateP2pAttachment(JsonNode root, String expectedKind,
-                                       boolean allowP2p, String invalidContentMessage) {
-        if (!allowP2p) {
-            throw new BusinessException(403, "P2P attachments must be created through the P2P offer channel");
-        }
+    private void validateP2pAttachment(JsonNode root, String expectedKind, String invalidContentMessage) {
         String transferId = root.path("transferId").asText();
         String name = root.path("name").asText();
         String kind = root.path("kind").asText();

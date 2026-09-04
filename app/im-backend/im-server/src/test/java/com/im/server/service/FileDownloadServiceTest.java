@@ -22,7 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
 
 /**
- * 文件下载服务测试，验证下载权限控制（匿名/会话成员）和存储后端路由。
+ * 媒体读取服务测试，验证图片类型、访问权限和存储后端路由。
  *
  * <p>测试范围：FileDownloadService 的 getDownloadableFile（权限校验）和 openFile（Range 读取）。</p>
  */
@@ -115,6 +115,22 @@ class FileDownloadServiceTest {
     }
 
     /**
+     * 验证历史服务器普通附件即使仍有元数据也不能再通过媒体服务读取。
+     */
+    @Test
+    void rejectsLegacyServerBackedAttachment() {
+        ImFile legacyFile = availableFile(6L);
+        legacyFile.setContentType("application/pdf");
+        when(metadataService.getById(6L)).thenReturn(legacyFile);
+
+        assertThatThrownBy(() -> fileDownloadService.getDownloadableFile(10L, 6L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Server-backed file attachments are no longer available")
+                .extracting("code")
+                .isEqualTo(410);
+    }
+
+    /**
      * 验证 openFile 根据文件记录的 storageType/bucket 路由到正确的存储后端进行 Range 读取。
      */
     @Test
@@ -136,6 +152,7 @@ class FileDownloadServiceTest {
         file.setId(id);
         file.setStatus(FileMetadataService.STATUS_AVAILABLE);
         file.setUploaderId(10L);
+        file.setContentType("image/png");
         return file;
     }
 }

@@ -377,18 +377,15 @@
                         <button v-if="canCancelP2p(msg)" type="button" class="p2p-cancel" @click="cancelP2pMessage(msg)">取消</button>
                       </span>
                     </div>
-                    <a
+                    <div
                       v-else
-                      class="file-bubble"
-                      href="#"
-                      @click.prevent="downloadMessageFile(msg.content)"
+                      class="file-bubble legacy-attachment-disabled"
                     >
                       <span class="file-bubble-main">
-                        <span class="file-bubble-name">{{ getFileInfo(msg.content).fileName }}</span>
-                        <span class="file-bubble-meta">{{ formatFileSize(getFileInfo(msg.content).fileSize) }}</span>
+                        <span class="file-bubble-name">旧版服务器文件已停用</span>
+                        <span class="file-bubble-meta">请发送方重新使用 P2P 发送</span>
                       </span>
-                      <span class="file-bubble-action">{{ getFileDownloadLabel(msg.content) }}</span>
-                    </a>
+                    </div>
                   </template>
                   <template v-else-if="msg.messageType === 'FOLDER'">
                     <div v-if="getP2pInfo(msg.content)" class="folder-bubble">
@@ -405,30 +402,12 @@
                       </div>
                     </div>
                     <div v-else class="folder-bubble">
-                      <a
-                        class="file-bubble folder-bubble-card"
-                        href="#"
-                        @click.prevent="toggleFolderExpand(msg)"
-                      >
+                      <div class="file-bubble folder-bubble-card legacy-attachment-disabled">
                         <span class="file-bubble-main">
-                          <span class="file-bubble-name">{{ getFolderInfo(msg.content).folderName }}</span>
-                          <span class="file-bubble-meta">{{ getFolderInfo(msg.content).files.length }} 个文件 · {{ formatFileSize(getFolderInfo(msg.content).totalSize) }}</span>
+                          <span class="file-bubble-name">旧版服务器文件夹已停用</span>
+                          <span class="file-bubble-meta">请发送方重新使用 P2P 发送</span>
                         </span>
-                        <span class="file-bubble-action">{{ isFolderExpanded(msg) ? '收起' : '展开' }}</span>
-                      </a>
-                      <ul v-if="isFolderExpanded(msg)" class="folder-file-list">
-                        <li
-                          v-for="file in getFolderInfo(msg.content).files"
-                          :key="String(file.fileId)"
-                          class="folder-file-item"
-                        >
-                          <a href="#" class="folder-file-link" @click.prevent="downloadFolderFile(file)">
-                            <span class="folder-file-name">{{ file.path || file.fileName }}</span>
-                            <span class="folder-file-meta">{{ formatFileSize(file.fileSize) }}</span>
-                            <span class="folder-file-action">{{ getFolderFileDownloadLabel(file) }}</span>
-                          </a>
-                        </li>
-                      </ul>
+                      </div>
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'SHAKE'">
@@ -1281,11 +1260,9 @@ import {
   isAllMention,
   MESSAGE_MENTION_ALL_ID,
   normalizeMessage,
-  parseFolderMessageContent,
   recallMessage,
   searchMessages as searchServerMessages,
   type Message,
-  type FolderMessageFile,
   type MessageMention,
   type MessageReply,
 } from '../api/message'
@@ -1297,9 +1274,8 @@ import {
 import {
   downloadFileBlob,
   getFileUrl,
-  uploadFile,
+  uploadConversationImage,
 } from '../api/file'
-import { downloadAuthenticatedFile } from '../utils/fileDownload'
 import { parseP2pAttachmentContent, type P2pAttachmentContent } from '../utils/p2pProtocol'
 import { runAttachmentQueue } from '../utils/attachmentQueue'
 import {
@@ -1482,8 +1458,6 @@ let imageLoadGeneration = 0
 const authenticatedAvatarUrls = ref<Record<string, string>>({})
 const avatarLoadPromises = new Map<string, Promise<string>>()
 let avatarLoadGeneration = 0
-const fileDownloadProgress = ref<Record<string, number>>({})
-const fileDownloadControllers = new Map<string, AbortController>()
 const isSendingMessage = ref(false)
 const isAttachmentDragActive = ref(false)
 const attachmentFeedback = ref('')
@@ -2903,25 +2877,6 @@ function loadAuthenticatedAvatar(fileId: string): Promise<string> {
   return promise
 }
 
-// 解析消息内容中的文件信息
-function getFileInfo(content: string): { fileId: string; fileName: string; fileSize: number; url: string } {
-  try {
-    const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object') {
-      const fileId = String(parsed.fileId || '')
-      return {
-        fileId,
-        fileName: String(parsed.fileName || '文件'),
-        fileSize: Number(parsed.fileSize || 0),
-        url: String(parsed.downloadUrl || parsed.url || (fileId ? getFileUrl(fileId) : '#')),
-      }
-    }
-  } catch {
-    // Fall through to a disabled fallback card.
-  }
-  return { fileId: '', fileName: '文件', fileSize: 0, url: '#' }
-}
-
 function getP2pInfo(content: string): P2pAttachmentContent | null {
   return parseP2pAttachmentContent(content)
 }
@@ -3007,85 +2962,6 @@ async function revealP2pMessage(msg: Message) {
   await p2pTransferStore.revealCompleted(info.transferId).catch((error) => {
     alert(error instanceof Error ? error.message : '无法打开文件所在位置')
   })
-}
-
-// 下载文件（带进度的通用实现，文件消息与文件夹内文件共用）
-async function downloadFileWithProgress(file: { fileId: string; fileName: string; fileSize: number }) {
-  if (!file.fileId) return
-  const active = fileDownloadControllers.get(file.fileId)
-  if (active) {
-    active.abort()
-    return
-  }
-  const controller = new AbortController()
-  fileDownloadControllers.set(file.fileId, controller)
-  fileDownloadProgress.value[file.fileId] = 0
-  try {
-    await downloadAuthenticatedFile({
-      fileId: file.fileId,
-      fileName: file.fileName,
-      fileSize: file.fileSize,
-      signal: controller.signal,
-      onProgress: (progress) => { fileDownloadProgress.value[file.fileId] = progress },
-    })
-  } catch (error) {
-    if (!controller.signal.aborted) alert(error instanceof Error ? error.message : '下载失败')
-  } finally {
-    fileDownloadControllers.delete(file.fileId)
-    delete fileDownloadProgress.value[file.fileId]
-  }
-}
-
-// 下载消息中的文件附件，支持进度显示和取消
-async function downloadMessageFile(content: string) {
-  await downloadFileWithProgress(getFileInfo(content))
-}
-
-// 解析文件夹消息内容，非法内容回退为占位结构
-function getFolderInfo(content: string) {
-  return parseFolderMessageContent(content) || { folderName: '文件夹', fileCount: 0, totalSize: 0, files: [] }
-}
-
-// 文件夹气泡展开状态（按消息 key 记录）
-const expandedFolderMessageKeys = ref<string[]>([])
-
-function folderMessageKey(msg: Message) {
-  return msg.messageId || msg.clientMsgId || ''
-}
-
-function isFolderExpanded(msg: Message) {
-  return expandedFolderMessageKeys.value.includes(folderMessageKey(msg))
-}
-
-function toggleFolderExpand(msg: Message) {
-  const key = folderMessageKey(msg)
-  expandedFolderMessageKeys.value = isFolderExpanded(msg)
-    ? expandedFolderMessageKeys.value.filter((item) => item !== key)
-    : [...expandedFolderMessageKeys.value, key]
-}
-
-// 下载文件夹消息中的单个文件
-async function downloadFolderFile(file: FolderMessageFile) {
-  await downloadFileWithProgress({
-    fileId: String(file.fileId || ''),
-    fileName: file.fileName || '文件',
-    fileSize: Number(file.fileSize || 0),
-  })
-}
-
-// 获取下载按钮的显示文本（下载/百分比/取消）
-function getDownloadLabelByFileId(fileId: string) {
-  if (!fileId || !(fileId in fileDownloadProgress.value)) return '下载'
-  const progress = fileDownloadProgress.value[fileId]
-  return progress > 0 ? `${Math.round(progress * 100)}%` : '取消'
-}
-
-function getFileDownloadLabel(content: string) {
-  return getDownloadLabelByFileId(getFileInfo(content).fileId)
-}
-
-function getFolderFileDownloadLabel(file: FolderMessageFile) {
-  return getDownloadLabelByFileId(String(file.fileId || ''))
 }
 
 // 清理所有已认证图片的 Blob URL，切换会话时调用
@@ -3357,8 +3233,8 @@ function messageReplyText(msg: Message): string {
   if (msg.status === 'RECALLED') return '消息已撤回'
   if (msg.displayContent) return msg.displayContent
   if (msg.messageType === 'IMAGE') return '[图片]'
-  if (msg.messageType === 'FILE') return `[文件] ${getP2pInfo(msg.content)?.name || getFileInfo(msg.content).fileName}`
-  if (msg.messageType === 'FOLDER') return `[文件夹] ${getP2pInfo(msg.content)?.name || getFolderInfo(msg.content).folderName}`
+  if (msg.messageType === 'FILE') return `[文件] ${getP2pInfo(msg.content)?.name || '旧版附件已停用'}`
+  if (msg.messageType === 'FOLDER') return `[文件夹] ${getP2pInfo(msg.content)?.name || '旧版附件已停用'}`
   if (msg.messageType === 'STICKER') return '[表情]'
   if (msg.messageType === 'SHAKE') return '[窗口抖动]'
   return msg.content || ''
@@ -3477,7 +3353,7 @@ async function handleSendMessage() {
   }
 }
 
-// 处理单个附件草稿的上传（图片直接上传，文件走分片传输）
+// 处理单个附件草稿：图片上传媒体服务，FILE/FOLDER 仅走 P2P。
 async function processAttachmentDraft(
   draft: AttachmentDraft,
   conversation: Conversation,
@@ -3492,10 +3368,9 @@ async function processAttachmentDraft(
   })
   try {
     if (draft.kind === 'image') {
-      const response = await uploadFile(
+      const response = await uploadConversationImage(
         draft.file,
         conversation.conversationId,
-        'image',
         (progress) => attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
           status: 'uploading',
           progress,
@@ -4045,8 +3920,6 @@ onUnmounted(() => {
   attachmentDraftStore.clearAll()
   clearAuthenticatedImages()
   clearAuthenticatedAvatars()
-  fileDownloadControllers.forEach((controller) => controller.abort())
-  fileDownloadControllers.clear()
   revokeCustomStickerUrls()
   clearGroupAvatarSelection()
   p2pTransferStore.dispose()
@@ -4852,55 +4725,14 @@ watch(
   max-width: none;
 }
 
-.folder-file-list {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  list-style: none;
-  margin: 4px 0 0;
-  max-height: 220px;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.folder-file-link {
-  align-items: center;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  padding: 6px 8px;
-  text-decoration: none;
-}
-
-.folder-file-link:hover {
-  background: var(--bg-header);
-}
-
-.folder-file-name {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.folder-file-meta {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.folder-file-action {
-  color: var(--accent);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .file-bubble:hover {
   border-color: #c8cef8;
   background: var(--accent-bg-light);
+}
+
+.legacy-attachment-disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .file-bubble-main {

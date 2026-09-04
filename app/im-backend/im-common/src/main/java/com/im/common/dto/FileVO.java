@@ -5,7 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 文件视图对象，向客户端返回会话内共享文件的展示与下载信息。
+ * 媒体视图对象，向客户端返回图片和头像资源信息。
  */
 @Data
 public class FileVO {
@@ -18,7 +18,6 @@ public class FileVO {
     private String status; // 文件状态（如正常/过期）
     private String url; // 文件访问地址
     private String downloadUrl; // 文件下载地址
-    private String transferMode; // 传输模式（如直传/中转）
     private Long conversationId; // 所属会话ID
     private Long uploaderId; // 上传者ID
     private String uploaderName; // 上传者昵称

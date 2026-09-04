@@ -1,18 +1,16 @@
 /**
  * Electron 主进程入口
  *
- * 管理原生窗口生命周期、系统托盘、桌面通知、文件下载及 IPC 通信。
+ * 管理原生窗口生命周期、系统托盘、桌面通知、P2P 接收及 IPC 通信。
  * 所有 native 能力通过 preload 脚本的白名单 IPC 暴露给渲染进程，保持 sandbox 隔离。
  * 支持单实例锁，点击关闭按钮最小化到托盘（macOS 除外）。
  */
-import { app, BrowserWindow, Menu, MessageChannelMain, Notification, Tray, dialog, ipcMain, nativeImage, net, shell } from 'electron'
+import { app, BrowserWindow, Menu, MessageChannelMain, Notification, Tray, dialog, ipcMain, nativeImage, shell } from 'electron'
 import type { IpcMainInvokeEvent, MessagePortMain } from 'electron'
-import { createReadStream, createWriteStream } from 'node:fs'
+import { createReadStream } from 'node:fs'
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
-import { Readable, Transform } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -50,18 +48,6 @@ let closeBehavior: 'tray' | 'exit' = 'tray'
 
 /** 未读消息计数，用于更新托盘图标和任务栏徽标 */
 let unreadCount = 0
-
-/** 活跃的文件下载任务映射，用于取消下载和更新器传输状态统计 */
-const activeFileDownloads = new Map<string, AbortController>()
-
-/** 文件下载 IPC 请求载荷 */
-interface FileDownloadPayload {
-  downloadId: string
-  fileId: string
-  serverOrigin: string
-  token: string
-  suggestedName: string
-}
 
 interface P2pReceiveStartPayload {
   transferId: string
@@ -878,90 +864,6 @@ ipcMain.handle('p2p:reveal-result', async (event, transferId: string) => {
   return { success: true, path }
 })
 
-/**
- * 文件下载 IPC 处理器
- * 流程：校验参数 -> 弹出保存对话框 -> 流式下载到临时文件 -> 原子重命名为目标文件
- * 支持进度回传和取消操作，下载期间阻止自动更新安装
- */
-ipcMain.handle('files:download', async (event, payload: FileDownloadPayload) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    return { canceled: false, success: false, error: 'Invalid download source' }
-  }
-  const downloadId = String(payload?.downloadId || '')
-  const fileId = String(payload?.fileId || '')
-  if (!downloadId || !/^\d+$/.test(fileId) || !payload?.token) {
-    return { canceled: false, success: false, error: 'Invalid download request' }
-  }
-  let downloadUrl: URL
-  try {
-    const origin = new URL(payload.serverOrigin)
-    const loopback = origin.protocol === 'http:'
-      && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-    if (origin.protocol !== 'https:' && !loopback) throw new Error('Downloads require HTTPS')
-    downloadUrl = new URL(`/api/files/download/${fileId}`, origin.origin)
-  } catch {
-    return { canceled: false, success: false, error: 'Invalid server address' }
-  }
-  // 清理文件名中的非法字符
-  const safeName = basename(payload.suggestedName || `file-${fileId}`).replace(/[<>:"/\\|?*]/g, '_')
-  const selection = await dialog.showSaveDialog(mainWindow, {
-    defaultPath: join(await getStorageLocation(), safeName),
-  })
-  if (selection.canceled || !selection.filePath) return { canceled: true, success: false }
-
-  const controller = new AbortController()
-  activeFileDownloads.set(downloadId, controller)
-  const partialPath = `${selection.filePath}.arttalk.part`
-  const sendProgress = (progress: Record<string, unknown>) => {
-    if (!event.sender.isDestroyed()) event.sender.send('files:download-progress', progress)
-  }
-  try {
-    await rm(partialPath, { force: true })
-    const response = await net.fetch(downloadUrl.toString(), {
-      headers: { Authorization: `Bearer ${payload.token}` },
-      signal: controller.signal,
-    })
-    if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`)
-    const total = Number(response.headers.get('content-length') || 0)
-    let received = 0
-    const progress = new Transform({
-      transform(chunk, _encoding, callback) {
-        received += chunk.length
-        sendProgress({ downloadId, received, total, state: 'downloading' })
-        callback(null, chunk)
-      },
-    })
-    // 流式下载：先写入 .part 临时文件，完成后再原子重命名
-    await pipeline(Readable.fromWeb(response.body as any), progress, createWriteStream(partialPath))
-    await rm(selection.filePath, { force: true })
-    await rename(partialPath, selection.filePath)
-    sendProgress({ downloadId, received, total, state: 'completed' })
-    return { canceled: false, success: true, path: selection.filePath }
-  } catch (error) {
-    await rm(partialPath, { force: true }).catch(() => undefined)
-    const canceled = controller.signal.aborted
-    const message = error instanceof Error ? error.message : String(error)
-    sendProgress({
-      downloadId,
-      received: 0,
-      total: 0,
-      state: canceled ? 'cancelled' : 'failed',
-      error: canceled ? undefined : message,
-    })
-    return { canceled, success: false, error: canceled ? undefined : message }
-  } finally {
-    activeFileDownloads.delete(downloadId)
-  }
-})
-
-/** 取消文件下载 */
-ipcMain.handle('files:cancel-download', (event, downloadId: string) => {
-  assertMainWindowSender(event)
-  const controller = activeFileDownloads.get(String(downloadId || ''))
-  controller?.abort()
-  return !!controller
-})
-
 // ==================== 应用生命周期 ====================
 
 // Windows：固定 AppUserModelId，确保任务栏图标、通知与安装包 appId 正确关联
@@ -1012,10 +914,9 @@ if (!hasSingleInstanceLock) {
   app.on('second-instance', () => focusMainWindow())
 }
 
-// 退出前取消所有活跃的文件下载；若用户选择"退出时自动安装"则先执行更新安装
+// 退出前清理 P2P 接收；若用户选择"退出时自动安装"则先执行更新安装
 app.on('before-quit', (event) => {
   isQuitting = true
-  activeFileDownloads.forEach((controller) => controller.abort())
   for (const receiveId of [...p2pReceiveSessions.keys()]) {
     void abortP2pReceive(receiveId)
   }

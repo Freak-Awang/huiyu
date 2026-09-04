@@ -3,8 +3,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { DIRECT_UPLOAD_MAX_SIZE, FILE_UPLOAD_MAX_SIZE } from '../api/file'
-import { P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
+import { DIRECT_UPLOAD_MAX_SIZE } from '../api/file'
+import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
 import { useAttachmentDraftStore } from './attachmentDrafts'
 
 vi.mock('../api/index', () => ({ default: {} }))
@@ -79,7 +79,7 @@ describe('AttachmentDraftStore', () => {
       report,
       file('empty.txt', 0, 'text/plain'),
       file('huge.png', DIRECT_UPLOAD_MAX_SIZE + 1, 'image/png'),
-      file('huge.bin', FILE_UPLOAD_MAX_SIZE + 1, 'application/octet-stream'),
+      file('huge.bin', P2P_MAX_FILE_SIZE + 1, 'application/octet-stream'),
     ])
 
     expect(result.added).toEqual([])
@@ -141,7 +141,7 @@ describe('AttachmentDraftStore', () => {
       files: [
         { path: 'ok.txt', file: file('ok.txt', 10) },
         { path: 'zero.txt', file: file('zero.txt', 0) },
-        { path: 'huge.bin', file: file('huge.bin', FILE_UPLOAD_MAX_SIZE + 1) },
+        { path: 'huge.bin', file: file('huge.bin', P2P_MAX_FILE_SIZE + 1) },
       ],
     })
     expect(result.added).toHaveLength(1)
@@ -160,7 +160,7 @@ describe('AttachmentDraftStore', () => {
     expect(tooMany.added).toEqual([])
     expect(tooMany.errors[0]).toContain(P2P_MAX_FOLDER_FILES.toLocaleString())
 
-    const perFileSize = FILE_UPLOAD_MAX_SIZE
+    const perFileSize = P2P_MAX_FILE_SIZE
     const tooLarge = store.addFolder('conversation-1', {
       name: 'large',
       files: Array.from({ length: Math.floor(P2P_MAX_FOLDER_SIZE / perFileSize) + 1 }, (_, index) => ({

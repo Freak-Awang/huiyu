@@ -14,7 +14,6 @@ import com.im.common.exception.BusinessException;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.FileMapper;
-import com.im.server.mapper.FileUploadMapper;
 import com.im.server.mapper.MessageMapper;
 import com.im.server.mapper.UserMapper;
 import com.im.server.service.FileRetentionService;
@@ -65,9 +64,6 @@ class ConversationServiceImplTest {
     private FileMapper fileMapper;
 
     @Mock
-    private FileUploadMapper fileUploadMapper;
-
-    @Mock
     private UserMapper userMapper;
 
     @Mock
@@ -92,8 +88,7 @@ class ConversationServiceImplTest {
         conversationService.dissolveGroup(1L, 10L);
 
         org.mockito.InOrder deletionOrder = org.mockito.Mockito.inOrder(
-                fileUploadMapper, fileMapper, conversationMemberMapper, conversationMapper);
-        deletionOrder.verify(fileUploadMapper).delete(any());
+                fileMapper, conversationMemberMapper, conversationMapper);
         deletionOrder.verify(fileMapper).update(eq(null), any());
         deletionOrder.verify(conversationMemberMapper).delete(any());
         deletionOrder.verify(conversationMapper).deleteById(1L);

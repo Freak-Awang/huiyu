@@ -2,7 +2,7 @@
  * desktop.d.ts - Electron桌面桥接层类型声明
  * 
  * 为渲染进程提供 preload.cts 通过 contextBridge 暴露的 imDesktop
- * API 类型定义。涵盖窗口管理、消息本地存储、文件下载等功能。
+ * API 类型定义。涵盖窗口管理、消息本地存储、P2P 接收等功能。
  */
 export {}
 
@@ -59,21 +59,6 @@ declare global {
       }>
       clearMessages?: (userId: string) => Promise<boolean>
       clearConversationMessages?: (userId: string, conversationId: string) => Promise<boolean>
-      downloadFile?: (payload: {
-        downloadId: string
-        fileId: string
-        serverOrigin: string
-        token: string
-        suggestedName: string
-      }) => Promise<{ canceled: boolean; success: boolean; path?: string; error?: string }>
-      cancelFileDownload?: (downloadId: string) => Promise<boolean>
-      onFileDownloadProgress?: (handler: (progress: {
-        downloadId: string
-        received: number
-        total: number
-        state: string
-        error?: string
-      }) => void) => () => void
       startP2pReceive?: (payload: {
         transferId: string
         kind: 'file' | 'folder'

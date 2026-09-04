@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
 /**
- * 文件下载服务：负责下载权限校验、存储读取及下载计数。
+ * 媒体读取服务：负责图片权限校验、存储读取及访问计数。
  */
 @Service
 public class FileDownloadService {
@@ -37,7 +37,7 @@ public class FileDownloadService {
     }
 
     /**
-     * 获取可下载的文件元数据，校验文件存在、可用、未过期且用户有权限。
+     * 获取可读取的媒体元数据，校验文件存在、可用、类型受支持且用户有权限。
      *
      * @param userId 下载用户 ID，可为空（匿名下载公开文件）
      * @param fileId 文件 ID
@@ -54,6 +54,9 @@ public class FileDownloadService {
         }
         if (imFile.getExpiresAt() != null && imFile.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new BusinessException(410, "File has expired");
+        }
+        if (!ImageTypeDetector.isSafeInlineType(imFile.getContentType())) {
+            throw new BusinessException(410, "Server-backed file attachments are no longer available");
         }
         if (!canAccessFile(userId, imFile)) {
             throw new BusinessException(403, "No permission to download this file");
