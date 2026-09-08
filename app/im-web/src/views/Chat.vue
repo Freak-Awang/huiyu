@@ -12,8 +12,8 @@
     <DesktopWindowControls />
 
     <!-- 左侧导航栏：消息/通讯录切换、在线状态、更多、退出 -->
-    <div class="left-sidebar">
-      <div class="sidebar-nav">
+    <aside class="left-sidebar" aria-label="主导航">
+      <nav class="sidebar-nav">
         <div
           class="user-avatar-sidebar"
           :title="authStore.currentUser?.nickname"
@@ -48,34 +48,38 @@
             </button>
           </div>
         </div>
-        <div
+        <button
           class="nav-item"
           :class="{ active: activeTab === 'chat' }"
+          :aria-current="activeTab === 'chat' ? 'page' : undefined"
+          type="button"
           @click="activeTab = 'chat'"
           title="消息"
         >
           <img :src="messageIcon" class="nav-icon" alt="消息" />
-          <span class="nav-label"></span>
-        </div>
-        <div
+          <span class="nav-label">消息</span>
+        </button>
+        <button
           class="nav-item"
           :class="{ active: activeTab === 'contacts' }"
+          :aria-current="activeTab === 'contacts' ? 'page' : undefined"
+          type="button"
           @click="activeTab = 'contacts'"
           title="通讯录"
         >
           <img :src="contactsIcon" class="nav-icon" alt="通讯录" />
-          <span class="nav-label"></span>
-        </div>
-      </div>
+          <span class="nav-label">通讯录</span>
+        </button>
+      </nav>
       <div class="sidebar-footer">
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
           <img :src="sidebarMoreIcon" alt="更多" />
         </button>
       </div>
-    </div>
+    </aside>
 
     <!-- 中间面板：会话列表 或 通讯录 -->
-    <div class="middle-panel">
+    <aside class="middle-panel" :aria-label="activeTab === 'chat' ? '会话列表' : '通讯录'">
       <!-- Chat List -->
       <template v-if="activeTab === 'chat'">
         <div class="panel-header">
@@ -95,6 +99,7 @@
             v-model="searchKeyword"
             type="text"
             placeholder="搜索"
+            aria-label="搜索会话"
             class="search-input"
           />
         </div>
@@ -284,10 +289,10 @@
           </template>
         </div>
       </template>
-    </div>
+    </aside>
 
     <!-- 右侧面板：聊天消息区 + 输入区 -->
-    <div class="right-panel">
+    <main class="right-panel">
       <template v-if="chatStore.currentConversation">
         <div class="chat-header">
           <ConversationAvatar
@@ -308,7 +313,7 @@
             <span v-else class="chat-header-meta"></span>
           </div>
           <div class="chat-header-actions">
-            <button class="action-btn" title="更多" @click="toggleMoreDrawer">
+            <button class="action-btn" type="button" title="更多" aria-label="会话设置" @click="toggleMoreDrawer">
               <img :src="moreIcon" alt="更多" />
             </button>
           </div>
@@ -508,6 +513,8 @@
                   v-model="messageText"
                   class="message-input"
                   rows="3"
+                  aria-label="输入消息"
+                  placeholder="输入消息，按 Enter 发送"
                   :disabled="isSendingMessage"
                   @input="onMessageInput"
                   @keydown="handleMessageKeydown"
@@ -586,6 +593,7 @@
               </div>
               <button
                 class="send-btn"
+                type="button"
                 :disabled="isSendingMessage"
                 @click="handleSendText"
               >{{ isSendingMessage ? '发送中...' : '发送' }}</button>
@@ -1147,7 +1155,7 @@
           </button>
         </div>
       </aside>
-      </div>
+    </main>
 
     <div v-if="showGroupAvatarPreview" class="dialog-overlay" @click.self="cancelGroupAvatarPreview">
       <div class="dialog-box group-avatar-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="group-avatar-preview-title">
@@ -3764,28 +3772,9 @@ function messageMentionsCurrentUser(message: Message) {
   return message.mentions.some((mention) => mention.userId === currentUserId || isAllMention(mention))
 }
 
-// 显示桌面通知（优先使用桌面 bridge，回退到浏览器 Notification API）
+// 通过 Electron 主进程显示桌面通知。
 async function showDesktopNotification(title: string, body: string, conversationId: string) {
-  if (window.imDesktop?.showMessageNotification) {
-    await window.imDesktop.showMessageNotification({ title, body, conversationId }).catch(() => false)
-    return
-  }
-  showBrowserNotification(title, body)
-}
-
-function showBrowserNotification(title: string, body: string) {
-  if (!('Notification' in window)) return
-  if (Notification.permission === 'granted') {
-    new Notification(title, { body })
-    return
-  }
-  if (Notification.permission === 'default') {
-    Notification.requestPermission().then((permission) => {
-      if (permission === 'granted') {
-        new Notification(title, { body })
-      }
-    })
-  }
+  await window.imDesktop?.showMessageNotification?.({ title, body, conversationId }).catch(() => false)
 }
 
 // 创建群聊弹窗
@@ -3996,6 +3985,7 @@ watch(
   height: 100%;
   width: 100%;
   background: var(--bg-app);
+  overflow: hidden;
 }
 
 .chat-layout.desktop-window {
@@ -4004,50 +3994,62 @@ watch(
 
 /* Left Sidebar */
 .left-sidebar {
-  width: 55px;
-  min-width: 55px;
+  width: 76px;
+  min-width: 76px;
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 12px 0;
-  border-right: 1px solid var(--border);
+  padding: 18px 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 6px;
+  gap: 8px;
+  padding: 0 9px;
 }
 
 .nav-item {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 0;
-  border-radius: var(--radius-lg);
+  padding: 9px 4px 8px;
+  border-radius: 12px;
+  background: transparent;
   cursor: pointer;
-  color: var(--text-muted);
-  transition: all var(--transition-normal);
-  gap: 2px;
+  color: #9ba7bd;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+  gap: 5px;
 }
 
 .nav-item:hover {
-  background: rgba(128, 128, 128, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .nav-item.active {
-  background: rgba(128, 128, 128, 0.25);
+  background: rgba(112, 126, 240, 0.24);
+  color: #fff;
 }
 
 .nav-icon {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
+  filter: invert(1);
+  opacity: 0.68;
+}
+
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon {
+  opacity: 1;
 }
 
 .nav-label {
-  font-size: var(--font-xs);
+  font-size: 11px;
+  line-height: 1;
 }
 
 .sidebar-footer {
@@ -4056,13 +4058,13 @@ watch(
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 0 6px;
+  padding: 0 9px;
 }
 
 .user-avatar-sidebar {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: var(--accent-avatar);
   display: flex;
@@ -4071,7 +4073,8 @@ watch(
   color: #fff;
   font-size: var(--font-md);
   cursor: pointer;
-  margin: 0 auto 8px;
+  margin: 0 auto 12px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
 }
 
 .user-avatar-sidebar img {
@@ -4082,7 +4085,7 @@ watch(
 }
 
 .user-avatar-sidebar:hover {
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.28);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.34);
 }
 
 .sidebar-presence-dot {
@@ -4141,9 +4144,9 @@ watch(
 }
 
 .settings-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-lg);
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -4155,21 +4158,29 @@ watch(
 .settings-btn img {
   width: 18px;
   height: 18px;
+  filter: invert(1);
+  opacity: 0.68;
 }
 
 .settings-btn:hover {
-  background: rgba(128, 128, 128, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-btn:hover img {
+  opacity: 1;
 }
 
 /* Middle Panel */
 .middle-panel {
-  width: 180px;
-  min-width: 180px;
+  width: 310px;
+  min-width: 310px;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-light);
-  border-radius: 3px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -4177,21 +4188,23 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
+  min-height: 64px;
+  padding: 18px 20px 12px;
   background: var(--bg-panel);
 }
 
 .panel-title {
-  font-size: var(--font-xl);
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
 .new-chat-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  background: var(--bg-hover-light);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent-bg-light);
   border: none;
   display: flex;
   align-items: center;
@@ -4206,23 +4219,23 @@ watch(
 }
 
 .new-chat-btn:hover {
-  background: var(--bg-hover-subtle);
+  background: var(--accent-bg-active);
 }
 
 .search-bar {
-  padding: 0 12px 10px;
+  padding: 0 16px 14px;
 }
 
 .search-input {
   width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--radius-md);
+  height: 40px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 11px;
   background: var(--bg-input-rest);
   font-size: var(--font-base);
   color: var(--text-primary);
-  transition: background var(--transition-normal);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
 .search-input::placeholder {
@@ -4231,6 +4244,8 @@ watch(
 
 .search-input:focus {
   background: var(--bg-surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .conversation-list,
@@ -4240,7 +4255,9 @@ watch(
 }
 
 .list-section-label {
-  padding: 6px 16px;
+  padding: 9px 20px 6px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   font-size: var(--font-sm);
   color: var(--text-tertiary);
 }
@@ -4248,7 +4265,9 @@ watch(
 .conv-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  margin: 2px 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
   cursor: pointer;
   transition: background var(--transition-fast);
   position: relative;
@@ -4261,6 +4280,7 @@ watch(
 
 .conv-item.active {
   background: var(--accent-bg-active);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .pin-icon {
@@ -4329,7 +4349,7 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  max-width: 180px;
 }
 
 .conv-time {
@@ -4344,7 +4364,7 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  max-width: 190px;
 }
 
 .unread-badge {
@@ -4379,7 +4399,9 @@ watch(
 .dept-header {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  margin: 2px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
   gap: 6px;
   font-size: var(--font-md);
@@ -4403,7 +4425,9 @@ watch(
 .contact-item {
   display: flex;
   align-items: center;
-  padding: 8px 16px 8px 32px;
+  margin: 2px 8px;
+  padding: 9px 12px 9px 28px;
+  border-radius: 11px;
   cursor: pointer;
   gap: 10px;
   transition: background var(--transition-fast);
@@ -4446,7 +4470,7 @@ watch(
 }
 
 .contact-signature {
-  max-width: 150px;
+  max-width: 210px;
   overflow: hidden;
   color: var(--text-tertiary);
   font-size: var(--font-xs);
@@ -4467,16 +4491,19 @@ watch(
   background: var(--bg-chat);
   min-width: 0;
   position: relative;
+  border: 1px solid var(--border-subtle);
+  border-left: 0;
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
+  padding: 11px 22px;
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
-  min-height: 40px;
+  min-height: 66px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
 }
 
 .chat-header-info {
@@ -4492,8 +4519,8 @@ watch(
 }
 
 .chat-header-name {
-  font-size: var(--font-lg);
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
   color: var(--text-primary);
 }
 
@@ -4553,8 +4580,10 @@ watch(
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+  border-radius: 10px;
   color: var(--text-tertiary);
   display: flex;
   align-items: center;
@@ -4575,19 +4604,21 @@ watch(
 .message-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 26px 28px;
 }
 
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  width: min(920px, 100%);
+  margin: 0 auto;
 }
 
 .message-item {
   display: flex;
   gap: 10px;
-  max-width: 70%;
+  max-width: 76%;
   border-radius: var(--radius-lg);
   transition: background-color 0.2s, box-shadow 0.2s;
 }
@@ -4647,7 +4678,8 @@ watch(
 .text-bubble {
   background: var(--bg-surface);
   padding: 10px 14px;
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px 14px 14px;
   font-size: var(--font-md);
   color: var(--text-primary);
   line-height: 1.5;
@@ -4659,6 +4691,9 @@ watch(
 .message-self .text-bubble {
   background: var(--accent);
   color: #fff;
+  border-color: transparent;
+  border-radius: 14px 4px 14px 14px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .recalled-bubble {
@@ -4849,7 +4884,7 @@ watch(
 .input-area {
   border-top: 1px solid var(--border);
   background: var(--bg-header);
-  padding: 8px 16px 12px;
+  padding: 13px 24px 18px;
   position: relative;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
@@ -5016,21 +5051,23 @@ watch(
   gap: 10px;
   align-items: flex-end;
   position: relative;
+  width: min(960px, 100%);
+  margin: 0 auto;
 }
 
 .message-field {
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
+  border-radius: 14px;
   flex: 1;
-  height: 122px;
+  height: 112px;
   overflow: hidden;
   position: relative;
 }
 
 .message-field:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .message-field::after {
@@ -5332,17 +5369,24 @@ watch(
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-placeholder);
+  color: var(--text-tertiary);
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--accent) 7%, transparent), transparent 34%),
+    var(--bg-chat);
 }
 
 .no-conv-icon {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 16px;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 18px;
+  padding: 11px;
+  border-radius: 15px;
+  background: var(--accent-bg-active);
+  opacity: 0.78;
 }
 
 .no-conversation p {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .member-drawer {
@@ -6413,6 +6457,128 @@ button.more-field-row:hover {
 
 .compact-mode .input-area {
   padding: 6px 14px 10px;
+}
+
+@media (max-width: 1180px) {
+  .middle-panel {
+    width: 276px;
+    min-width: 276px;
+  }
+
+  .conv-name {
+    max-width: 155px;
+  }
+
+  .conv-preview {
+    max-width: 166px;
+  }
+}
+
+/* 适配 Electron 主窗口的最小宽度，仍保持桌面三栏结构。 */
+@media (max-width: 720px) {
+  .left-sidebar {
+    width: 58px;
+    min-width: 58px;
+    padding: 12px 0;
+  }
+
+  .sidebar-nav,
+  .sidebar-footer {
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+
+  .user-avatar-sidebar {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 8px;
+  }
+
+  .nav-item {
+    padding: 8px 2px;
+  }
+
+  .nav-icon {
+    width: 19px;
+    height: 19px;
+  }
+
+  .nav-label {
+    font-size: 10px;
+  }
+
+  .settings-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .middle-panel {
+    width: 214px;
+    min-width: 214px;
+  }
+
+  .panel-header {
+    min-height: 58px;
+    padding: 14px 14px 10px;
+  }
+
+  .panel-title {
+    font-size: 18px;
+  }
+
+  .search-bar {
+    padding: 0 10px 10px;
+  }
+
+  .conv-item {
+    margin-right: 5px;
+    margin-left: 5px;
+    padding: 9px 8px;
+  }
+
+  .conv-avatar {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+  }
+
+  .conv-name,
+  .conv-preview {
+    max-width: 105px;
+  }
+
+  .message-area {
+    padding: 16px 12px;
+  }
+
+  .message-list {
+    gap: 12px;
+  }
+
+  .message-item {
+    max-width: 88%;
+  }
+
+  .input-area,
+  .compact-mode .input-area {
+    padding: 8px 10px 10px;
+  }
+
+  .message-field {
+    height: 104px;
+  }
+
+  .input-toolbar {
+    gap: 4px;
+  }
+
+  .tool-btn {
+    padding: 4px;
+  }
+
+  .send-btn {
+    padding: 7px 14px;
+  }
 }
 
 </style>

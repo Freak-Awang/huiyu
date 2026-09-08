@@ -1,6 +1,28 @@
 .env
 node_modules/
 **/target/
-app/im-web/dist/
-app/im-web/dist-electron/
+
+# Runtime and diagnostic output
+*.log
+logs/
+*.pid
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.rej
+hs_err_pid*
+*.hprof
+mysql_err.txt
+
+# Generated build and test output
+**/dist/
+**/dist-electron/
+**/coverage/
 app/im-web/release/
+
+# Local caches
+**/__pycache__/
+*.pyc
+.eslintcache

@@ -2,6 +2,9 @@
 
 Vue 3、TypeScript、Vite 与 Electron 构建的 ArtTalk 桌面客户端。
 
+`dist/` 是 Electron 的渲染层产物，仅由 `BrowserWindow` 通过 `file://` 加载，
+不作为独立网页部署。服务端 Nginx 只提供 API、WebSocket 与管理后台入口。
+
 ## Verification
 
 ```powershell

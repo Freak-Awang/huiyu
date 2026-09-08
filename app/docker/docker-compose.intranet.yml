@@ -125,7 +125,6 @@ services:
         source: ${TLS_KEY_PATH:?set TLS_KEY_PATH in .env}
         target: /etc/nginx/tls/tls.key
         read_only: true
-      - ../im-web/dist:/usr/share/nginx/html/im
       - ../im-admin/dist:/usr/share/nginx/html/admin
     depends_on:
       backend:

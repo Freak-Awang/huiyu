@@ -24,7 +24,7 @@ import {
   parseAndValidateInternalCa,
 } from './internalCertificateTrust'
 
-const validTestTime = Date.parse('2026-09-04T00:00:00Z')
+const validTestTime = Date.parse('2026-09-08T04:00:00Z')
 const rootCaPem = readFileSync(
   fileURLToPath(new URL('../build/huiyu-root-ca.crt', import.meta.url)),
   'utf8',
@@ -102,7 +102,7 @@ describe('Electron internal CA certificate trust', () => {
 
   it('rejects a non-CA trust anchor and an expired CA', () => {
     expect(() => parseAndValidateInternalCa(serverCertificatePem, validTestTime)).toThrow('不是 CA')
-    expect(() => parseAndValidateInternalCa(rootCaPem, Date.parse('2036-09-01T00:00:00Z')))
+    expect(() => parseAndValidateInternalCa(rootCaPem, Date.parse('2037-01-01T00:00:00Z')))
       .toThrow('已经过期')
   })
 })

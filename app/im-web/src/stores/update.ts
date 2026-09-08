@@ -7,7 +7,7 @@
  */
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getServerOrigin, isDesktopRuntime } from '../config/runtime'
+import { getServerOrigin } from '../config/runtime'
 
 /** 更新状态快照（与主进程 UpdateStateSnapshot 对齐） */
 export interface UpdateState {
@@ -40,7 +40,7 @@ export const useUpdateStore = defineStore('update', () => {
   let initialized = false
   let unsubscribe: (() => void) | null = null
 
-  const supported = computed(() => isDesktopRuntime() && !!window.imDesktop?.initUpdate)
+  const supported = computed(() => !!window.imDesktop?.initUpdate)
   const hasUpdate = computed(() => ['available', 'downloading', 'downloaded'].includes(status.value))
   const isForce = computed(() => updateType.value === 'force' && hasUpdate.value)
   const progressPercent = computed(() => {

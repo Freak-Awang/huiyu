@@ -3,26 +3,16 @@
  * 支持从环境变量、localStorage 读取配置，并提供地址规范化与校验能力。
  */
 const SERVER_ORIGIN_KEY = 'imServerOrigin'
+const INTERNAL_SERVER_IP = '172.16.59.253'
+const INTERNAL_SERVER_ORIGIN = 'https://172.16.59.253:8443'
 
 function stripTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
 }
 
-function isLoopbackHostname(hostname: string) {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-}
-
-/**
- * 判断当前是否为桌面端（Electron）运行环境。
- * @returns 是桌面端返回 true，否则返回 false
- */
-export function isDesktopRuntime() {
-  return typeof window !== 'undefined' && (window.location.protocol === 'file:' || !!window.imDesktop)
-}
-
 /**
  * 规范化服务器地址：补全协议、去除末尾斜杠，并校验协议合法性。
- * 生产环境（非桌面端）强制要求 HTTPS，本地回环地址除外。
+ * 桌面客户端允许连接受信任内网中的 HTTP 或 HTTPS 服务。
  * @param value 原始服务器地址字符串
  * @returns 规范化后的服务器 origin
  * @throws 地址为空或协议不合法时抛出异常
@@ -36,9 +26,13 @@ export function normalizeServerOrigin(value: string) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('服务器地址必须使用 http 或 https')
   }
-  if (import.meta.env.PROD && !isDesktopRuntime() && url.protocol !== 'https:' && !isLoopbackHostname(url.hostname)) {
-    throw new Error('Production server addresses must use HTTPS')
+
+  // 公司固定内网服务器始终强制使用受信任的 HTTPS 入口，
+  // 同时自动迁移旧版本保存的 HTTP 地址。
+  if (url.hostname === INTERNAL_SERVER_IP) {
+    return INTERNAL_SERVER_ORIGIN
   }
+
   return stripTrailingSlash(url.origin)
 }
 
@@ -48,7 +42,7 @@ export function normalizeServerOrigin(value: string) {
  * @returns 服务器 origin，未配置时返回空字符串
  */
 export function getServerOrigin() {
-  const envOrigin = import.meta.env.VITE_IM_SERVER_ORIGIN || import.meta.env.VITE_API_BASE_URL || ''
+  const envOrigin = import.meta.env.VITE_IM_SERVER_ORIGIN || ''
   const savedOrigin = typeof window !== 'undefined' ? localStorage.getItem(SERVER_ORIGIN_KEY) || '' : ''
   const rawOrigin = savedOrigin || envOrigin
 
@@ -104,7 +98,7 @@ export function getWsBaseUrl() {
     return `${origin.replace(/^http/i, 'ws')}/ws/im`
   }
 
-  return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/im`
+  return ''
 }
 
 /**

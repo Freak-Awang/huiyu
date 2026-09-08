@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertP2pWriteBounds, resolveP2pEntryPath, safeP2pRelativePath } from './p2pReceiveSafety'
 
@@ -12,8 +13,10 @@ describe('Electron P2P receive safety', () => {
   })
 
   it('resolves valid entries beneath the selected temporary directory', () => {
-    const target = resolveP2pEntryPath('C:\\receive\\.arttalk-temp.part', 'nested/file.txt')
-    expect(target.toLowerCase()).toContain('nested\\file.txt')
+    const root = resolve('.arttalk-temp.part')
+    const target = resolveP2pEntryPath(root, 'nested/file.txt')
+
+    expect(target).toBe(resolve(root, 'nested', 'file.txt'))
   })
 
   it('rejects duplicate, skipped, empty, oversized and out-of-range writes', () => {

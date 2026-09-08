@@ -115,7 +115,6 @@ services:
       - "127.0.0.1:${DEV_NGINX_PORT:-8088}:80"
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
-      - ../im-web/dist:/usr/share/nginx/html/im
       - ../im-admin/dist:/usr/share/nginx/html/admin
     depends_on:
       backend:
