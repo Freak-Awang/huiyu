@@ -185,6 +185,15 @@ export async function listLocalMessages(
   return bucket.slice(Math.max(0, end - limit), end)
 }
 
+/** Read-only, account-scoped attachment history for ownership-checked legacy migration. */
+export async function listLocalP2pMessages(userId: string): Promise<LocalMessageRecord[]> {
+  if (!userId) return []
+  const store = await readStore()
+  return Object.values(store.users[userId]?.conversations || {}).flat()
+    .filter((message) => message && (message.messageType === 'FILE' || message.messageType === 'FOLDER'))
+    .map((message) => ({ ...message }))
+}
+
 /**
  * 在本地消息中搜索关键词
  * @param userId - 当前用户ID

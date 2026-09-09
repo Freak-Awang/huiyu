@@ -5,13 +5,10 @@
  * 所有 native 能力通过 preload 脚本的白名单 IPC 暴露给渲染进程，保持 sandbox 隔离。
  * 支持单实例锁，点击关闭按钮最小化到托盘（macOS 除外）。
  */
-import { app, BrowserWindow, Menu, MessageChannelMain, Notification, Tray, dialog, ipcMain, nativeImage, shell } from 'electron'
-import type { IpcMainInvokeEvent, MessagePortMain } from 'electron'
-import { createReadStream } from 'node:fs'
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import type { FileHandle } from 'node:fs/promises'
-import { createHash, randomUUID } from 'node:crypto'
-import { basename, dirname, join } from 'node:path'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   listLocalMessages,
@@ -23,7 +20,7 @@ import {
   type LocalMessageRecord,
 } from './localMessages.js'
 import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
-import { assertP2pWriteBounds, resolveP2pEntryPath, safeP2pRelativePath } from './p2pReceiveSafety.js'
+import { registerP2pHandlers } from './p2pNative.js'
 import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
 import { createWindowModeController, LOGIN_WINDOW_SIZE } from './windowMode.js'
 import { listLocalDrafts, saveLocalDraft } from './localDrafts.js'
@@ -51,48 +48,6 @@ let closeBehavior: 'tray' | 'exit' = 'tray'
 
 /** 未读消息计数，用于更新托盘图标和任务栏徽标 */
 let unreadCount = 0
-
-interface P2pReceiveStartPayload {
-  transferId: string
-  kind: 'file' | 'folder'
-  name: string
-  totalSize: number
-  fileCount: number
-}
-
-interface P2pManifestEntry {
-  index: number
-  path: string
-  name: string
-  size: number
-  contentType?: string
-  sha256: string
-}
-
-interface P2pReceiveSession {
-  receiveId: string
-  transferId: string
-  kind: 'file' | 'folder'
-  name: string
-  totalSize: number
-  fileCount: number
-  finalPath: string
-  temporaryPath: string
-  port: MessagePortMain
-  entries: P2pManifestEntry[]
-  paths: Map<number, string>
-  handles: Map<number, FileHandle>
-  offsets: Map<number, number>
-  verified: Set<number>
-  writeChain: Promise<void>
-}
-
-const P2P_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
-const P2P_MAX_FOLDER_SIZE = 20 * 1024 * 1024 * 1024
-const P2P_MAX_FOLDER_FILES = 10_000
-const P2P_MAX_CHUNK_SIZE = 64 * 1024
-const p2pReceiveSessions = new Map<string, P2pReceiveSession>()
-const p2pCompletedRuntimePaths = new Map<string, string>()
 
 /** 用户选择的文件存储目录，首次读取后缓存在主进程内 */
 let storageLocation: string | null = null
@@ -133,171 +88,6 @@ async function saveStorageLocation(location: string) {
   await rename(temporary, preferencesFile)
   storageLocation = normalized
   return normalized
-}
-
-function p2pOrphanRegistryPath() {
-  return join(app.getPath('userData'), 'p2p-receive-orphans.json')
-}
-
-function p2pCompletedRegistryPath() {
-  return join(app.getPath('userData'), 'p2p-completed-paths.json')
-}
-
-async function readP2pCompletedPaths() {
-  try {
-    const value = JSON.parse(await readFile(p2pCompletedRegistryPath(), 'utf8'))
-    const persisted = value && typeof value === 'object' ? value as Record<string, string> : {}
-    return { ...persisted, ...Object.fromEntries(p2pCompletedRuntimePaths) }
-  } catch {
-    return Object.fromEntries(p2pCompletedRuntimePaths)
-  }
-}
-
-async function saveP2pCompletedPath(transferId: string, path: string) {
-  const values = await readP2pCompletedPaths()
-  values[transferId] = path
-  const target = p2pCompletedRegistryPath()
-  const temporary = `${target}.${process.pid}.tmp`
-  await writeFile(temporary, JSON.stringify(Object.fromEntries(Object.entries(values).slice(-200))), {
-    encoding: 'utf8', mode: 0o600,
-  })
-  await rename(temporary, target)
-}
-
-async function readP2pOrphans() {
-  try {
-    const value = JSON.parse(await readFile(p2pOrphanRegistryPath(), 'utf8'))
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-async function writeP2pOrphans(paths: string[]) {
-  const target = p2pOrphanRegistryPath()
-  const temporary = `${target}.${process.pid}.tmp`
-  await mkdir(dirname(target), { recursive: true })
-  await writeFile(temporary, JSON.stringify([...new Set(paths)]), { encoding: 'utf8', mode: 0o600 })
-  await rename(temporary, target)
-}
-
-async function addP2pOrphan(path: string) {
-  await writeP2pOrphans([...(await readP2pOrphans()), path])
-}
-
-async function removeP2pOrphan(path: string) {
-  await writeP2pOrphans((await readP2pOrphans()).filter((item) => item !== path))
-}
-
-async function cleanupP2pOrphans() {
-  const paths = await readP2pOrphans()
-  for (const path of paths) {
-    const leaf = basename(path)
-    if (path.endsWith('.arttalk.part') || /^\.arttalk-[0-9a-f-]{36}\.part$/i.test(leaf)) {
-      await rm(path, { recursive: true, force: true }).catch(() => undefined)
-    }
-  }
-  await writeP2pOrphans([])
-}
-
-function safeP2pName(value: string, fallback: string) {
-  const name = basename(String(value || fallback)).normalize('NFC')
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().replace(/[. ]+$/g, '')
-  if (!name || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) return fallback
-  return name.slice(0, 255)
-}
-
-async function pathExists(path: string) {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function uniqueP2pFolderPath(parent: string, requestedName: string) {
-  const name = safeP2pName(requestedName, '文件夹')
-  let candidate = join(parent, name)
-  let suffix = 1
-  while (await pathExists(candidate)) {
-    candidate = join(parent, `${name} (${suffix})`)
-    suffix += 1
-  }
-  return candidate
-}
-
-function sha256Path(path: string) {
-  return new Promise<string>((resolveHash, rejectHash) => {
-    const hash = createHash('sha256')
-    const stream = createReadStream(path)
-    stream.on('data', (chunk) => hash.update(chunk))
-    stream.on('error', rejectHash)
-    stream.on('end', () => resolveHash(hash.digest('hex')))
-  })
-}
-
-async function closeP2pHandles(session: P2pReceiveSession) {
-  await session.writeChain.catch(() => undefined)
-  await Promise.all([...session.handles.values()].map((handle) => handle.close().catch(() => undefined)))
-  session.handles.clear()
-}
-
-async function abortP2pReceive(receiveId: string) {
-  const session = p2pReceiveSessions.get(receiveId)
-  if (!session) return false
-  p2pReceiveSessions.delete(receiveId)
-  await closeP2pHandles(session)
-  session.port.close()
-  await rm(session.temporaryPath, { recursive: true, force: true }).catch(() => undefined)
-  await removeP2pOrphan(session.temporaryPath).catch(() => undefined)
-  return true
-}
-
-function respondP2pPort(session: P2pReceiveSession, requestId: string, payload: Record<string, unknown>) {
-  session.port.postMessage({ requestId, ...payload })
-}
-
-function bindP2pReceivePort(session: P2pReceiveSession) {
-  session.port.on('message', (event) => {
-    const message = event.data as {
-      type?: string
-      requestId?: string
-      fileIndex?: number
-      offset?: number
-      data?: ArrayBuffer
-    }
-    if (message?.type !== 'write' || !message.requestId) return
-    const requestId = message.requestId
-    session.writeChain = session.writeChain.then(async () => {
-      const entry = session.entries[Number(message.fileIndex)]
-      const path = session.paths.get(Number(message.fileIndex))
-      let handle = session.handles.get(Number(message.fileIndex))
-      const expectedOffset = session.offsets.get(Number(message.fileIndex))
-      if (!entry || !path || expectedOffset == null || !(message.data instanceof ArrayBuffer)) {
-        throw new Error('Invalid P2P write request')
-      }
-      assertP2pWriteBounds(
-        entry.size, expectedOffset, Number(message.offset), message.data.byteLength, P2P_MAX_CHUNK_SIZE,
-      )
-      if (!handle) {
-        handle = await open(path, 'r+')
-        session.handles.set(entry.index, handle)
-      }
-      const buffer = Buffer.from(message.data)
-      const result = await handle.write(buffer, 0, buffer.byteLength, expectedOffset)
-      if (result.bytesWritten !== buffer.byteLength) throw new Error('Incomplete P2P disk write')
-      const nextOffset = expectedOffset + result.bytesWritten
-      session.offsets.set(entry.index, nextOffset)
-      respondP2pPort(session, requestId, { ok: true, offset: nextOffset })
-    }).catch((error) => {
-      respondP2pPort(session, requestId, {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
-  })
-  session.port.start()
 }
 
 /**
@@ -619,13 +409,13 @@ ipcMain.handle('notification:setUnreadBadge', (event, count: number) => {
  * 弹出桌面通知
  * 点击通知后聚焦主窗口，并发送 IPC 事件通知渲染进程跳转到对应会话
  */
-ipcMain.handle('notification:show', (event, payload: { title?: string; body?: string; conversationId?: string }) => {
+ipcMain.handle('notification:show', (event, payload: { title?: string; body?: string; conversationId?: string; silent?: boolean }) => {
   assertMainWindowSender(event)
   const title = payload?.title || 'ArtTalk'
   const body = payload?.body || '收到一条新消息'
   const conversationId = String(payload?.conversationId || '')
   if (Notification.isSupported()) {
-    const notification = new Notification({ title, body })
+    const notification = new Notification({ title, body, silent: !!payload?.silent })
     notification.on('click', () => {
       focusMainWindow()
       if (conversationId) {
@@ -696,194 +486,8 @@ ipcMain.handle('drafts:save', (event, userId: string, conversationId: string, dr
   return saveLocalDraft(userId, conversationId, draft)
 })
 
-ipcMain.handle('p2p:receive-start', async (event, payload: P2pReceiveStartPayload) => {
-  assertMainWindowSender(event)
-  if (!mainWindow || !/^p2p_[a-z0-9]+$/i.test(String(payload?.transferId || ''))
-    || !['file', 'folder'].includes(payload?.kind)
-    || !Number.isSafeInteger(payload?.totalSize) || payload.totalSize <= 0
-    || !Number.isInteger(payload?.fileCount) || payload.fileCount <= 0) {
-    return { canceled: false, success: false, error: 'Invalid P2P receive request' }
-  }
-  if ((payload.kind === 'file' && (payload.fileCount !== 1 || payload.totalSize > P2P_MAX_FILE_SIZE))
-    || (payload.kind === 'folder'
-      && (payload.fileCount > P2P_MAX_FOLDER_FILES || payload.totalSize > P2P_MAX_FOLDER_SIZE))) {
-    return { canceled: false, success: false, error: 'P2P receive limit exceeded' }
-  }
-
-  const safeName = safeP2pName(payload.name, payload.kind === 'file' ? 'file' : '文件夹')
-  let finalPath: string
-  let temporaryPath: string
-  if (payload.kind === 'file') {
-    const selection = await dialog.showSaveDialog(mainWindow, {
-      title: '接收 P2P 文件',
-      defaultPath: join(await getStorageLocation(), safeName),
-    })
-    if (selection.canceled || !selection.filePath) return { canceled: true, success: false }
-    finalPath = selection.filePath
-    temporaryPath = `${finalPath}.arttalk.part`
-    const conflicts = [...p2pReceiveSessions.values()].some((session) =>
-      session.finalPath.toLowerCase() === finalPath.toLowerCase()
-      || session.temporaryPath.toLowerCase() === temporaryPath.toLowerCase())
-    if (conflicts) {
-      return { canceled: false, success: false, error: '该保存位置已有正在进行的 P2P 接收任务' }
-    }
-  } else {
-    const selection = await dialog.showOpenDialog(mainWindow, {
-      title: '选择文件夹保存位置',
-      defaultPath: await getStorageLocation(),
-      properties: ['openDirectory', 'createDirectory'],
-    })
-    if (selection.canceled || !selection.filePaths[0]) return { canceled: true, success: false }
-    finalPath = await uniqueP2pFolderPath(selection.filePaths[0], safeName)
-    temporaryPath = join(selection.filePaths[0], `.arttalk-${randomUUID()}.part`)
-  }
-
-  const receiveId = `recv_${randomUUID().replace(/-/g, '')}`
-  const { port1, port2 } = new MessageChannelMain()
-  const session: P2pReceiveSession = {
-    receiveId,
-    transferId: payload.transferId,
-    kind: payload.kind,
-    name: safeName,
-    totalSize: payload.totalSize,
-    fileCount: payload.fileCount,
-    finalPath,
-    temporaryPath,
-    port: port2,
-    entries: [],
-    paths: new Map(),
-    handles: new Map(),
-    offsets: new Map(),
-    verified: new Set(),
-    writeChain: Promise.resolve(),
-  }
-  p2pReceiveSessions.set(receiveId, session)
-  try {
-    await addP2pOrphan(temporaryPath)
-    bindP2pReceivePort(session)
-    event.sender.postMessage('p2p:receive-port', { receiveId }, [port1])
-  } catch (error) {
-    p2pReceiveSessions.delete(receiveId)
-    port1.close()
-    port2.close()
-    return {
-      canceled: false,
-      success: false,
-      error: error instanceof Error ? error.message : '无法创建 P2P 接收任务',
-    }
-  }
-  return { canceled: false, success: true, receiveId, finalPath }
-})
-
-ipcMain.handle('p2p:receive-prepare', async (event, receiveId: string, entries: P2pManifestEntry[]) => {
-  assertMainWindowSender(event)
-  const session = p2pReceiveSessions.get(String(receiveId || ''))
-  if (!session) throw new Error('P2P receive session not found')
-  if (session.entries.length) {
-    return { offsets: Object.fromEntries(session.offsets), finalPath: session.finalPath }
-  }
-  if (!Array.isArray(entries) || entries.length !== session.fileCount) {
-    throw new Error('P2P manifest file count mismatch')
-  }
-  const ordered = [...entries].sort((left, right) => left.index - right.index)
-  const seenPaths = new Set<string>()
-  let totalSize = 0
-  try {
-    if (session.kind === 'folder') await mkdir(session.temporaryPath, { recursive: false })
-    for (const [expectedIndex, entry] of ordered.entries()) {
-      if (entry.index !== expectedIndex || !Number.isSafeInteger(entry.size) || entry.size <= 0
-        || entry.size > P2P_MAX_FILE_SIZE || !/^[0-9a-f]{64}$/i.test(entry.sha256)) {
-        throw new Error('Invalid P2P manifest entry')
-      }
-      const safeRelative = session.kind === 'folder'
-        ? safeP2pRelativePath(entry.path)
-        : entry.path.replace(/\\/g, '/')
-      const path = session.kind === 'file'
-        ? session.temporaryPath
-        : resolveP2pEntryPath(session.temporaryPath, safeRelative)
-      if (seenPaths.has(safeRelative.toLowerCase())) throw new Error('Duplicate P2P folder path')
-      seenPaths.add(safeRelative.toLowerCase())
-      totalSize += entry.size
-
-      await mkdir(dirname(path), { recursive: true })
-      const handle = await open(path, 'w')
-      await handle.close()
-      session.paths.set(entry.index, path)
-      session.offsets.set(entry.index, 0)
-    }
-    if (totalSize !== session.totalSize) throw new Error('P2P manifest size mismatch')
-    session.entries = ordered
-    return { offsets: Object.fromEntries(session.offsets), finalPath: session.finalPath }
-  } catch (error) {
-    await abortP2pReceive(session.receiveId)
-    throw error
-  }
-})
-
-ipcMain.handle('p2p:receive-finish-file', async (event, receiveId: string, fileIndex: number) => {
-  assertMainWindowSender(event)
-  const session = p2pReceiveSessions.get(String(receiveId || ''))
-  const entry = session?.entries[Number(fileIndex)]
-  const path = session?.paths.get(Number(fileIndex))
-  const handle = session?.handles.get(Number(fileIndex))
-  if (!session || !entry || !path) throw new Error('P2P receive file not found')
-  if (session.verified.has(entry.index)) {
-    return { success: true, offset: entry.size, sha256: entry.sha256 }
-  }
-  if (!handle) throw new Error('P2P receive file handle not found')
-  await session.writeChain
-  if (session.offsets.get(entry.index) !== entry.size) throw new Error('P2P file is incomplete')
-  await handle.sync()
-  await handle.close()
-  session.handles.delete(entry.index)
-  const actualHash = await sha256Path(path)
-  if (actualHash.toLowerCase() !== entry.sha256.toLowerCase()) {
-    await rm(path, { force: true })
-    throw new Error('P2P file checksum mismatch')
-  }
-  session.verified.add(entry.index)
-  return { success: true, offset: entry.size, sha256: actualHash }
-})
-
-ipcMain.handle('p2p:receive-commit', async (event, receiveId: string) => {
-  assertMainWindowSender(event)
-  const session = p2pReceiveSessions.get(String(receiveId || ''))
-  if (!session || session.verified.size !== session.fileCount) throw new Error('P2P receive is incomplete')
-  await closeP2pHandles(session)
-  if (session.kind === 'folder' && await pathExists(session.finalPath)) {
-    session.finalPath = await uniqueP2pFolderPath(dirname(session.finalPath), session.name)
-  }
-  await rename(session.temporaryPath, session.finalPath)
-  p2pReceiveSessions.delete(session.receiveId)
-  session.port.close()
-  await removeP2pOrphan(session.temporaryPath)
-  p2pCompletedRuntimePaths.set(session.transferId, session.finalPath)
-  await saveP2pCompletedPath(session.transferId, session.finalPath).catch(() => undefined)
-  return { success: true, path: session.finalPath, transferId: session.transferId }
-})
-
-ipcMain.handle('p2p:receive-abort', async (event, receiveId: string) => {
-  assertMainWindowSender(event)
-  return abortP2pReceive(String(receiveId || ''))
-})
-
-ipcMain.handle('p2p:open-result', async (event, transferId: string) => {
-  assertMainWindowSender(event)
-  const paths = await readP2pCompletedPaths()
-  const path = paths[String(transferId || '')]
-  if (!path || !(await pathExists(path))) return { success: false, error: '本地文件已移动或删除' }
-  const error = await shell.openPath(path)
-  return error ? { success: false, error } : { success: true, path }
-})
-
-ipcMain.handle('p2p:reveal-result', async (event, transferId: string) => {
-  assertMainWindowSender(event)
-  const paths = await readP2pCompletedPaths()
-  const path = paths[String(transferId || '')]
-  if (!path || !(await pathExists(path))) return { success: false, error: '本地文件已移动或删除' }
-  shell.showItemInFolder(path)
-  return { success: true, path }
-})
+const p2pNative = registerP2pHandlers({ assertTrusted: assertMainWindowSender,
+  getWindow: () => mainWindow || undefined, getStorageDirectory: getStorageLocation })
 
 // ==================== 应用生命周期 ====================
 
@@ -903,7 +507,6 @@ app.whenReady().then(async () => {
     return
   }
 
-  await cleanupP2pOrphans().catch(() => undefined)
   createMainWindow()
   createTray()
   // 无边框窗口不再挂载原生应用菜单，避免菜单栏浮出
@@ -935,16 +538,24 @@ if (!hasSingleInstanceLock) {
   app.on('second-instance', () => focusMainWindow())
 }
 
-// 退出前清理 P2P 接收；若用户选择"退出时自动安装"则先执行更新安装
+// Flush durable P2P checkpoints before quitting or installing an update.
+let p2pQuitReady = false
+let p2pQuitPending = false
 app.on('before-quit', (event) => {
   isQuitting = true
-  for (const receiveId of [...p2pReceiveSessions.keys()]) {
-    void abortP2pReceive(receiveId)
-  }
-  if (shouldInstallOnQuit()) {
-    event.preventDefault()
-    void installPendingUpdateOnQuit()
-  }
+  if (p2pQuitReady) return
+  event.preventDefault()
+  if (p2pQuitPending) return
+  p2pQuitPending = true
+  void p2pNative.suspendAll().then(async () => {
+    p2pQuitReady = true
+    if (shouldInstallOnQuit()) await installPendingUpdateOnQuit()
+    else app.quit()
+  }).catch((error) => {
+    p2pQuitPending = false
+    isQuitting = false
+    dialog.showErrorBox('传输进度尚未保存', String(error?.message || error))
+  })
 })
 
 // macOS 特殊处理：关闭所有窗口不退出应用（符合 macOS 惯例）

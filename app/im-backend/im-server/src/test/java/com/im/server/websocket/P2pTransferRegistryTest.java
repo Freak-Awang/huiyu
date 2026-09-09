@@ -4,10 +4,70 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class P2pTransferRegistryTest {
+
+    @Test
+    void completionKeepsSourceAndAllowsTheNextDeviceToReceive() {
+        P2pTransferRegistry registry = new P2pTransferRegistry();
+        WebSocketSession sender = session("sender", true), first = session("first", true), next = session("next", true);
+        var source = new P2pTransferRegistry.SourceRegistration("p2p_test", 1L, 2L, 10L, 11L, sender);
+        registry.registerSource(source);
+        var route = registry.bindReceiver(source, 11L, first);
+        assertThat(registry.endRoute(route.routeId(), "p2p_test", first, "completed").alreadyEnded()).isFalse();
+        assertThat(registry.getSource("p2p_test")).isSameAs(source);
+        assertThat(registry.bindReceiver(source, 11L, next)).isNotNull();
+    }
+
+    @Test
+    void oldRouteReplayCannotCancelANewAttempt() {
+        P2pTransferRegistry registry = new P2pTransferRegistry();
+        WebSocketSession sender = session("sender", true), receiver = session("receiver", true);
+        var source = new P2pTransferRegistry.SourceRegistration("p2p_test", 1L, 2L, 10L, 11L, sender);
+        registry.registerSource(source);
+        var old = registry.bindReceiver(source, 11L, receiver);
+        registry.endRoute(old.routeId(), "p2p_test", receiver, "paused");
+        var current = registry.bindReceiver(source, 11L, receiver);
+        var duplicate = registry.endRoute(old.routeId(), "p2p_test", receiver, "cancelled");
+        assertThat(duplicate.alreadyEnded()).isTrue();
+        assertThat(duplicate.reason()).isEqualTo("paused");
+        assertThat(registry.getRoute(current.routeId())).isSameAs(current);
+        assertThatThrownBy(() -> registry.endRoute(old.routeId(), "p2p_other", receiver, "cancelled"))
+                .hasMessage("Invalid P2P route");
+    }
+
+    @Test
+    void sourceCannotBeSilentlyTakenOverAndReregistrationPreservesGeneration() {
+        P2pTransferRegistry registry = new P2pTransferRegistry();
+        WebSocketSession sender = session("sender", true), other = session("other", true);
+        var source = new P2pTransferRegistry.SourceRegistration("p2p_test", 1L, 2L, 10L, 11L, sender, "lease", "generation");
+        registry.registerSource(source);
+        registry.registerSource(new P2pTransferRegistry.SourceRegistration("p2p_test", 1L, 2L, 10L, 11L,
+                sender, "lease", "discarded-generation", true));
+        assertThat(registry.getSource("p2p_test").sourceGeneration()).isEqualTo("generation");
+        assertThat(registry.getSource("p2p_test").paused()).isTrue();
+        assertThatThrownBy(() -> registry.registerSource(new P2pTransferRegistry.SourceRegistration(
+                "p2p_test", 1L, 2L, 10L, 11L, other))).hasMessage("SOURCE_BUSY");
+    }
+
+    @Test
+    void terminalAcknowledgmentsRemainBoundToOriginalParticipants() {
+        P2pTransferRegistry registry = new P2pTransferRegistry();
+        WebSocketSession sender = session("sender", true), receiver = session("receiver", true), stranger = session("stranger", true);
+        var source = new P2pTransferRegistry.SourceRegistration("p2p_test", 1L, 2L, 10L, 11L, sender);
+        registry.registerSource(source);
+        var route = registry.bindReceiver(source, 11L, receiver);
+        registry.invalidateShare("p2p_test", "recalled");
+        assertThat(registry.endRoute(route.routeId(), "p2p_test", receiver, "completed").reason()).isEqualTo("recalled");
+        assertThatThrownBy(() -> registry.endRoute(route.routeId(), "p2p_test", stranger, "cancelled"))
+                .hasMessage("Invalid P2P route");
+        WebSocketSession reconnected = session("receiver-reconnected", true);
+        when(reconnected.getAttributes()).thenReturn(java.util.Map.of("userId", 11L));
+        assertThat(registry.endRoute(route.routeId(), "p2p_test", reconnected, "cancelled").alreadyEnded()).isTrue();
+    }
 
     @Test
     void capabilityIsBoundToTheAuthenticatedSession() {

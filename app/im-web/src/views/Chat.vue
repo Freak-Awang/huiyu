@@ -72,11 +72,14 @@
         </button>
       </nav>
       <div class="sidebar-footer">
+        <button class="settings-btn" type="button" @click="showTransferCenter = true" title="文件传输中心" aria-label="文件传输中心">⇅</button>
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
           <img :src="sidebarMoreIcon" alt="更多" />
         </button>
       </div>
     </aside>
+
+    <TransferCenter :open="showTransferCenter" :items="transferCenterItems" :busy-ids="transferBusyIds" @close="showTransferCenter = false" @action="handleTransferAction" @conversation="openConversationFromNotification" />
 
     <!-- 中间面板：会话列表 或 通讯录 -->
     <aside class="middle-panel" :aria-label="activeTab === 'chat' ? '会话列表' : '通讯录'">
@@ -375,11 +378,15 @@
                       <span class="file-bubble-main">
                         <span class="file-bubble-name">{{ getP2pInfo(msg.content)?.name }}</span>
                         <span class="file-bubble-meta">{{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }} · 局域网直传</span>
+                        <span class="file-bubble-meta">{{ transferStatusLabel(getP2pBubbleItem(msg)) }} · {{ transferProgressText(getP2pBubbleItem(msg)) }}</span>
+                        <span v-if="getP2pState(msg)?.error" class="file-bubble-meta p2p-error">{{ getP2pState(msg)?.error }}</span>
                       </span>
                       <span class="p2p-file-actions">
                         <button type="button" class="p2p-action" :disabled="isP2pPrimaryDisabled(msg)" @click="handleP2pPrimary(msg)">{{ getP2pActionLabel(msg) }}</button>
                         <button v-if="canRevealP2p(msg)" type="button" class="p2p-cancel" @click="revealP2pMessage(msg)">位置</button>
                         <button v-if="canCancelP2p(msg)" type="button" class="p2p-cancel" @click="cancelP2pMessage(msg)">取消</button>
+                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">停止分享</button>
+                        <button type="button" class="p2p-cancel" @click="showTransferCenter = true">详情</button>
                       </span>
                     </div>
                     <div
@@ -397,12 +404,16 @@
                       <div class="file-bubble folder-bubble-card p2p-file-bubble">
                         <span class="file-bubble-main">
                           <span class="file-bubble-name">{{ getP2pInfo(msg.content)?.name }}</span>
-                          <span class="file-bubble-meta">{{ getP2pInfo(msg.content)?.fileCount }} 个文件 · {{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }} · 局域网直传</span>
+                          <span class="file-bubble-meta">{{ getP2pInfo(msg.content)?.fileCount }} 个文件 · {{ getP2pInfo(msg.content)?.directoryCount || 0 }} 个目录 · {{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }} · 局域网直传</span>
+                          <span class="file-bubble-meta">{{ transferStatusLabel(getP2pBubbleItem(msg)) }} · {{ transferProgressText(getP2pBubbleItem(msg)) }}</span>
+                          <span v-if="getP2pState(msg)?.error" class="file-bubble-meta p2p-error">{{ getP2pState(msg)?.error }}</span>
                         </span>
                         <span class="p2p-file-actions">
                           <button type="button" class="p2p-action" :disabled="isP2pPrimaryDisabled(msg)" @click="handleP2pPrimary(msg)">{{ getP2pActionLabel(msg) }}</button>
                           <button v-if="canRevealP2p(msg)" type="button" class="p2p-cancel" @click="revealP2pMessage(msg)">位置</button>
                           <button v-if="canCancelP2p(msg)" type="button" class="p2p-cancel" @click="cancelP2pMessage(msg)">取消</button>
+                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">停止分享</button>
+                        <button type="button" class="p2p-cancel" @click="showTransferCenter = true">详情</button>
                         </span>
                       </div>
                     </div>
@@ -497,15 +508,16 @@
                 <AttachmentDraftTray
                   ref="attachmentDraftTrayRef"
                   :drafts="currentAttachmentDrafts"
-                  :disabled="isSendingMessage"
+                  :disabled="false"
                   @remove="removeAttachmentDraft"
                   @pause="pauseAttachmentDraft"
                   @retry="retryAttachmentDraft"
                   @focus-input="focusMessageInputAtStart"
                 />
                 <p
-                  v-if="attachmentFeedback && attachmentFeedbackIsError"
-                  class="attachment-feedback error"
+                  v-if="attachmentFeedback"
+                  class="attachment-feedback"
+                  :class="{ error: attachmentFeedbackIsError }"
                   role="alert"
                 >{{ attachmentFeedback }}</p>
                 <p v-if="draftSaveError" class="attachment-feedback error" role="alert">{{ draftSaveError }}</p>
@@ -555,7 +567,7 @@
                 <label
                   class="tool-btn"
                   :class="{ disabled: isSendingMessage }"
-                  title="发送文件"
+                  title="发送文件（单文件最多 2GB，双方桌面端直传）"
                   :aria-disabled="isSendingMessage"
                   role="button"
                   :tabindex="isSendingMessage ? -1 : 0"
@@ -569,7 +581,7 @@
                 <label
                   class="tool-btn"
                   :class="{ disabled: isSendingMessage }"
-                  title="发送文件夹"
+                  title="发送文件夹（最多 20GB、10,000 个文件及 10,000 个目录）"
                   :aria-disabled="isSendingMessage"
                   role="button"
                   :tabindex="isSendingMessage ? -1 : 0"
@@ -1237,6 +1249,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
 import {
   useAttachmentDraftStore,
+  resolveDraftKind,
   type AttachmentDraft,
   type AttachmentDraftClassification,
 } from '../stores/attachmentDrafts'
@@ -1244,6 +1257,7 @@ import { useP2pTransferStore } from '../stores/p2pTransfers'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import ProfileDialog from '../components/ProfileDialog.vue'
 import AttachmentDraftTray from '../components/AttachmentDraftTray.vue'
+import TransferCenter, { transferActions, primaryTransferAction, transferStatusLabel, transferProgressText, type TransferCenterItem, type TransferAction } from '../components/TransferCenter.vue'
 import ConversationAvatar from '../components/ConversationAvatar.vue'
 import CreateGroupDialog from '../components/CreateGroupDialog.vue'
 import DesktopWindowControls from '../components/DesktopWindowControls.vue'
@@ -1289,10 +1303,11 @@ import {
   uploadConversationImage,
 } from '../api/file'
 import { parseP2pAttachmentContent, type P2pAttachmentContent } from '../utils/p2pProtocol'
-import { runAttachmentQueue } from '../utils/attachmentQueue'
+import { createAttachmentQueue, createAttachmentTaskPersistence } from '../utils/attachmentQueue'
 import {
   DragDepthTracker,
   collectDroppedItems,
+  droppedDirectoryNames,
   hasFileDragPayload,
   type DroppedFolder,
 } from '../utils/fileDrop'
@@ -1338,6 +1353,12 @@ const settingsStore = useSettingsStore()
 const userProfileStore = useUserProfileStore()
 const attachmentDraftStore = useAttachmentDraftStore()
 const p2pTransferStore = useP2pTransferStore()
+const attachmentQueue = createAttachmentQueue()
+const showTransferCenter = ref(false)
+const transferBusyIds = ref<string[]>([])
+const transferNotificationStates = new Map<string, string>()
+const attachmentTaskPersistence = createAttachmentTaskPersistence()
+let attachmentAccountGeneration = 0
 
 const activeTab = ref<'chat' | 'contacts'>('chat') // 左侧导航当前激活标签
 const showSettingsDialog = ref(false) // 设置弹窗可见性
@@ -1516,8 +1537,67 @@ let highlightMessageTimer: ReturnType<typeof setTimeout> | null = null
 let loadingOlderMessages = false
 let lastMarkedReadMessageId = ''
 const currentAttachmentDrafts = computed(() =>
-  attachmentDraftStore.draftsFor(chatStore.currentConversation?.conversationId)
+  attachmentDraftStore.draftsFor(chatStore.currentConversation?.conversationId).filter((draft) => !draft.submitted)
 )
+const transferCenterItems = computed<TransferCenterItem[]>(() => {
+  const prepared: TransferCenterItem[] = Object.values(attachmentDraftStore.draftsByConversation).flat()
+    .filter((draft) => draft.submitted).map((draft) => ({
+      taskId: draft.id, transferId: draft.id, conversationId: draft.conversationId,
+      name: draft.name, kind: draft.kind, direction: 'send', status: draft.status,
+      progress: draft.progress, transferredBytes: draft.size * draft.progress, totalBytes: draft.size,
+      error: draft.error, fileCount: draft.nativeSource?.fileCount ?? draft.folderFiles?.length,
+      draft: true,
+    }))
+  const tasks = [...prepared, ...p2pTransferStore.tasks]
+  return tasks.map((item) => ({ ...item,
+    conversationName: (() => { const conversation = chatStore.conversations.find((entry) => entry.conversationId === item.conversationId); return conversation ? getConversationName(conversation) : '查看所属会话' })(),
+  }))
+})
+
+async function handleTransferAction(action: TransferAction, item: TransferCenterItem) {
+  const id = item.taskId || item.transferId
+  if (transferBusyIds.value.includes(id)) return
+  transferBusyIds.value.push(id)
+  try {
+    if (item.draft) {
+      const draft = Object.values(attachmentDraftStore.draftsByConversation).flat().find((entry) => entry.id === id)
+      if (!draft) return
+      if (action === 'pause') pauseAttachmentDraft(draft)
+      else if (action === 'resume') await retryAttachmentDraft(draft)
+      else if (action === 'cancel') removeAttachmentDraft(draft)
+      return
+    }
+    if (action === 'pause') await p2pTransferStore.pauseTransfer(id)
+    else if (action === 'resume') await p2pTransferStore.resumeTransfer(id)
+    else if (action === 'cancel') await p2pTransferStore.cancelTransfer(id)
+    else if (action === 'stopSharing') await p2pTransferStore.stopSharing(id)
+    else if (action === 'locateSource') await p2pTransferStore.locateSource(id)
+    else if (action === 'open') await p2pTransferStore.openCompleted(id)
+    else if (action === 'reveal') await p2pTransferStore.revealCompleted(id)
+    else if (action === 'locateResult') await p2pTransferStore.locateResult(id)
+    else if (action === 'receiveAgain') await p2pTransferStore.receiveAgain(id)
+    else if (action === 'changeDestination') await p2pTransferStore.changeDestination(id)
+    else if (action === 'retryCleanup') await p2pTransferStore.retryCleanup(id)
+  } catch (error) {
+    setAttachmentFeedback(error instanceof Error ? error.message : '文件操作失败', true)
+  } finally { transferBusyIds.value = transferBusyIds.value.filter((value) => value !== id) }
+}
+
+watch(transferCenterItems, (items) => {
+  for (const item of items) {
+    const key = item.taskId || item.transferId
+    const previous = transferNotificationStates.get(key)
+    transferNotificationStates.set(key, item.status)
+    if (!previous || previous === item.status || !['completed', 'failed'].includes(item.status) || !item.conversationId) continue
+    const setting = settingsStore.notification
+    const conversation = chatStore.conversations.find((entry) => entry.conversationId === item.conversationId)
+    if (isChatForeground() || !setting.desktop || setting.doNotDisturb || setting.mentionOnly || conversation?.muted) continue
+    const title = item.status === 'completed' ? '文件传输完成' : '文件传输失败'
+    const body = setting.showPreview ? (item.name || '文件') + (item.error ? '：' + item.error : '') : '请打开文件传输中心查看'
+    void window.imDesktop?.showMessageNotification?.({ title, body, conversationId: item.conversationId, silent: !setting.sound }).catch(() => false)
+  }
+}, { deep: true })
+
 const totalUnreadCount = computed(() =>
   Array.from(chatStore.unreadCounts.values()).reduce((sum, count) => sum + count, 0)
 )
@@ -1812,10 +1892,6 @@ function matchesAllMentionKeyword(keyword: string): boolean {
 
 // 切换选中会话：加载消息、请求在线状态、关闭附属面板、滚动到底部
 async function handleSelectConv(conv: any) {
-  if (isSendingMessage.value) {
-    setAttachmentFeedback('附件发送完成后才能切换会话', true)
-    return
-  }
   try {
     await chatStore.selectConversation(conv.conversationId)
     requestConversationPresence(conv.conversationId)
@@ -1853,19 +1929,11 @@ function setAttachmentFeedback(message: string, isError = false) {
   attachmentFeedbackIsError.value = isError
 }
 
-function p2pAttachmentBlockReason() {
-  const conversation = chatStore.currentConversation
+function p2pAttachmentBlockReason(conversationId = chatStore.currentConversation?.conversationId) {
+  const conversation = chatStore.conversations.find((item) => item.conversationId === conversationId)
   if (!conversation) return '请先选择会话'
   if (conversation.type === 'GROUP') return '纯 P2P 第一版暂不支持群文件和文件夹'
   if (!p2pTransferStore.desktopSupported) return 'P2P 文件传输仅支持桌面客户端'
-  if (!wsConnected.value || !p2pTransferStore.serverEnabled) return 'P2P 文件传输服务未连接'
-  if (!(conversation.conversationId in p2pTransferStore.peerAvailability)) {
-    void p2pTransferStore.refreshPeerStatus(conversation.conversationId)
-    return '正在检测对方桌面端的 P2P 能力，请稍后重试'
-  }
-  if (!p2pTransferStore.peerAvailability[conversation.conversationId]) {
-    return '对方桌面端未在线，无法发送 P2P 文件'
-  }
   return ''
 }
 
@@ -1874,14 +1942,11 @@ function addAttachmentFiles(
   files: File[],
   classification: AttachmentDraftClassification = 'auto',
   extraMessages: string[] = [],
+  targetConversationId = chatStore.currentConversation?.conversationId,
 ) {
-  const conversationId = chatStore.currentConversation?.conversationId
+  const conversationId = targetConversationId
   if (!conversationId || !authStore.currentUser) {
     setAttachmentFeedback('请先选择会话，再添加附件', true)
-    return false
-  }
-  if (isSendingMessage.value) {
-    setAttachmentFeedback('附件正在发送，请稍后再添加', true)
     return false
   }
   if (!files.length) {
@@ -1890,7 +1955,7 @@ function addAttachmentFiles(
   }
 
   if (classification === 'file') {
-    const reason = p2pAttachmentBlockReason()
+    const reason = p2pAttachmentBlockReason(conversationId)
     if (reason) {
       setAttachmentFeedback(reason, true)
       return false
@@ -1900,7 +1965,7 @@ function addAttachmentFiles(
   const result = attachmentDraftStore.addFiles(conversationId, files, classification)
   const messages: string[] = [...extraMessages]
   const p2pDrafts = result.added.filter((draft) => draft.kind !== 'image')
-  const p2pReason = p2pDrafts.length ? p2pAttachmentBlockReason() : ''
+  const p2pReason = p2pDrafts.length ? p2pAttachmentBlockReason(conversationId) : ''
   if (p2pReason) {
     p2pDrafts.forEach((draft) => attachmentDraftStore.removeDraft(conversationId, draft.id))
     result.added.splice(0, result.added.length, ...result.added.filter((draft) => draft.kind === 'image'))
@@ -1913,23 +1978,25 @@ function addAttachmentFiles(
 }
 
 function removeAttachmentDraft(draft: AttachmentDraft) {
-  if (isSendingMessage.value) return
   p2pTransferStore.discardPreparedDraft(draft.id)
   attachmentDraftStore.removeDraft(draft.conversationId, draft.id)
+  void deleteNativeDraftTask(draft)
   setAttachmentFeedback('')
 }
 
 function pauseAttachmentDraft(draft: AttachmentDraft) {
-  if (draft.kind === 'image' || draft.status !== 'hashing' || draft.progress >= 1) return
+  if (!['queued', 'hashing', 'uploading'].includes(draft.status)) return
   attachmentDraftStore.updateDraft(draft.conversationId, draft.id, {
     status: 'paused',
     error: undefined,
   })
-  draft.controller?.abort()
+  draft.controller?.abort('pause')
 }
 
-function retryAttachmentDraft() {
-  void handleSendMessage()
+async function retryAttachmentDraft(draft: AttachmentDraft) {
+  if (draft.controller?.signal.aborted) await attachmentQueue.waitFor(draft.id)
+  if (!attachmentDraftStore.draftsFor(draft.conversationId).some((item) => item.id === draft.id)) return
+  enqueueAttachmentDraft(draft)
 }
 
 // 附件拖拽进入：检测文件拖拽，显示拖放提示
@@ -1965,37 +2032,63 @@ async function handleAttachmentDrop(event: DragEvent) {
   event.stopPropagation()
   attachmentDragDepth.reset()
   isAttachmentDragActive.value = false
-  const { files, folders } = await collectDroppedItems(event.dataTransfer)
+  const conversationId = chatStore.currentConversation?.conversationId
+  const accountId = String(authStore.currentUser?.userId || '')
+  const generation = attachmentAccountGeneration
+  if (!conversationId || !accountId) { setAttachmentFeedback('请先选择会话', true); return }
+  const droppedNativeFiles = Array.from(event.dataTransfer?.files || [])
+  const directories = droppedDirectoryNames(event.dataTransfer?.items)
+  const imageFiles = droppedNativeFiles.filter((file) => !directories.has(file.name) && resolveDraftKind(file, 'auto') === 'image')
+  const nativeFiles = droppedNativeFiles.filter((file) => directories.has(file.name) || resolveDraftKind(file, 'auto') !== 'image')
+  if (window.imDesktop?.importP2pSources && imageFiles.length) addAttachmentFiles(imageFiles, 'image', [], conversationId)
+  if (window.imDesktop?.importP2pSources && imageFiles.length && !nativeFiles.length) return
+  if (window.imDesktop?.importP2pSources && nativeFiles.length) {
+    const reason = p2pAttachmentBlockReason()
+    if (reason) { setAttachmentFeedback(reason, true); return }
+    setAttachmentFeedback('正在扫描附件；可继续聊天')
+    try {
+      const result = await window.imDesktop.importP2pSources(nativeFiles)
+      if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
+      if (!result.canceled) attachmentDraftStore.addNativeSources(conversationId, result.sources)
+      if (chatStore.currentConversation?.conversationId === conversationId) setAttachmentFeedback('附件已添加；文件夹将完整发送，最多 2GB/文件、20GB/文件夹、10,000 个文件')
+    } catch (error) {
+      if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '附件扫描失败，未添加任何文件', true)
+    }
+    return
+  }
+  let dropped: Awaited<ReturnType<typeof collectDroppedItems>>
+  try { dropped = await collectDroppedItems(event.dataTransfer) } catch (error) {
+    if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '文件夹读取失败', true)
+    return
+  }
+  if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
+  const { files, folders } = dropped
   const notes: string[] = []
   let folderHasError = false
   for (const folder of folders) {
-    const result = addAttachmentFolder(folder)
+    const result = addAttachmentFolder(folder, conversationId)
     notes.push(...result.messages)
     folderHasError = folderHasError || result.isError
   }
   if (files.length) {
-    addAttachmentFiles(files, 'auto', notes)
+    addAttachmentFiles(files, 'auto', notes, conversationId)
   } else if (notes.length) {
     setAttachmentFeedback(notes.join('；'), folderHasError)
   }
 }
 
 // 添加文件夹附件草稿，返回反馈信息（不直接设置，由调用方合并展示）
-function addAttachmentFolder(folder: DroppedFolder) {
-  const conversationId = chatStore.currentConversation?.conversationId
+function addAttachmentFolder(folder: DroppedFolder, conversationId = chatStore.currentConversation?.conversationId) {
   if (!conversationId || !authStore.currentUser) {
     return { messages: ['请先选择会话，再添加附件'], isError: true }
   }
-  if (isSendingMessage.value) {
-    return { messages: ['附件正在发送，请稍后再添加'], isError: true }
-  }
-  const reason = p2pAttachmentBlockReason()
+  const reason = p2pAttachmentBlockReason(conversationId)
   if (reason) return { messages: [reason], isError: true }
   const result = attachmentDraftStore.addFolder(conversationId, folder)
   const messages: string[] = []
   if (result.duplicateCount) messages.push(`已忽略重复的文件夹「${folder.name}」`)
   if (result.errors.length) messages.push(...result.errors)
-  return { messages, isError: result.errors.length > 0 && !result.added.length }
+  return { messages, isError: result.errors.length > 0 }
 }
 
 function preventWindowFileDrop(event: DragEvent) {
@@ -2895,34 +2988,33 @@ function getP2pState(msg: Message) {
   return info ? p2pTransferStore.stateFor(info.transferId) : undefined
 }
 
-function getP2pActionLabel(msg: Message) {
+function getP2pBubbleItem(msg: Message): TransferCenterItem {
   const info = getP2pInfo(msg.content)
-  if (!info) return ''
   const state = getP2pState(msg)
-  const mine = msg.senderId === String(authStore.currentUser?.userId || '')
-  if (!mine && !p2pTransferStore.desktopSupported) return '仅桌面端可接收'
-  if (!state) return mine ? '源文件已失效' : '接收'
-  if (state.status === 'completed') return mine ? '发送完成' : '打开'
-  if (state.status === 'claimed') return '已在其他设备接收'
-  if (state.status === 'unavailable') return '重试'
-  if (state.status === 'failed' || state.status === 'cancelled') return mine ? '发送失败' : '重试'
-  if (state.status === 'paused') return mine ? '等待对方继续' : '继续'
-  if (state.status === 'waiting') return mine ? '等待接收' : '接收'
-  if (state.status === 'queued') return '排队中'
-  if (state.status === 'connecting') return mine ? '正在连接' : '暂停'
-  const percent = Math.round((state.progress || 0) * 100)
-  return mine ? `发送 ${percent}%` : `接收 ${percent}%`
+  return state || { transferId: info?.transferId || '', direction: msg.senderId === String(authStore.currentUser?.userId || '') ? 'send' : 'receive', status: 'waiting', name: info?.name, kind: info?.kind, totalBytes: info?.totalSize, fileCount: info?.fileCount }
+}
+
+function getP2pActionLabel(msg: Message) {
+  const item = getP2pBubbleItem(msg)
+  if (!p2pTransferStore.desktopSupported) return '仅桌面端可接收'
+  if (item.direction === 'send' && !getP2pState(msg)) return '本机无源文件，请重新发送'
+  return primaryTransferAction(item)?.label || transferStatusLabel(item)
 }
 
 function isP2pPrimaryDisabled(msg: Message) {
-  const mine = msg.senderId === String(authStore.currentUser?.userId || '')
-  const state = getP2pState(msg)
-  return mine || !p2pTransferStore.desktopSupported || state?.status === 'claimed'
+  const item = getP2pBubbleItem(msg)
+  if (item.direction === 'send' && !getP2pState(msg)) return true
+  return !p2pTransferStore.desktopSupported || !primaryTransferAction(item)
+}
+
+function canStopSharingP2p(msg: Message) {
+  const item = getP2pBubbleItem(msg)
+  return !!getP2pState(msg) && item.direction === 'send' && !['STOPPED', 'RECALLED'].includes(item.shareState || '') && !['cancelled', 'stopped', 'recalled'].includes(item.status)
 }
 
 function canCancelP2p(msg: Message) {
   const state = getP2pState(msg)
-  return !!state && !['completed', 'cancelled', 'claimed'].includes(state.status)
+  return !!state && transferActions(state).some((action) => action.value === 'cancel')
 }
 
 function canRevealP2p(msg: Message) {
@@ -2933,28 +3025,15 @@ function canRevealP2p(msg: Message) {
 async function handleP2pPrimary(msg: Message) {
   const info = getP2pInfo(msg.content)
   if (!info) return
-  const mine = msg.senderId === String(authStore.currentUser?.userId || '')
   const state = getP2pState(msg)
   try {
-    if (state?.status === 'completed') {
-      if (!mine) await p2pTransferStore.openCompleted(info.transferId)
+    if (state) {
+      const action = primaryTransferAction(state)
+      if (action) await handleTransferAction(action.value, state)
       return
     }
-    if (mine) {
-      return
-    }
-    if (state && ['connecting', 'receiving', 'queued'].includes(state.status)) {
-      p2pTransferStore.pauseTransfer(info.transferId)
-      return
-    }
-    if (state?.status === 'paused' && state.receiveId) {
-      await p2pTransferStore.resumeTransfer(info.transferId)
-      return
-    }
-    await p2pTransferStore.receiveAttachment(info)
-  } catch (error) {
-    alert(error instanceof Error ? error.message : 'P2P 文件操作失败')
-  }
+    await p2pTransferStore.receiveAttachment(info, { messageId: msg.messageId, conversationId: msg.conversationId })
+  } catch (error) { setAttachmentFeedback(error instanceof Error ? error.message : 'P2P 文件操作失败', true) }
 }
 
 async function cancelP2pMessage(msg: Message) {
@@ -3069,6 +3148,7 @@ async function loadCustomStickerState() {
   customStickerError.value = ''
   try {
     const records = await listCustomStickerRecords()
+    if (chatDisposed) return
     revokeCustomStickerUrls()
     customStickers.value = records.map(toCustomSticker)
     loadRecentEmojiState()
@@ -3324,31 +3404,79 @@ function sendTextMessage(
   return true
 }
 
-// 主发送入口：先处理附件队列，再发送文本消息
+// 提交后附件独立后台准备；文字立即发送，后续输入不受影响。
 async function handleSendMessage() {
   if (isSendingMessage.value) return
-  const hasText = !!messageText.value.trim()
   const conversation = chatStore.currentConversation
   const user = authStore.currentUser
-  const attachments = [...currentAttachmentDrafts.value]
-  if (!hasText && !attachments.length) return
-  if (!conversation || !user) {
-    setAttachmentFeedback('请先选择会话', true)
-    return
-  }
-
-  isSendingMessage.value = true
+  if (!conversation || !user) return
   const textDraft = conversationDrafts.snapshot(conversation.conversationId)
+  const attachments = [...currentAttachmentDrafts.value]
+  if (!textDraft.text.trim() && !attachments.length) return
+  isSendingMessage.value = true
   try {
-    const completed = await runAttachmentQueue(
-      attachments,
-      (draft) => processAttachmentDraft(draft, conversation, user),
-    )
-    if (!completed) return
-    if (hasText) sendTextMessage(conversation, user, textDraft)
-    if (attachments.length) setAttachmentFeedback('附件已加入发送队列')
-  } finally {
-    isSendingMessage.value = false
+    if (textDraft.text.trim()) sendTextMessage(conversation, user, textDraft)
+    for (const draft of attachments) enqueueAttachmentDraft(draft)
+    if (attachments.length) setAttachmentFeedback('附件正在后台准备，可在文件传输中心查看')
+  } finally { isSendingMessage.value = false }
+}
+
+function enqueueAttachmentDraft(draft: AttachmentDraft) {
+  const conversation = chatStore.conversations.find((item) => item.conversationId === draft.conversationId)
+  const user = authStore.currentUser
+  if (!conversation || !user) return
+  const generation = attachmentAccountGeneration
+  const accountId = String(user.userId)
+  attachmentDraftStore.updateDraft(draft.conversationId, draft.id, { submitted: true, status: 'queued', error: undefined })
+  const source = draft.nativeSource
+  const saved = source && window.imDesktop?.saveP2pTask ? window.imDesktop.saveP2pTask({
+    taskId: `draft_${draft.id}`, transferId: `draft_${draft.id}`, draftId: draft.id,
+    direction: 'send', sourceId: source.sourceId, conversationId: draft.conversationId,
+    messageId: '', status: 'preparing', name: source.name, kind: source.kind,
+    totalBytes: source.totalSize, totalSize: source.totalSize, fileCount: source.fileCount,
+    directoryCount: source.directoryCount,
+  }) : Promise.resolve()
+  // Observe immediately even while this job is waiting behind another preparation.
+  const persisted = saved.then(() => true, (error) => {
+    if (generation === attachmentAccountGeneration) attachmentDraftStore.updateDraft(draft.conversationId, draft.id, {
+      status: 'failed', error: error instanceof Error ? `无法保存发送任务：${error.message}` : '无法保存发送任务，请重试',
+    })
+    return false
+  })
+  attachmentTaskPersistence.save(draft.id, persisted)
+  void attachmentQueue.enqueue(draft.id, async () => {
+    if (!await persisted) return false
+    if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId) !== accountId) return false
+    const existing = attachmentDraftStore.draftsFor(draft.conversationId).find((item) => item.id === draft.id)
+    if (!existing || existing.status !== 'queued') return false
+    return processAttachmentDraft(existing, { ...conversation }, { ...user })
+  })
+}
+
+async function deleteNativeDraftTask(draft: AttachmentDraft) {
+  if (!draft.nativeSource) return
+  const accountId = String(authStore.currentUser?.userId || '')
+  const generation = attachmentAccountGeneration
+  await attachmentTaskPersistence.remove(draft.id, async () => {
+    if (!accountId || String(authStore.currentUser?.userId || '') !== accountId) return
+    try {
+      await window.imDesktop?.deleteP2pTask?.(`draft_${draft.id}`)
+    } catch (error) {
+      if (!chatDisposed && generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '无法更新本地发送任务', true)
+    }
+  })
+}
+
+function restoreAttachmentDraftTasks() {
+  for (const task of p2pTransferStore.restoredDrafts) {
+    if (!task.sourceId || !task.conversationId || !task.name || !task.kind) continue
+    const draftId = task.taskId?.replace(/^draft_/, '')
+    if (!draftId) continue
+    attachmentDraftStore.restoreNativeDraft(draftId, task.conversationId, {
+      sourceId: task.sourceId, kind: task.kind, name: task.name,
+      totalSize: task.totalSize ?? 0,
+      fileCount: task.fileCount ?? 0, directoryCount: task.directoryCount ?? 0,
+    })
   }
 }
 
@@ -3359,6 +3487,8 @@ async function processAttachmentDraft(
   user: UserInfo,
 ) {
   const controller = new AbortController()
+  const generation = attachmentAccountGeneration
+  const stillCurrentAccount = () => !chatDisposed && generation === attachmentAccountGeneration && String(authStore.currentUser?.userId) === String(user.userId)
   attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
     controller,
     status: draft.kind === 'image' ? 'uploading' : 'hashing',
@@ -3376,6 +3506,7 @@ async function processAttachmentDraft(
         }),
         controller.signal,
       )
+      if (!stillCurrentAccount() || controller.signal.aborted) return false
       const image = response.data
       const imageContent = {
         fileId: image.id,
@@ -3395,6 +3526,9 @@ async function processAttachmentDraft(
         }),
         controller.signal,
       )
+      if (!stillCurrentAccount() || !attachmentDraftStore.draftsFor(draft.conversationId).some((item) => item.id === draft.id)) return false
+      // A pause after offer creation returns the original message and moves its paused task to the center.
+      if (controller.signal.aborted && controller.signal.reason !== 'pause') return false
       const p2pMessage = normalizeMessage({
         ...response,
         messageId: String(response.messageId),
@@ -3408,18 +3542,20 @@ async function processAttachmentDraft(
         ...getInitialReadReceipt(conversation),
       })
       chatStore.addMessage(p2pMessage)
-      scrollToBottom(true)
+      if (chatStore.currentConversation?.conversationId === conversation.conversationId) scrollToBottom(true)
     }
     attachmentDraftStore.removeDraft(conversation.conversationId, draft.id)
+    await deleteNativeDraftTask(draft)
     return true
   } catch (error: any) {
-    const errorMessage = error?.response?.data?.message || error?.message || '上传失败'
+    if (!stillCurrentAccount()) return false
+    const errorMessage = error?.response?.data?.message || error?.message || '附件发送失败'
     attachmentDraftStore.updateDraft(conversation.conversationId, draft.id, {
       controller: undefined,
       status: controller.signal.aborted ? 'paused' : 'failed',
       error: controller.signal.aborted ? undefined : errorMessage,
     })
-    setAttachmentFeedback(
+    if (chatStore.currentConversation?.conversationId === conversation.conversationId) setAttachmentFeedback(
       controller.signal.aborted ? `${draft.name} 已暂停` : `${draft.name}：${errorMessage}`,
       !controller.signal.aborted,
     )
@@ -3495,9 +3631,28 @@ function activateFileLabel(event: KeyboardEvent) {
 
 function guardP2pPicker(event: Event) {
   const reason = p2pAttachmentBlockReason()
-  if (!reason) return
-  event.preventDefault()
-  setAttachmentFeedback(reason, true)
+  if (reason) { event.preventDefault(); setAttachmentFeedback(reason, true); return }
+  if (window.imDesktop?.pickP2pSources) {
+    event.preventDefault()
+    const label = event.currentTarget as HTMLElement
+    void pickNativeAttachments(label.querySelector('[webkitdirectory]') ? 'folder' : 'file')
+  }
+}
+
+async function pickNativeAttachments(kind: 'file' | 'folder') {
+  const conversationId = chatStore.currentConversation?.conversationId
+  const accountId = String(authStore.currentUser?.userId || '')
+  const generation = attachmentAccountGeneration
+  if (!conversationId || !accountId || !window.imDesktop?.pickP2pSources) return
+  setAttachmentFeedback('正在选择和扫描附件；可继续聊天')
+  try {
+    const result = await window.imDesktop.pickP2pSources(kind)
+    if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
+    if (!result.canceled) attachmentDraftStore.addNativeSources(conversationId, result.sources)
+    if (chatStore.currentConversation?.conversationId === conversationId) setAttachmentFeedback(result.canceled ? '' : '附件已添加；单文件上限 2GB，文件夹上限 20GB / 10,000 个文件，超过限制将整项停止')
+  } catch (error) {
+    if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '附件读取失败，未添加任何文件', true)
+  }
 }
 
 function onSendImage(e: Event) {
@@ -3522,6 +3677,7 @@ function onSendFolder(e: Event) {
     const folderName = firstPath.replace(/\\/g, '/').split('/')[0] || 'folder'
     const result = addAttachmentFolder({
       name: folderName,
+      directories: [],
       files: files.map((file) => ({
         path: file.webkitRelativePath || file.name,
         file,
@@ -3561,7 +3717,7 @@ function sendMediaMessage(
   }
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
-  scrollToBottom(true)
+  if (chatStore.currentConversation?.conversationId === conv.conversationId) scrollToBottom(true)
 }
 
 // WebSocket message handler
@@ -3870,9 +4026,13 @@ async function openConversationFromNotification(conversationId: string) {
 // 退出登录：断开 WebSocket、清除未读标记、清空聊天状态、跳转到登录页
 async function handleLogout() {
   await conversationDrafts.flush()
+  attachmentAccountGeneration++
+  attachmentQueue.clear()
+  attachmentDraftStore.clearAll()
+  await Promise.allSettled(attachmentTaskPersistence.pending())
   messageSender.dispose()
   wsManager?.disconnect()
-  p2pTransferStore.dispose()
+  await p2pTransferStore.dispose()
   if (window.imDesktop?.setUnreadBadge) {
     await window.imDesktop.setUnreadBadge(0).catch(() => false)
   }
@@ -3897,6 +4057,7 @@ onMounted(async () => {
   window.addEventListener('focus', handleChatVisibility)
   document.addEventListener('visibilitychange', handleChatVisibility)
   await loadCustomStickerState()
+  if (chatDisposed) return
   document.addEventListener('mousedown', handleDocumentMouseDown)
   window.addEventListener('mousemove', handleUserActivity)
   window.addEventListener('keydown', handleUserActivity)
@@ -3916,13 +4077,22 @@ onMounted(async () => {
     } catch {
       // Settings can be retried from the dialog if the backend is temporarily unavailable.
     }
+    if (chatDisposed) return
     if (window.imDesktop?.setCloseBehavior) {
       await window.imDesktop.setCloseBehavior(settingsStore.general.closeBehavior).catch(() => false)
     }
+    if (chatDisposed) return
     await loadInitialChatData()
     if (chatDisposed) return
     applySelfPresence(manualPresence.value)
     updateUnreadBadge()
+    try {
+      await p2pTransferStore.restoreAccount(String(authStore.currentUser?.userId || ''))
+      if (!chatDisposed) restoreAttachmentDraftTasks()
+    } catch (error) {
+      if (!chatDisposed) setAttachmentFeedback(error instanceof Error ? `本地传输任务恢复失败：${error.message}` : '本地传输任务恢复失败', true)
+    }
+    if (chatDisposed) return
     initWebSocket()
   }
 
@@ -3931,6 +4101,9 @@ onMounted(async () => {
 // 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
   chatDisposed = true
+  attachmentAccountGeneration++
+  attachmentQueue.clear()
+  transferNotificationStates.clear()
   syncGeneration++
   clearTimeout(pendingSyncTimer)
   clearTimeout(readRetryTimer)
@@ -3957,7 +4130,7 @@ onUnmounted(() => {
   clearAuthenticatedAvatars()
   revokeCustomStickerUrls()
   clearGroupAvatarSelection()
-  p2pTransferStore.dispose()
+  void p2pTransferStore.dispose(attachmentTaskPersistence.pending())
   wsManager?.disconnect()
 })
 
@@ -3995,6 +4168,9 @@ watch(
   () => authStore.isLoggedIn,
   (val) => {
     if (!val) {
+      attachmentAccountGeneration++
+      attachmentQueue.clear()
+      transferNotificationStates.clear()
       messageSender.dispose()
       wsManager?.disconnect()
       chatStore.cancelPendingSync()
@@ -4028,6 +4204,8 @@ watch(
 </script>
 
 <style scoped>
+.p2p-error { color: var(--danger-strong); white-space: normal; overflow-wrap: anywhere; }
+
 .chat-layout {
   display: flex;
   height: 100%;
@@ -4845,12 +5023,14 @@ watch(
 
 .p2p-file-bubble {
   cursor: default;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .p2p-file-actions {
   align-items: center;
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .p2p-action,

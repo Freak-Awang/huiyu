@@ -15,6 +15,7 @@ public class P2pTransferProperties {
     private long maxFileSize = 2_147_483_648L;
     private long maxFolderSize = 21_474_836_480L;
     private int maxFolderFiles = 10_000;
+    private int maxFolderDirectories = 10_000;
     private int maxSignalBytes = 65_536;
 
     public boolean isEnabled() {
@@ -52,6 +53,10 @@ public class P2pTransferProperties {
     public int getMaxSignalBytes() {
         return maxSignalBytes;
     }
+
+    public int getMaxFolderDirectories() { return maxFolderDirectories; }
+
+    public void setMaxFolderDirectories(int maxFolderDirectories) { this.maxFolderDirectories = maxFolderDirectories; }
 
     public void setMaxSignalBytes(int maxSignalBytes) {
         this.maxSignalBytes = maxSignalBytes;

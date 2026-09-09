@@ -40,7 +40,8 @@ class ImWebSocketHandlerMessageTest {
         handler = new ImWebSocketHandler(mock(StringRedisTemplate.class), messages,
                 mock(ConversationMapper.class), mock(ConversationMemberMapper.class),
                 mock(MessageMapper.class), mock(UserMapper.class), sessions,
-                new P2pTransferRegistry(), new P2pTransferProperties(), json);
+                new P2pTransferRegistry(), new P2pTransferProperties(), json,
+                mock(com.im.server.service.P2pShareService.class));
     }
 
     @Test

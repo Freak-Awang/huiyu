@@ -6,13 +6,13 @@
  * 暴露两个全局对象：
  * - imDesktop：桌面端通用能力（版本、平台、通知、消息缓存、P2P 接收）
  */
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const p2pPorts = new Map<string, MessagePort>()
 let p2pWriteRequestSequence = 0
 const p2pWritePending = new Map<string, {
   receiveId: string
-  resolve: (value: { offset: number }) => void
+  resolve: (value: { offset: number; durableOffset?: number }) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
 }>()
@@ -22,12 +22,12 @@ ipcRenderer.on('p2p:receive-port', (event, payload: { receiveId?: string }) => {
   const port = event.ports[0]
   if (!receiveId || !port) return
   port.onmessage = (message) => {
-    const data = message.data as { requestId?: string; ok?: boolean; offset?: number; error?: string }
+    const data = message.data as { requestId?: string; ok?: boolean; offset?: number; durableOffset?: number; error?: string }
     const pending = data.requestId ? p2pWritePending.get(data.requestId) : undefined
     if (!pending || !data.requestId) return
     clearTimeout(pending.timer)
     p2pWritePending.delete(data.requestId)
-    if (data.ok) pending.resolve({ offset: Number(data.offset || 0) })
+    if (data.ok) pending.resolve({ offset: Number(data.offset || 0), durableOffset: Number(data.durableOffset ?? data.offset ?? 0) })
     else pending.reject(new Error(data.error || 'P2P 写入失败'))
   }
   port.start()
@@ -51,6 +51,44 @@ function nextP2pWriteRequestId() {
 }
 
 contextBridge.exposeInMainWorld('imDesktop', {
+  setP2pAccount: async (userId: string | null) => {
+    for (const receiveId of p2pPorts.keys()) closeP2pPort(receiveId)
+    return ipcRenderer.invoke('p2p:account', userId)
+  },
+  listP2pTasks: () => ipcRenderer.invoke('p2p:tasks'),
+  retryP2pCleanup: (taskId: string) => ipcRenderer.invoke('p2p:receive-cleanup', taskId),
+  saveP2pTask: (task: unknown) => ipcRenderer.invoke('p2p:task-save', task),
+  deleteP2pTask: (taskId: string) => ipcRenderer.invoke('p2p:task-delete', taskId),
+  pickP2pSources: (kind: 'file' | 'folder') => ipcRenderer.invoke('p2p:source-pick', kind),
+  importP2pSources: (files: File[]) => ipcRenderer.invoke('p2p:source-import', files.map((file) => {
+    const path = webUtils.getPathForFile(file)
+    if (!path) throw new Error('无法读取此文件的本机位置，请使用文件选择按钮')
+    return path
+  })),
+  prepareP2pSource: (sourceId: string) => ipcRenderer.invoke('p2p:source-prepare', sourceId),
+  cancelP2pSourcePreparation: (sourceId: string) => ipcRenderer.invoke('p2p:source-cancel', sourceId),
+  readP2pSourceChunk: (sourceId: string, index: number, offset: number, length: number) =>
+    ipcRenderer.invoke('p2p:source-read', sourceId, index, offset, length) as Promise<ArrayBuffer>,
+  validateP2pSource: (sourceId: string) => ipcRenderer.invoke('p2p:source-validate', sourceId),
+  locateP2pSource: (sourceId: string) => ipcRenderer.invoke('p2p:source-locate', sourceId),
+  onP2pSourceProgress: (handler: (event: unknown) => void) => {
+    const listener = (_event: unknown, progress: unknown) => handler(progress)
+    ipcRenderer.on('p2p:source-progress', listener)
+    return () => ipcRenderer.removeListener('p2p:source-progress', listener)
+  },
+  onP2pReceiveProgress: (handler: (event: unknown) => void) => {
+    const listener = (_event: unknown, progress: unknown) => handler(progress)
+    ipcRenderer.on('p2p:receive-progress', listener)
+    return () => ipcRenderer.removeListener('p2p:receive-progress', listener)
+  },
+  restoreP2pReceive: (receiveId: string) => ipcRenderer.invoke('p2p:receive-restore', receiveId),
+  suspendP2pReceive: async (receiveId: string, reason?: string) => {
+    const result = await ipcRenderer.invoke('p2p:receive-suspend', receiveId, reason)
+    closeP2pPort(receiveId)
+    return result
+  },
+  locateP2pResult: (taskId: string) => ipcRenderer.invoke('p2p:locate-result', taskId),
+  changeP2pReceiveDestination: (receiveId: string) => ipcRenderer.invoke('p2p:receive-destination', receiveId),
   listDrafts: (userId: string) => ipcRenderer.invoke('drafts:list', userId),
   saveDraft: (userId: string, conversationId: string, draft: unknown) =>
     ipcRenderer.invoke('drafts:save', userId, conversationId, draft) as Promise<boolean>,
@@ -79,7 +117,7 @@ contextBridge.exposeInMainWorld('imDesktop', {
     ipcRenderer.invoke('storage:open-location') as Promise<{ success: boolean; error?: string }>,
 
   /** 弹出桌面通知，点击后跳转到对应会话 */
-  showMessageNotification: (payload: { title: string; body: string; conversationId: string }) =>
+  showMessageNotification: (payload: { title: string; body: string; conversationId: string; silent?: boolean }) =>
     ipcRenderer.invoke('notification:show', payload) as Promise<boolean>,
 
   /** 更新未读消息徽标 */
@@ -134,8 +172,8 @@ contextBridge.exposeInMainWorld('imDesktop', {
     error?: string
   }>,
 
-  prepareP2pReceive: (receiveId: string, entries: unknown[]) =>
-    ipcRenderer.invoke('p2p:receive-prepare', receiveId, entries) as Promise<{
+  prepareP2pReceive: (receiveId: string, manifest: unknown) =>
+    ipcRenderer.invoke('p2p:receive-prepare', receiveId, manifest) as Promise<{
       offsets: Record<string, number>
       finalPath: string
     }>,
@@ -144,13 +182,15 @@ contextBridge.exposeInMainWorld('imDesktop', {
     const port = p2pPorts.get(receiveId)
     if (!port) return Promise.reject(new Error('P2P 接收通道不可用'))
     const requestId = nextP2pWriteRequestId()
-    return new Promise<{ offset: number }>((resolve, reject) => {
+    return new Promise<{ offset: number; durableOffset?: number }>((resolve, reject) => {
       const timer = setTimeout(() => {
         p2pWritePending.delete(requestId)
         reject(new Error('P2P 写入超时'))
       }, 30_000)
       p2pWritePending.set(requestId, { receiveId, resolve, reject, timer })
-      port.postMessage({ type: 'write', requestId, fileIndex, offset, data }, [data])
+      // Electron MessagePortMain cannot reliably deserialize a renderer ArrayBuffer
+      // transfer list. Clone this bounded chunk across the local process boundary.
+      port.postMessage({ type: 'write', requestId, fileIndex, offset, data })
     })
   },
 

@@ -22,11 +22,14 @@ import com.im.server.mapper.UserMapper;
 import com.im.server.service.FileMetadataService;
 import com.im.server.service.ImageTypeDetector;
 import com.im.server.service.MessageService;
+import com.im.server.service.P2pShareService;
 import com.im.server.websocket.WebSocketSessionManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -78,6 +81,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired
     private FileMetadataService fileMetadataService;
+
+    @Autowired
+    private P2pShareService p2pShareService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -151,7 +157,11 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public ImMessage sendP2pMessage(Long senderId, SendMessageRequest request) {
-        return sendMessageInternal(senderId, request, true);
+        try (P2pShareService.Guard ignored = p2pShareService.guardTransaction()) {
+            ImMessage message = sendMessageInternal(senderId, request, true);
+            p2pShareService.ensureShare(message);
+            return message;
+        }
     }
 
     private ImMessage sendMessageInternal(Long senderId, SendMessageRequest request, boolean allowP2p) {
@@ -222,6 +232,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public MessageVO recallMessage(Long userId, Long messageId) {
+        try (P2pShareService.Guard ignored = p2pShareService.guardTransaction()) {
         // 撤回只允许发送者在短窗口内执行，并通过 WebSocket 推送让在线端替换本地消息状态。
         ImMessage message = messageMapper.selectById(messageId);
         if (message == null) {
@@ -235,12 +246,18 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException(409, "Messages can only be recalled within 2 minutes");
         }
 
+        p2pShareService.recall(message);
         message.setStatus("RECALLED");
         message.setContent("");
         messageMapper.updateById(message);
         updateConversationPreviewAfterRecall(message);
-        pushMessageUpdated(message);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { pushMessageUpdated(message); }
+            });
+        } else pushMessageUpdated(message);
         return toMessageVO(message, userId);
+        }
     }
 
     @Override
@@ -724,12 +741,16 @@ public class MessageServiceImpl implements MessageService {
         String hash = "file".equals(expectedKind)
                 ? root.path("sha256").asText()
                 : root.path("manifestSha256").asText();
-        if (root.path("version").asInt() != 1
+        int version = root.path("version").asInt();
+        int directoryCount = root.path("directoryCount").asInt(0);
+        if ((version != 1 && version != 2)
                 || !transferId.startsWith("p2p_")
                 || transferId.length() > 64
                 || name.isBlank() || name.length() > 255
                 || !expectedKind.equals(kind)
-                || totalSize <= 0 || fileCount <= 0
+                || totalSize < 0 || fileCount < 0 || directoryCount < 0
+                || (version == 1 && (totalSize == 0 || fileCount == 0 || directoryCount != 0))
+                || ("file".equals(expectedKind) && (fileCount != 1 || directoryCount != 0))
                 || !hash.matches("(?i)^[0-9a-f]{64}$")) {
             throw new BusinessException(400, invalidContentMessage);
         }

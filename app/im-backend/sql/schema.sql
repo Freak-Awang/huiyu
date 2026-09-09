@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS im_message (
     UNIQUE KEY uk_client_msg (sender_id, client_msg_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='temporary messages';
 
+CREATE TABLE IF NOT EXISTS im_p2p_share (
+    transfer_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+    message_id BIGINT NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    revision BIGINT NOT NULL DEFAULT 1,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_p2p_share_message (message_id),
+    CONSTRAINT fk_p2p_share_message FOREIGN KEY (message_id) REFERENCES im_message(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS im_message_delivery (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'delivery id',
     message_id BIGINT NOT NULL COMMENT 'message id',

@@ -26,6 +26,13 @@ export function hasDirectoryDragItem(items?: DataTransferItemList | null) {
   })
 }
 
+export function droppedDirectoryNames(items?: DataTransferItemList | null): Set<string> {
+  return new Set(Array.from(items || []).flatMap((item) => {
+    const entry = getEntryFromItem(item)
+    return entry?.isDirectory ? [entry.name] : []
+  }))
+}
+
 /** FileSystemEntry 的最小结构定义（兼容 webkitGetAsEntry 返回值） */
 type FileSystemEntryLike = {
   isFile: boolean
@@ -47,16 +54,17 @@ function getEntryFromItem(item: DataTransferItem): FileSystemEntryLike | null {
   )
 }
 
-function readEntryFile(entry: FileSystemEntryLike): Promise<File | null> {
-  return new Promise((resolve) => {
-    entry.file?.(resolve, () => resolve(null))
+function readEntryFile(entry: FileSystemEntryLike): Promise<File> {
+  return new Promise((resolve, reject) => {
+    if (!entry.file) { reject(new Error(`无法读取：${entry.name}`)); return }
+    entry.file(resolve, () => reject(new Error(`无法读取文件：${entry.name}`)))
   })
 }
 
 // readEntries 每次最多返回 100 条，需循环读取直到返回空批次
 function readEntryBatch(reader: ReturnType<NonNullable<FileSystemEntryLike['createReader']>>) {
-  return new Promise<FileSystemEntryLike[]>((resolve) => {
-    reader.readEntries(resolve, () => resolve([]))
+  return new Promise<FileSystemEntryLike[]>((resolve, reject) => {
+    reader.readEntries(resolve, () => reject(new Error('无法读取文件夹，未添加其中任何文件')))
   })
 }
 
@@ -64,6 +72,7 @@ function readEntryBatch(reader: ReturnType<NonNullable<FileSystemEntryLike['crea
 export interface DroppedFolder {
   name: string
   files: { path: string; file: File }[]
+  directories: string[]
 }
 
 /** 拖放收集结果：顶层散文件 + 文件夹列表 */
@@ -76,32 +85,37 @@ async function walkEntry(
   entry: FileSystemEntryLike,
   output: { path: string; file: File }[],
   prefix: string,
+  directories: string[],
 ) {
   if (entry.isFile && entry.file) {
     const file = await readEntryFile(entry)
-    if (file) output.push({ path: prefix + file.name, file })
+    output.push({ path: prefix + file.name, file })
     return
   }
   if (entry.isDirectory && entry.createReader) {
+    directories.push(`${prefix}${entry.name}`)
     const reader = entry.createReader()
     let batch: FileSystemEntryLike[]
     do {
       batch = await readEntryBatch(reader)
-      for (const child of batch) await walkEntry(child, output, `${prefix}${entry.name}/`)
+      for (const child of batch) await walkEntry(child, output, `${prefix}${entry.name}/`, directories)
     } while (batch.length > 0)
+    return
   }
+  throw new Error(`无法读取：${prefix}${entry.name}`)
 }
 
 async function walkRootDirectory(
   entry: FileSystemEntryLike,
   output: { path: string; file: File }[],
+  directories: string[],
 ) {
-  if (!entry.createReader) return
+  if (!entry.createReader) throw new Error(`无法读取文件夹：${entry.name}`)
   const reader = entry.createReader()
   let batch: FileSystemEntryLike[]
   do {
     batch = await readEntryBatch(reader)
-    for (const child of batch) await walkEntry(child, output, '')
+    for (const child of batch) await walkEntry(child, output, '', directories)
   } while (batch.length > 0)
 }
 
@@ -124,8 +138,8 @@ export async function collectDroppedItems(dataTransfer?: DataTransfer | null): P
   const result: DroppedItems = { files: [], folders: [] }
   for (const entry of entries) {
     if (entry.isDirectory) {
-      const folder: DroppedFolder = { name: entry.name, files: [] }
-      await walkRootDirectory(entry, folder.files)
+      const folder: DroppedFolder = { name: entry.name, files: [], directories: [] }
+      await walkRootDirectory(entry, folder.files, folder.directories)
       result.folders.push(folder)
     } else if (entry.isFile && entry.file) {
       const file = await readEntryFile(entry)

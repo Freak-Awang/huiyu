@@ -1,6 +1,6 @@
 import { hashFile } from './fileHash'
 
-export const P2P_PROTOCOL_VERSION = 1 as const
+export const P2P_PROTOCOL_VERSION = 2 as const
 export const P2P_CHUNK_SIZE = 64 * 1024
 export const P2P_ACK_WINDOW = 4 * 1024 * 1024
 export const P2P_BUFFER_HIGH_WATER = 8 * 1024 * 1024
@@ -8,6 +8,7 @@ export const P2P_BUFFER_LOW_WATER = 4 * 1024 * 1024
 export const P2P_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 export const P2P_MAX_FOLDER_SIZE = 20 * 1024 * 1024 * 1024
 export const P2P_MAX_FOLDER_FILES = 10_000
+export const P2P_MAX_FOLDER_DIRECTORIES = 10_000
 export const P2P_MANIFEST_TEXT_CHUNK = 12 * 1024
 export const P2P_MAX_MANIFEST_TEXT = 16 * 1024 * 1024
 
@@ -21,23 +22,25 @@ export interface P2pManifestEntry {
 }
 
 export interface P2pManifest {
-  version: 1
+  version: 1 | 2
   kind: 'file' | 'folder'
   name: string
   totalSize: number
   fileCount: number
   files: P2pManifestEntry[]
+  directories?: string[]
   manifestSha256: string
 }
 
 export interface P2pAttachmentContent {
-  version: 1
+  version: 1 | 2
   transferMode: 'p2p_lan'
   transferId: string
   kind: 'file' | 'folder'
   name: string
   totalSize: number
   fileCount: number
+  directoryCount?: number
   sha256?: string
   manifestSha256?: string
   fileName?: string
@@ -47,12 +50,13 @@ export interface P2pAttachmentContent {
 
 export interface P2pSourceFile {
   entry: P2pManifestEntry
-  file: File
+  file?: File
 }
 
 export interface PreparedP2pSource {
   manifest: P2pManifest
   files: P2pSourceFile[]
+  sourceId?: string
 }
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
@@ -95,6 +99,7 @@ function manifestPayload(manifest: Omit<P2pManifest, 'manifestSha256'>) {
     name: manifest.name,
     totalSize: manifest.totalSize,
     fileCount: manifest.fileCount,
+    ...(manifest.version === 2 ? { directories: manifest.directories || [] } : {}),
     files: manifest.files.map((entry) => ({
       index: entry.index,
       path: entry.path,
@@ -115,6 +120,7 @@ async function finishManifest(
   kind: 'file' | 'folder',
   name: string,
   files: P2pSourceFile[],
+  directories: string[] = [],
 ): Promise<PreparedP2pSource> {
   const totalSize = files.reduce((sum, item) => sum + item.entry.size, 0)
   const base: Omit<P2pManifest, 'manifestSha256'> = {
@@ -123,6 +129,7 @@ async function finishManifest(
     name,
     totalSize,
     fileCount: files.length,
+    directories,
     files: files.map((item) => item.entry),
   }
   const manifest: P2pManifest = {
@@ -137,8 +144,8 @@ export async function prepareP2pFile(
   onProgress?: (progress: number) => void,
   signal?: AbortSignal,
 ) {
-  if (file.size <= 0 || file.size > P2P_MAX_FILE_SIZE) {
-    throw new Error('文件为空或超过 2GB')
+  if (file.size < 0 || file.size > P2P_MAX_FILE_SIZE) {
+    throw new Error('文件超过 2 GiB')
   }
   const sha256 = await hashFile(file, onProgress, signal)
   const entry: P2pManifestEntry = {
@@ -157,9 +164,10 @@ export async function prepareP2pFolder(
   input: Array<{ path: string; file: File }>,
   onProgress?: (progress: number) => void,
   signal?: AbortSignal,
+  directoryPaths: string[] = [],
 ) {
-  if (!input.length || input.length > P2P_MAX_FOLDER_FILES) {
-    throw new Error(`文件夹文件数必须在 1～${P2P_MAX_FOLDER_FILES} 之间`)
+  if (input.length > P2P_MAX_FOLDER_FILES) {
+    throw new Error(`文件夹文件数不能超过 ${P2P_MAX_FOLDER_FILES}`)
   }
   const normalized = input.map(({ path, file }) => ({
     path: normalizeP2pRelativePath(path, folderName),
@@ -167,19 +175,19 @@ export async function prepareP2pFolder(
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)
   const paths = new Set<string>()
   const totalSize = normalized.reduce((sum, item) => sum + item.file.size, 0)
-  if (totalSize <= 0 || totalSize > P2P_MAX_FOLDER_SIZE) {
-    throw new Error('文件夹为空或总大小超过 20GB')
+  if (totalSize > P2P_MAX_FOLDER_SIZE) {
+    throw new Error('文件夹总大小超过 20 GiB')
   }
   let hashedBytes = 0
   const files: P2pSourceFile[] = []
   for (const [index, item] of normalized.entries()) {
     if (paths.has(item.path.toLowerCase())) throw new Error(`文件夹包含重复路径：${item.path}`)
     paths.add(item.path.toLowerCase())
-    if (item.file.size <= 0 || item.file.size > P2P_MAX_FILE_SIZE) {
-      throw new Error(`${item.path} 为空或超过 2GB`)
+    if (item.file.size < 0 || item.file.size > P2P_MAX_FILE_SIZE) {
+      throw new Error(`${item.path} 超过 2 GiB`)
     }
     const sha256 = await hashFile(item.file, (progress) => {
-      onProgress?.((hashedBytes + item.file.size * progress) / totalSize)
+      onProgress?.(totalSize ? (hashedBytes + item.file.size * progress) / totalSize : 0)
     }, signal)
     hashedBytes += item.file.size
     files.push({
@@ -195,16 +203,26 @@ export async function prepareP2pFolder(
     })
   }
   onProgress?.(1)
-  return finishManifest('folder', folderName || 'folder', files)
+  const directories = new Set(directoryPaths.map((path) => normalizeP2pRelativePath(path, folderName)))
+  for (const item of normalized) {
+    const parts = item.path.split('/')
+    for (let index = 1; index < parts.length; index++) directories.add(parts.slice(0, index).join('/'))
+  }
+  if (directories.size > P2P_MAX_FOLDER_DIRECTORIES) throw new Error('文件夹目录数超过 10000')
+  const prepared = await finishManifest('folder', folderName || 'folder', files, [...directories].sort())
+  validateP2pManifestStructure(prepared.manifest)
+  return prepared
 }
 
 export function p2pOfferSummary(source: PreparedP2pSource) {
   const { manifest } = source
   return {
+    version: manifest.version,
     kind: manifest.kind,
     name: manifest.name,
     totalSize: manifest.totalSize,
     fileCount: manifest.fileCount,
+    directoryCount: manifest.directories?.length || 0,
     ...(manifest.kind === 'file'
       ? { sha256: manifest.files[0].sha256 }
       : { manifestSha256: manifest.manifestSha256 }),
@@ -248,16 +266,63 @@ export function decodeP2pDataFrame(frame: ArrayBuffer) {
 export function parseP2pAttachmentContent(content: string): P2pAttachmentContent | null {
   try {
     const value = JSON.parse(content) as P2pAttachmentContent
-    if (value?.version === 1 && value.transferMode === 'p2p_lan'
+    if ((value?.version === 1 || value?.version === 2) && value.transferMode === 'p2p_lan'
       && /^p2p_[a-z0-9]+$/i.test(value.transferId)
       && (value.kind === 'file' || value.kind === 'folder')
       && typeof value.name === 'string' && value.name.length > 0
-      && Number.isFinite(value.totalSize) && value.totalSize > 0
-      && Number.isInteger(value.fileCount) && value.fileCount > 0) {
+      && Number.isSafeInteger(value.totalSize) && value.totalSize >= (value.version === 1 ? 1 : 0)
+      && value.totalSize <= (value.kind === 'file' ? P2P_MAX_FILE_SIZE : P2P_MAX_FOLDER_SIZE)
+      && Number.isInteger(value.fileCount) && value.fileCount >= (value.version === 1 ? 1 : 0)
+      && value.fileCount <= P2P_MAX_FOLDER_FILES
+      && (value.kind !== 'file' || value.fileCount === 1)
+      && (value.version !== 2 || (Number.isInteger(value.directoryCount) && value.directoryCount! >= 0
+        && value.directoryCount! <= P2P_MAX_FOLDER_DIRECTORIES))) {
       return value
     }
   } catch {
     // Invalid legacy/user content is not a P2P attachment.
   }
   return null
+}
+
+/** Validate the complete tree before allocating files. No malformed entry may be skipped. */
+export function validateP2pManifestStructure(manifest: P2pManifest) {
+  if (![1, 2].includes(manifest.version) || !['file', 'folder'].includes(manifest.kind)
+    || !Array.isArray(manifest.files) || manifest.files.length !== manifest.fileCount
+    || manifest.fileCount > P2P_MAX_FOLDER_FILES || !Number.isSafeInteger(manifest.totalSize)
+    || manifest.totalSize < 0 || manifest.totalSize > (manifest.kind === 'file' ? P2P_MAX_FILE_SIZE : P2P_MAX_FOLDER_SIZE)
+    || (manifest.kind === 'file' && manifest.fileCount !== 1)
+    || (manifest.version === 1 && (manifest.totalSize <= 0 || manifest.fileCount <= 0))) {
+    throw new Error('P2P 文件清单数量或大小无效')
+  }
+  const directories = manifest.version === 2 ? manifest.directories : []
+  if (!Array.isArray(directories) || directories.length > P2P_MAX_FOLDER_DIRECTORIES
+    || (manifest.kind === 'file' && directories.length)) throw new Error('P2P 目录清单无效')
+  const paths = new Map<string, 'file' | 'directory'>()
+  for (const path of directories) {
+    const safe = normalizeP2pRelativePath(path)
+    if (safe !== path || paths.has(safe.toLowerCase())) throw new Error(`P2P 目录路径冲突：${path}`)
+    paths.set(safe.toLowerCase(), 'directory')
+  }
+  let total = 0
+  for (const [index, entry] of manifest.files.entries()) {
+    const safe = normalizeP2pRelativePath(entry.path)
+    if (safe !== entry.path || entry.index !== index || !Number.isSafeInteger(entry.size)
+      || entry.size < (manifest.version === 1 ? 1 : 0) || entry.size > P2P_MAX_FILE_SIZE
+      || !/^[a-f0-9]{64}$/i.test(entry.sha256) || paths.has(safe.toLowerCase())) {
+      throw new Error(`P2P 文件条目无效：${entry.path}`)
+    }
+    paths.set(safe.toLowerCase(), 'file')
+    total += entry.size
+  }
+  if (total !== manifest.totalSize) throw new Error('P2P 文件清单总大小不一致')
+  for (const path of paths.keys()) {
+    const parts = path.split('/')
+    for (let index = 1; index < parts.length; index++) {
+      const parent = parts.slice(0, index).join('/')
+      if (paths.get(parent) === 'file' || (manifest.version === 2 && !paths.has(parent))) {
+        throw new Error(`P2P 父目录无效：${path}`)
+      }
+    }
+  }
 }

@@ -61,6 +61,9 @@ class MessageServiceImplTest {
     @Mock
     private FileMetadataService fileMetadataService;
 
+    @Mock
+    private com.im.server.service.P2pShareService p2pShareService;
+
     @InjectMocks
     private MessageServiceImpl messageService;
 

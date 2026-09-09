@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const { hashFileMock } = vi.hoisted(() => ({
-  hashFileMock: vi.fn(async (file: File, onProgress?: (progress: number) => void) => {
+  hashFileMock: vi.fn(async (_file: File, onProgress?: (progress: number) => void) => {
     onProgress?.(1)
-    return file.name.padEnd(64, '0').slice(0, 64)
+    return 'a'.repeat(64)
   }),
 }))
 
@@ -17,6 +17,9 @@ import {
   normalizeP2pRelativePath,
   parseP2pAttachmentContent,
   prepareP2pFolder,
+  prepareP2pFile,
+  validateP2pManifestStructure,
+  p2pOfferSummary,
   splitP2pManifest,
   verifyP2pManifest,
 } from './p2pProtocol'
@@ -98,5 +101,33 @@ describe('P2P attachment protocol', () => {
     expect(parseP2pAttachmentContent(valid)?.name).toBe('report.pdf')
     expect(parseP2pAttachmentContent(valid.replace('p2p_lan', 'object_storage'))).toBeNull()
     expect(parseP2pAttachmentContent('{bad json')).toBeNull()
+  })
+
+  it('preserves empty files and all empty directories in the authenticated v2 manifest', async () => {
+    const prepared = await prepareP2pFolder('docs', [{ path: 'empty.txt', file: file('empty.txt', 0) }],
+      undefined, undefined, ['nested', 'nested/empty'])
+    expect(prepared.manifest.directories).toEqual(['nested', 'nested/empty'])
+    expect(prepared.manifest.fileCount).toBe(1)
+    expect(prepared.manifest.totalSize).toBe(0)
+    expect(await verifyP2pManifest(prepared.manifest)).toBe(true)
+    prepared.manifest.directories!.pop()
+    expect(await verifyP2pManifest(prepared.manifest)).toBe(false)
+  })
+
+  it('supports an empty root folder and a standalone zero-byte file', async () => {
+    const folder = await prepareP2pFolder('empty', [])
+    const emptyFile = await prepareP2pFile(file('empty.txt', 0))
+    for (const source of [folder, emptyFile]) {
+      expect(() => validateP2pManifestStructure(source.manifest)).not.toThrow()
+      expect(parseP2pAttachmentContent(JSON.stringify({ transferId: 'p2p_empty', transferMode: 'p2p_lan', ...p2pOfferSummary(source) }))).not.toBeNull()
+    }
+  })
+
+  it('rejects a folder as a whole if any file exceeds its limit or a directory conflicts', async () => {
+    await expect(prepareP2pFolder('docs', [
+      { path: 'valid', file: file('valid', 2) }, { path: 'large', file: file('large', 2 * 1024 ** 3 + 1) },
+    ])).rejects.toThrow(/2 GiB/)
+    await expect(prepareP2pFolder('docs', [{ path: 'same', file: file('same', 0) }], undefined, undefined, ['same']))
+      .rejects.toThrow(/条目无效/)
   })
 })

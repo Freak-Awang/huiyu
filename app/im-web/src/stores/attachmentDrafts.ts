@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia'
 import { markRaw, ref } from 'vue'
 import { DIRECT_UPLOAD_MAX_SIZE } from '../api/file'
-import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
+import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE, P2P_MAX_FOLDER_DIRECTORIES } from '../utils/p2pProtocol'
 
 /** 附件类型：图片、普通文件或文件夹 */
 export type AttachmentDraftKind = 'image' | 'file' | 'folder'
@@ -18,7 +18,16 @@ export interface AttachmentFolderFile {
   file: File
 }
 /** 附件上传状态 */
-export type AttachmentDraftStatus = 'waiting' | 'hashing' | 'uploading' | 'paused' | 'failed'
+export type AttachmentDraftStatus = 'waiting' | 'queued' | 'hashing' | 'uploading' | 'paused' | 'failed'
+
+export interface NativeAttachmentSource {
+  sourceId: string
+  kind: 'file' | 'folder'
+  name: string
+  totalSize: number
+  fileCount: number
+  directoryCount: number
+}
 
 /**
  * 附件草稿：表示一个待发送的附件文件及其上传状态。
@@ -34,6 +43,9 @@ export interface AttachmentDraft {
   file: File
   /** 文件夹内容（仅 folder 类型存在） */
   folderFiles?: AttachmentFolderFile[]
+  folderDirectories?: string[]
+  nativeSource?: NativeAttachmentSource
+  submitted?: boolean
   /** 文件名 */
   name: string
   /** 文件大小（字节） */
@@ -95,7 +107,7 @@ function hasSupportedImageExtension(file: File) {
   return !!extension && SUPPORTED_IMAGE_EXTENSIONS.has(extension)
 }
 
-function resolveDraftKind(file: File, classification: AttachmentDraftClassification): AttachmentDraftKind {
+export function resolveDraftKind(file: File, classification: AttachmentDraftClassification): AttachmentDraftKind {
   if (classification !== 'auto') return classification
 
   const mimeType = normalizedMimeType(file)
@@ -108,10 +120,11 @@ function fingerprint(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`
 }
 
-/** 草稿去重指纹：文件夹按名称+总大小+文件数，其余按文件属性 */
+/** Native sources use their opaque identity; browser folder fallback compares the complete entry list. */
 function draftFingerprint(draft: AttachmentDraft) {
+  if (draft.nativeSource) return `native:${draft.nativeSource.sourceId}`
   if (draft.kind === 'folder') {
-    return `folder:${draft.name}:${draft.size}:${draft.folderFiles?.length ?? 0}`
+    return `folder:${draft.name}:${JSON.stringify(draft.folderFiles?.map(({ path, file }) => [path, fingerprint(file)]))}:${JSON.stringify(draft.folderDirectories || [])}`
   }
   return fingerprint(draft.file)
 }
@@ -141,7 +154,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
 
   /**
    * 向指定会话添加附件文件。
-   * 自动过滤空文件、超大文件及重复文件，图片文件生成预览 URL。
+   * 普通空文件保留；过滤无效图片、超大文件及重复文件，图片文件生成预览 URL。
    * @param conversationId 会话 ID
    * @param files 待添加的文件数组
    * @param classification 分类方式；图片/文件入口应明确传值，拖拽等场景使用 auto
@@ -162,7 +175,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
       const name = file.name || 'file'
       const kind = resolveDraftKind(file, classification)
       const maxSize = kind === 'image' ? DIRECT_UPLOAD_MAX_SIZE : P2P_MAX_FILE_SIZE
-      if (file.size <= 0) {
+      if (file.size < 0 || (kind === 'image' && file.size === 0)) {
         errors.push(`${name}：文件为空`)
         continue
       }
@@ -200,14 +213,14 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
 
   /**
    * 向指定会话添加文件夹附件（作为整体草稿，内部文件保留相对路径）。
-   * 过滤空文件与超大文件；与现有草稿（按名称+总大小+文件数）重复时拒绝。
+   * 保留空文件与空目录，任一条目超限时整项拒绝。
    * @param conversationId 会话 ID
    * @param folder 文件夹（名称 + 带相对路径的文件列表）
    * @returns 添加结果（成功列表、重复数、错误列表）
    */
   function addFolder(
     conversationId: string,
-    folder: { name: string; files: AttachmentFolderFile[] },
+    folder: { name: string; files: AttachmentFolderFile[]; directories?: string[] },
   ): AddAttachmentResult {
     const current = draftsFor(conversationId)
     const fingerprints = new Set(current.map(draftFingerprint))
@@ -222,23 +235,17 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
       }
     }
 
-    const validFiles = folder.files.filter(({ path, file }) => {
-      if (file.size <= 0) {
-        errors.push(`${path}：文件为空`)
-        return false
-      }
-      if (file.size > P2P_MAX_FILE_SIZE) {
+    for (const { path, file } of folder.files) {
+      if (file.size < 0 || file.size > P2P_MAX_FILE_SIZE) {
         errors.push(`${path}：不能超过 ${formatLimit(P2P_MAX_FILE_SIZE)}`)
-        return false
       }
-      return true
-    })
-    if (!validFiles.length) {
-      if (!errors.length) errors.push(`${name}：文件夹为空`)
+    }
+    if ((folder.directories?.length || 0) > P2P_MAX_FOLDER_DIRECTORIES) errors.push(`${name}：目录数量不能超过 ${P2P_MAX_FOLDER_DIRECTORIES.toLocaleString()}`)
+    if (errors.length) {
       return { added: [], duplicateCount: 0, errors }
     }
 
-    const totalSize = validFiles.reduce((sum, { file }) => sum + file.size, 0)
+    const totalSize = folder.files.reduce((sum, { file }) => sum + file.size, 0)
     if (totalSize > P2P_MAX_FOLDER_SIZE) {
       return {
         added: [],
@@ -251,7 +258,8 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
       conversationId,
       kind: 'folder',
       file: markRaw(new File([], name)),
-      folderFiles: validFiles.map(({ path, file }) => ({ path, file: markRaw(file) })),
+      folderFiles: folder.files.map(({ path, file }) => ({ path, file: markRaw(file) })),
+      folderDirectories: [...(folder.directories || [])],
       name,
       size: totalSize,
       mimeType: '',
@@ -267,6 +275,39 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     return { added: [probe], duplicateCount: 0, errors }
   }
 
+  function addNativeSources(conversationId: string, sources: NativeAttachmentSource[]): AddAttachmentResult {
+    const current = draftsFor(conversationId)
+    const existing = new Set(current.map(draftFingerprint))
+    const added: AttachmentDraft[] = []
+    let duplicateCount = 0
+    for (const source of sources) {
+      const identity = `native:${source.sourceId}`
+      if (existing.has(identity)) { duplicateCount += 1; continue }
+      existing.add(identity)
+      added.push({
+        id: createDraftId(), conversationId, kind: source.kind,
+        file: markRaw(new File([], source.name)), nativeSource: { ...source },
+        name: source.name, size: source.totalSize, mimeType: '', lastModified: 0,
+        status: 'waiting', progress: 0,
+      })
+    }
+    if (added.length) draftsByConversation.value[conversationId] = [...current, ...added]
+    return { added, duplicateCount, errors: [] }
+  }
+
+  function restoreNativeDraft(id: string, conversationId: string, source: NativeAttachmentSource) {
+    const existing = draftsFor(conversationId).find((draft) => draft.id === id)
+    if (existing) return existing
+    const draft: AttachmentDraft = {
+      id, conversationId, kind: source.kind, nativeSource: { ...source },
+      file: markRaw(new File([], source.name)), name: source.name, size: source.totalSize,
+      mimeType: '', lastModified: 0, submitted: true, status: 'paused', progress: 0,
+      error: '任务已恢复，请手动继续',
+    }
+    draftsByConversation.value[conversationId] = [...draftsFor(conversationId), draft]
+    return draft
+  }
+
   /**
    * 更新指定附件草稿的状态、进度、错误或中断控制器。
    * @param conversationId 会话 ID
@@ -276,7 +317,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
   function updateDraft(
     conversationId: string,
     draftId: string,
-    changes: Partial<Pick<AttachmentDraft, 'status' | 'progress' | 'error' | 'controller'>>,
+    changes: Partial<Pick<AttachmentDraft, 'status' | 'progress' | 'error' | 'controller' | 'submitted'>>,
   ) {
     const draft = draftsFor(conversationId).find((item) => item.id === draftId)
     if (!draft) return
@@ -329,6 +370,8 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     draftsFor,
     addFiles,
     addFolder,
+    addNativeSources,
+    restoreNativeDraft,
     updateDraft,
     removeDraft,
     clearConversation,

@@ -71,7 +71,7 @@ describe('AttachmentDraftStore', () => {
     ])
   })
 
-  it('rejects empty and oversized files and ignores duplicates', () => {
+  it('accepts zero-byte files, rejects oversized files and ignores duplicates', () => {
     const store = useAttachmentDraftStore()
     const report = file('report.pdf', 10, 'application/pdf')
     store.addFiles('conversation-1', [report])
@@ -82,10 +82,10 @@ describe('AttachmentDraftStore', () => {
       file('huge.bin', P2P_MAX_FILE_SIZE + 1, 'application/octet-stream'),
     ])
 
-    expect(result.added).toEqual([])
+    expect(result.added.map((draft) => draft.name)).toEqual(['empty.txt'])
     expect(result.duplicateCount).toBe(1)
-    expect(result.errors).toHaveLength(3)
-    expect(store.draftsFor('conversation-1')).toHaveLength(1)
+    expect(result.errors).toHaveLength(2)
+    expect(store.draftsFor('conversation-1')).toHaveLength(2)
   })
 
   it('keeps conversations isolated and releases resources when cleared', () => {
@@ -130,11 +130,11 @@ describe('AttachmentDraftStore', () => {
     expect(duplicate.duplicateCount).toBe(1)
   })
 
-  it('filters empty and oversized files when adding folders', () => {
+  it('preserves empty folders and rejects the entire folder containing an oversized file', () => {
     const store = useAttachmentDraftStore()
     const empty = store.addFolder('conversation-1', { name: 'empty', files: [] })
-    expect(empty.added).toEqual([])
-    expect(empty.errors).toEqual(['empty：文件夹为空'])
+    expect(empty.added).toHaveLength(1)
+    expect(empty.errors).toEqual([])
 
     const result = store.addFolder('conversation-1', {
       name: 'mixed',
@@ -144,9 +144,9 @@ describe('AttachmentDraftStore', () => {
         { path: 'huge.bin', file: file('huge.bin', P2P_MAX_FILE_SIZE + 1) },
       ],
     })
-    expect(result.added).toHaveLength(1)
-    expect(result.errors).toHaveLength(2)
-    expect(result.added[0].folderFiles?.map((item) => item.path)).toEqual(['ok.txt'])
+    expect(result.added).toEqual([])
+    expect(result.errors).toHaveLength(1)
+    expect(store.draftsFor('conversation-1').map((draft) => draft.name)).toEqual(['empty'])
   })
 
   it('enforces the shared P2P folder count and aggregate size limits', () => {
@@ -170,4 +170,44 @@ describe('AttachmentDraftStore', () => {
     expect(tooLarge.added).toEqual([])
     expect(tooLarge.errors[0]).toContain('20GB')
   })
+  it('preserves zero-byte files and nested empty directories', () => {
+    const store = useAttachmentDraftStore()
+    const result = store.addFolder('a', { name: 'empty tree', directories: ['nested', 'nested/empty'], files: [{ path: 'zero.txt', file: file('zero.txt', 0) }] })
+    expect(result.errors).toEqual([])
+    expect(result.added[0].folderDirectories).toEqual(['nested', 'nested/empty'])
+    expect(result.added[0].folderFiles).toHaveLength(1)
+    expect(result.added[0].size).toBe(0)
+  })
+
+  it('does not confuse different folders with the same name, size and file count', () => {
+    const store = useAttachmentDraftStore()
+    store.addFolder('a', { name: 'docs', files: [{ path: 'a.txt', file: file('a.txt', 4) }] })
+    const second = store.addFolder('a', { name: 'docs', files: [{ path: 'b.txt', file: file('b.txt', 4) }] })
+    expect(second.added).toHaveLength(1)
+  })
+
+  it('keeps native source identity and zero-byte folder statistics in the requested conversation', () => {
+    const store = useAttachmentDraftStore()
+    const source = { sourceId: 'source-a', kind: 'folder' as const, name: 'docs', totalSize: 0, fileCount: 0, directoryCount: 2 }
+    const first = store.addNativeSources('conversation-a', [source])
+    expect(store.addNativeSources('conversation-a', [source]).duplicateCount).toBe(1)
+    expect(store.addNativeSources('conversation-a', [{ ...source, sourceId: 'source-b' }]).added).toHaveLength(1)
+    expect(store.draftsFor('conversation-b')).toEqual([])
+    expect(first.added[0].nativeSource).toEqual(source)
+    store.updateDraft('conversation-a', first.added[0].id, { submitted: true, status: 'queued' })
+    expect(first.added[0].submitted).toBe(true)
+  })
+
+  it('restores a submitted native task with the same id and waits for manual continuation', () => {
+    const store = useAttachmentDraftStore()
+    const source = { sourceId: 'source-a', kind: 'file' as const, name: 'report.txt', totalSize: 3, fileCount: 1, directoryCount: 0 }
+    const restored = store.restoreNativeDraft('original-id', 'conversation-a', source)
+    expect(restored.id).toBe('original-id')
+    expect(restored.status).toBe('paused')
+    expect(restored.submitted).toBe(true)
+    expect(restored.error).toContain('手动继续')
+    store.restoreNativeDraft('original-id', 'conversation-a', source)
+    expect(store.draftsFor('conversation-a')).toHaveLength(1)
+  })
+
 })

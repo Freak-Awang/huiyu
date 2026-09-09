@@ -63,6 +63,13 @@
         :class="{ 'is-visible': draft.status !== 'waiting' }"
       >
         <button
+          type="button"
+          class="attachment-draft-action"
+          :aria-label="`移除 ${draft.name}`"
+          title="移除附件"
+          @click="$emit('remove', draft)"
+        >移除</button>
+        <button
           v-if="draft.kind !== 'image' && draft.status === 'hashing' && draft.progress < 1"
           type="button"
           class="attachment-draft-action"
@@ -164,13 +171,14 @@ function kindText(draft: AttachmentDraft) {
 // 待上传状态的元信息：文件夹显示文件数+总大小，其余显示文件大小
 function waitingMetaText(draft: AttachmentDraft) {
   if (draft.kind === 'folder') {
-    return `${draft.folderFiles?.length ?? 0} 个文件 · ${formatFileSize(draft.size)}`
+    return `${draft.nativeSource?.fileCount ?? draft.folderFiles?.length ?? 0} 个文件 · ${draft.nativeSource?.directoryCount ?? draft.folderDirectories?.length ?? 0} 个目录 · ${formatFileSize(draft.size)}`
   }
   return formatFileSize(draft.size)
 }
 
 // 根据草稿状态返回对应的状态文本（校验/上传进度、已暂停、失败原因）
 function statusText(draft: AttachmentDraft) {
+  if (draft.status === 'queued') return '等待准备'
   if (draft.status === 'hashing') return `校验 ${Math.round(draft.progress * 100)}%`
   if (draft.status === 'uploading') return `上传 ${Math.round(draft.progress * 100)}%`
   if (draft.status === 'paused') return '已暂停'

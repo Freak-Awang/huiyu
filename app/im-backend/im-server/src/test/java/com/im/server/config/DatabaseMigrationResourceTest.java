@@ -13,6 +13,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class DatabaseMigrationResourceTest {
 
+    @Test
+    void p2pShareMigrationPersistsOnlyAuthorizationAndBackfillsUniqueLiveSummaries() throws Exception {
+        try (var input = getClass().getResourceAsStream("/db/migration/V20260909__p2p_share_authorization.sql")) {
+            assertThat(input).isNotNull();
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(sql).contains("CREATE TABLE IF NOT EXISTS im_p2p_share", "ON DELETE CASCADE",
+                    "status <> 'RECALLED'", "HAVING COUNT(*) = 1", "JSON_VALID(content)");
+            String table = sql.substring(sql.indexOf("CREATE TABLE"), sql.indexOf("-- Restore"));
+            assertThat(table).doesNotContain("path", "manifest", "BLOB", "offset");
+        }
+    }
+
     /**
      * 验证 token_version 迁移 SQL 存在且包含必要 DDL：information_schema.COLUMNS 检测、
      * token_version 字段添加、PREPARE 动态 SQL。

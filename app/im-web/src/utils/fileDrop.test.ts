@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DragDepthTracker,
   collectDroppedItems,
+  droppedDirectoryNames,
   hasDirectoryDragItem,
   hasFileDragPayload,
 } from './fileDrop'
@@ -33,6 +34,11 @@ describe('file drop helpers', () => {
   it('detects directory entries', () => {
     const items = [{ webkitGetAsEntry: () => ({ isDirectory: true }) }] as unknown as DataTransferItemList
     expect(hasDirectoryDragItem(items)).toBe(true)
+  })
+
+  it('keeps directories with image extensions separate from inline images', () => {
+    const items = [{ webkitGetAsEntry: () => ({ name: 'assets.png', isDirectory: true }) }] as unknown as DataTransferItemList
+    expect(droppedDirectoryNames(items)).toEqual(new Set(['assets.png']))
   })
 
   it('separates loose files from folders and keeps relative paths', async () => {
@@ -74,6 +80,7 @@ describe('file drop helpers', () => {
     expect(folders).toHaveLength(1)
     expect(folders[0].name).toBe('docs')
     expect(folders[0].files.map(({ path }) => path)).toEqual(['nested.txt', 'inner/deep.txt'])
+    expect(folders[0].directories).toEqual(['inner'])
   })
 
   it('falls back to dataTransfer.files when the entries API is unavailable', async () => {
@@ -86,5 +93,35 @@ describe('file drop helpers', () => {
     const { files, folders } = await collectDroppedItems(dataTransfer)
     expect(files).toEqual([fallback])
     expect(folders).toEqual([])
+  })
+
+  it('rejects the complete folder when a later directory batch cannot be read', async () => {
+    const directory = {
+      isDirectory: true, isFile: false, name: 'docs',
+      createReader: () => {
+        let calls = 0
+        return { readEntries: (success: (entries: unknown[]) => void, fail: (error: Error) => void) => {
+          if (calls++ === 0) success([{ isFile: true, name: 'first.txt', file: (done: (file: File) => void) => done(new File(['ok'], 'first.txt')) }])
+          else fail(new Error('permission denied'))
+        } }
+      },
+    }
+    const dataTransfer = { items: [{ kind: 'file', webkitGetAsEntry: () => directory }] } as unknown as DataTransfer
+    await expect(collectDroppedItems(dataTransfer)).rejects.toThrow('无法读取文件夹')
+  })
+
+  it('reports unreadable files instead of silently returning a partial directory', async () => {
+    const dataTransfer = { items: [{ kind: 'file', webkitGetAsEntry: () => ({
+      isFile: true, name: 'secret.txt', file: (_: unknown, fail: (error: Error) => void) => fail(new Error('permission denied')),
+    }) }] } as unknown as DataTransfer
+    await expect(collectDroppedItems(dataTransfer)).rejects.toThrow('secret.txt')
+  })
+
+  it('keeps an empty top-level folder', async () => {
+    const dataTransfer = { items: [{ kind: 'file', webkitGetAsEntry: () => ({
+      isDirectory: true, name: 'empty', createReader: () => ({ readEntries: (success: (entries: unknown[]) => void) => success([]) }),
+    }) }] } as unknown as DataTransfer
+    const result = await collectDroppedItems(dataTransfer)
+    expect(result.folders).toEqual([{ name: 'empty', files: [], directories: [] }])
   })
 })
