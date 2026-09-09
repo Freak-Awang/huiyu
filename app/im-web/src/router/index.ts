@@ -33,4 +33,11 @@ router.beforeEach((to) => {
   }
 })
 
+// 仅同步已完成的导航，覆盖手动登录、自动进入、退出和认证失效跳转。
+router.afterEach((to, _from, failure) => {
+  if (failure) return
+  void window.imDesktop?.window?.setMode?.(to.name === 'Login' ? 'login' : 'chat')
+    .catch((error) => console.error('同步桌面窗口模式失败', error))
+})
+
 export default router

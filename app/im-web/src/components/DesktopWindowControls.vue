@@ -15,6 +15,7 @@
         <img :src="minimizeIcon" alt="最小化" />
       </button>
       <button
+        v-if="!hideMaximize"
         class="desktop-window-button"
         :aria-label="isMaximized ? '还原' : '最大化'"
         type="button"
@@ -43,6 +44,7 @@ import closeIcon from '../assets/icons/关  闭.svg'
 
 defineProps<{
   transparent?: boolean
+  hideMaximize?: boolean
 }>()
 
 const windowControls = typeof window !== 'undefined' ? window.imDesktop?.window : undefined

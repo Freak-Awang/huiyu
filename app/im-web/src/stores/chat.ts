@@ -45,6 +45,10 @@ export const useChatStore = defineStore('chat', () => {
   const unreadCounts = ref<Map<string, number>>(new Map())
   /** 各会话 @ 我的未读消息数 */
   const mentionUnreadCounts = ref<Map<string, number>>(new Map())
+  let generation = 0
+  let pendingSync: Promise<void> | null = null
+  const unreadRevisions = new Map<string, number>()
+  const touchUnread = (id: string) => unreadRevisions.set(id, (unreadRevisions.get(id) || 0) + 1)
 
   const currentMessages = computed(() => {
     if (!currentConversation.value) return []
@@ -61,12 +65,17 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 拉取会话列表并同步未读数、用户资料快照 */
   async function fetchConversations() {
+    const epoch = generation
+    const revisions = new Map(unreadRevisions)
     const res = await listConversations()
+    if (epoch !== generation) return
     conversations.value = res.data
     res.data.forEach(seedConversationProfiles)
     for (const conv of res.data) {
-      unreadCounts.value.set(conv.conversationId, conv.unreadCount || 0)
-      mentionUnreadCounts.value.set(conv.conversationId, conv.mentionUnreadCount || 0)
+      if (unreadRevisions.get(conv.conversationId) === revisions.get(conv.conversationId)) {
+        unreadCounts.value.set(conv.conversationId, conv.unreadCount || 0)
+        mentionUnreadCounts.value.set(conv.conversationId, conv.mentionUnreadCount || 0)
+      }
     }
     if (currentConversation.value) {
       const updated = conversations.value.find(
@@ -116,8 +125,10 @@ export const useChatStore = defineStore('chat', () => {
    * @returns 刷新后的会话对象，失败返回 null
    */
   async function refreshConversation(convId: string): Promise<Conversation | null> {
+    const epoch = generation
     try {
       const res = await getConversation(convId)
+      if (epoch !== generation) return null
       upsertConversation(res.data)
       return res.data
     } catch {
@@ -149,9 +160,17 @@ export const useChatStore = defineStore('chat', () => {
    * @param beforeId 分页锚点消息 ID（加载更早消息时传入）
    */
   async function fetchMessages(convId: string, beforeId?: string) {
+    const epoch = generation
     if (canUseLocalMessageStore()) {
       // Desktop mode reads local history first so the chat opens instantly and still works during transient server outages.
       const localMessages = await listLocalMessages(convId, beforeId, 50)
+      if (epoch !== generation) return
+      // A previous process cannot still be waiting for an acknowledgement.
+      for (const message of localMessages) {
+        if (message.status === 'SENDING' && !messages.value.get(convId)?.some(
+          (active) => active.clientMsgId === message.clientMsgId && active.status === 'SENDING',
+        )) message.status = 'FAILED'
+      }
       const existingRaw = messages.value.get(convId)
       const existing = Array.isArray(existingRaw) ? existingRaw : []
       if (beforeId) {
@@ -161,6 +180,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       try {
         const res = await getMessages(convId, beforeId)
+        if (epoch !== generation) return
         // Server data remains authoritative for delivery/read status and replaces optimistic local records by id/clientMsgId.
         mergeServerMessages(convId, [...res.data.records].reverse())
       } catch {
@@ -169,6 +189,7 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     const res = await getMessages(convId, beforeId)
+    if (epoch !== generation) return
     const msgs = [...res.data.records].reverse()
     const existingRaw = messages.value.get(convId)
     const existing = Array.isArray(existingRaw) ? existingRaw : []
@@ -208,11 +229,7 @@ export const useChatStore = defineStore('chat', () => {
       if (index >= 0) {
         const updated = {
           ...nextMessages[index],
-          status: serverMessage.status,
-          readCount: serverMessage.readCount,
-          recipientCount: serverMessage.recipientCount,
-          readStatus: serverMessage.readStatus,
-          readTime: serverMessage.readTime,
+          ...serverMessage,
         }
         nextMessages[index] = updated
         void upsertLocalMessage(updated)
@@ -233,19 +250,34 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /** 拉取离线待收消息并逐条确认接收（ACK） */
-  async function fetchPendingMessages() {
-    const res = await getPendingMessages()
-    for (const msg of res.data) {
-      upsertMessage(msg)
-      if (msg.messageId) {
-        try {
+  /** Drain every pending page. Only ACK after durable storage; retries never skip a failed page. */
+  function fetchPendingMessages(): Promise<void> {
+    if (pendingSync) return pendingSync
+    const epoch = generation
+    const run = async () => {
+      const acknowledged = new Set<string>()
+      while (epoch === generation) {
+        const res = await getPendingMessages(100)
+        if (epoch !== generation || !res.data.length) return
+        for (const msg of res.data) {
+          if (epoch !== generation) return
+          if (!msg.messageId || acknowledged.has(msg.messageId)) {
+            throw new Error('待收消息确认未生效，请重试同步')
+          }
+          // Pending delivery does not mean unread: the server owns unread counts.
+          mergeHistoricalMessage(msg, false)
+          await upsertLocalMessage(msg, undefined, true)
+          if (epoch !== generation) return
           await acknowledgeMessage(msg.messageId)
-        } catch {
-          // The next pending sync will retry the delivery acknowledgement.
+          acknowledged.add(msg.messageId)
         }
       }
     }
+    const task = run().finally(() => {
+      if (pendingSync === task) pendingSync = null
+    })
+    pendingSync = task
+    return task
   }
 
   /**
@@ -322,7 +354,7 @@ export const useChatStore = defineStore('chat', () => {
    * 将搜索命中的历史消息合入缓存，但不更新会话的最后消息预览。
    * 搜索结果可能不在当前分页中，因此需要按时间插入后才能在消息列表中定位。
    */
-  function mergeHistoricalMessage(msg: Message) {
+  function mergeHistoricalMessage(msg: Message, persist = true) {
     seedMessageProfile(msg)
     const convMessagesRaw = messages.value.get(msg.conversationId)
     const convMessages = Array.isArray(convMessagesRaw) ? convMessagesRaw : []
@@ -338,7 +370,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     nextMessages.sort((left, right) => messageSortValue(left) - messageSortValue(right))
     messages.value.set(msg.conversationId, nextMessages)
-    void upsertLocalMessage(msg)
+    if (persist) void upsertLocalMessage(msg)
   }
 
   /**
@@ -355,10 +387,17 @@ export const useChatStore = defineStore('chat', () => {
     countAsUnread = true,
   ): Promise<Conversation | null> {
     // Receiving a message may create/refresh the conversation first so sidebar badges and previews have a target.
+    const epoch = generation
     const conv = await ensureConversation(msg.conversationId)
+    if (epoch !== generation) return null
+    const duplicate = messages.value.get(msg.conversationId)?.some((item) =>
+      (msg.messageId && item.messageId === msg.messageId) ||
+      (msg.clientMsgId && item.clientMsgId === msg.clientMsgId),
+    )
     addMessage(msg)
     const isOwnMessage = !!currentUserId && msg.senderId === currentUserId
-    if (countAsUnread && !isOwnMessage) {
+    if (countAsUnread && !isOwnMessage && !duplicate) {
+      touchUnread(msg.conversationId)
       const count = unreadCounts.value.get(msg.conversationId) || 0
       unreadCounts.value.set(msg.conversationId, count + 1)
       const mentioned = !!currentUserId && msg.mentions.some((m) => m.userId === currentUserId || isAllMention(m))
@@ -376,18 +415,18 @@ export const useChatStore = defineStore('chat', () => {
    * @param lastReadMessageId 已读到的最后一条消息 ID
    */
   async function markAsRead(convId: string, lastReadMessageId?: string) {
+    const epoch = generation
     const previousUnread = unreadCounts.value.get(convId) || 0
     const previousMentions = mentionUnreadCounts.value.get(convId) || 0
-    clearUnread(convId)
     try {
       await markRead(convId, lastReadMessageId)
+      if (epoch !== generation) return false
+      touchUnread(convId)
+      unreadCounts.value.set(convId, Math.max(0, (unreadCounts.value.get(convId) || 0) - previousUnread))
+      mentionUnreadCounts.value.set(convId, Math.max(0, (mentionUnreadCounts.value.get(convId) || 0) - previousMentions))
+      return true
     } catch {
-      if ((unreadCounts.value.get(convId) || 0) === 0) {
-        unreadCounts.value.set(convId, previousUnread)
-      }
-      if ((mentionUnreadCounts.value.get(convId) || 0) === 0) {
-        mentionUnreadCounts.value.set(convId, previousMentions)
-      }
+      return false
     }
   }
 
@@ -396,6 +435,7 @@ export const useChatStore = defineStore('chat', () => {
    * @param convId 会话 ID
    */
   function clearUnread(convId: string) {
+    touchUnread(convId)
     unreadCounts.value.set(convId, 0)
     mentionUnreadCounts.value.set(convId, 0)
   }
@@ -503,6 +543,7 @@ export const useChatStore = defineStore('chat', () => {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
       if (msg) {
         msg.messageId = String(serverMsgId || msg.messageId || '')
+        if (msg.status === 'RECALLED' && status !== 'RECALLED') return
         msg.status = status
         void upsertLocalMessage(msg)
         break
@@ -519,6 +560,9 @@ export const useChatStore = defineStore('chat', () => {
     for (const [, convMessages] of messages.value) {
       const msg = convMessages.find((m) => m.clientMsgId === clientMsgId)
       if (msg) {
+        if (msg.status === 'RECALLED' && status !== 'RECALLED') return
+        // A delayed timeout/failure must not overwrite a late success or recall.
+        if (status === 'FAILED' && msg.status !== 'SENDING') return
         msg.status = status
         void upsertLocalMessage(msg)
         break
@@ -532,11 +576,18 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 清空全部聊天状态（登出/切换账号时调用，防止跨账号数据泄露） */
   function reset() {
+    cancelPendingSync()
     conversations.value = []
     currentConversation.value = null
     messages.value = new Map()
     unreadCounts.value = new Map()
     mentionUnreadCounts.value = new Map()
+    unreadRevisions.clear()
+  }
+
+  function cancelPendingSync() {
+    generation++
+    pendingSync = null
   }
 
   function seedMessageProfile(message: Message) {
@@ -564,6 +615,7 @@ export const useChatStore = defineStore('chat', () => {
     ensureConversation,
     fetchMessages,
     fetchPendingMessages,
+    cancelPendingSync,
     addMessage,
     clearConversationMessages,
     upsertMessage,

@@ -134,7 +134,7 @@
                   <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
                 </div>
                 <div class="conv-bottom">
-                  <span class="conv-preview">{{ getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
+                  <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
                   <span
                     v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                     class="mention-badge"
@@ -176,7 +176,7 @@
                 <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
               </div>
               <div class="conv-bottom">
-                <span class="conv-preview">{{ getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
+                <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
                 <span
                   v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                   class="mention-badge"
@@ -508,6 +508,7 @@
                   class="attachment-feedback error"
                   role="alert"
                 >{{ attachmentFeedback }}</p>
+                <p v-if="draftSaveError" class="attachment-feedback error" role="alert">{{ draftSaveError }}</p>
                 <textarea
                   ref="messageInputRef"
                   v-model="messageText"
@@ -1229,6 +1230,9 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
+import { useConversationDrafts, type ConversationDraft } from '../stores/conversationDrafts'
+import { createMessageSender } from '../utils/messageSender'
+import { isChatForeground, isConversationBeingRead } from '../utils/chatAttention'
 import { useSettingsStore } from '../stores/settings'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
 import {
@@ -1272,12 +1276,12 @@ import {
   searchMessages as searchServerMessages,
   type Message,
   type MessageMention,
-  type MessageReply,
 } from '../api/message'
 import {
   canUseLocalMessageStore,
   clearLocalConversationMessages,
   searchLocalMessages,
+  upsertLocalMessage,
 } from '../utils/localMessageStore'
 import {
   downloadFileBlob,
@@ -1404,11 +1408,6 @@ async function loadInitialChatData() {
   })
 
   await Promise.all([conversationTask, contactsTask])
-  if (authStore.isLoggedIn) {
-    await chatStore.fetchPendingMessages().catch((err) => {
-      console.warn('Pending messages sync failed', err)
-    })
-  }
 }
 
 // 展开/折叠部门节点，首次展开时加载该部门用户
@@ -1458,7 +1457,12 @@ const attachmentDraftTrayRef = ref<{ focusLast: () => void } | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
 const customStickerInputRef = ref<HTMLInputElement | null>(null)
-const messageText = ref('')
+const conversationDrafts = useConversationDrafts(
+  computed(() => authStore.currentUser?.userId || ''),
+  computed(() => chatStore.currentConversation?.conversationId),
+)
+const { text: messageText, mentions: draftMentions, replyTo: replyTarget, error: draftSaveError } = conversationDrafts
+const messageSender = createMessageSender(chatStore.updateMessageStatus, chatStore.setMessageStatus)
 const previewImage = ref('')
 const authenticatedImageUrls = ref<Record<string, string>>({})
 const imageLoadsInProgress = new Set<string>()
@@ -1472,8 +1476,6 @@ const attachmentFeedback = ref('')
 const attachmentFeedbackIsError = ref(false)
 const attachmentDragDepth = new DragDepthTracker()
 const hasDesktopWindowControls = !!window.imDesktop?.window
-const draftMentions = ref<MessageMention[]>([])
-const replyTarget = ref<MessageReply | null>(null)
 const showMentionPicker = ref(false)
 const mentionSearch = ref('')
 const mentionSelectedIndex = ref(0)
@@ -2573,7 +2575,7 @@ async function removeGroupMember(member: ConversationMember) {
 
 // 消息输入事件：检测 @ 触发提及选择器
 function onMessageInput(event: Event) {
-  pruneDraftMentions()
+  draftMentions.value = pruneDraftMentions(conversationDrafts.snapshot(chatStore.currentConversation?.conversationId || ''))
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') {
     closeMentionPicker()
@@ -2673,11 +2675,11 @@ function selectMention(member: ConversationMember) {
     messageText.value.slice(0, atIndex) + mentionText + messageText.value.slice(cursor)
 
   if (!draftMentions.value.some((mention) => mention.userId === member.userId)) {
-    draftMentions.value.push({
+    draftMentions.value = [...draftMentions.value, {
       type: member.userId === MESSAGE_MENTION_ALL_ID ? 'all' : 'user',
       userId: member.userId,
       nickname: name,
-    })
+    }]
   }
   closeMentionPicker()
 
@@ -2695,15 +2697,14 @@ function closeMentionPicker() {
 }
 
 // 清理草稿中的提及列表：移除文本中不再存在的 @ 提及
-function pruneDraftMentions(): MessageMention[] {
-  const text = messageText.value
+function pruneDraftMentions(draft: ConversationDraft): MessageMention[] {
+  const text = draft.text
   const seen = new Set<string>()
-  draftMentions.value = draftMentions.value.filter((mention) => {
+  return draft.mentions.filter((mention) => {
     if (seen.has(mention.userId)) return false
     seen.add(mention.userId)
     return text.includes(`@${mention.nickname}`)
   })
-  return draftMentions.value
 }
 
 // 将消息文本拆分为普通文本和 @ 提及片段，用于高亮显示
@@ -2767,7 +2768,7 @@ function insertEmoji(emoji: string) {
   const end = input?.selectionEnd ?? start
   messageText.value = messageText.value.slice(0, start) + emoji + messageText.value.slice(end)
   rememberEmoji(emoji)
-  pruneDraftMentions()
+  draftMentions.value = pruneDraftMentions(conversationDrafts.snapshot(chatStore.currentConversation?.conversationId || ''))
   closeEmojiPanel()
 
   nextTick(() => {
@@ -3152,19 +3153,28 @@ function getLastReadableMessageId() {
   return lastMessage?.messageId || ''
 }
 
-function markCurrentConversationReadAtBottom() {
+let readInFlight = false
+let readRetryTimer: ReturnType<typeof setTimeout> | undefined
+
+function canReadConversation(conversationId: string) {
+  return isConversationBeingRead(conversationId, chatStore.currentConversation?.conversationId,
+    isMessageAreaNearBottom(), isChatForeground() && !showSettingsDialog.value && !showProfileDialog.value && !previewImage.value)
+}
+
+async function markCurrentConversationReadAtBottom() {
   // 只有滚动到底部时才上报已读，避免用户查看旧消息时误清空未读状态。
   const convId = chatStore.currentConversation?.conversationId
   const lastReadMessageId = getLastReadableMessageId()
-  if (!convId || !lastReadMessageId || lastMarkedReadMessageId === lastReadMessageId) return
-  lastMarkedReadMessageId = lastReadMessageId
-  chatStore.clearUnread(convId)
+  if (!convId || !lastReadMessageId || !canReadConversation(convId) || readInFlight || lastMarkedReadMessageId === lastReadMessageId) return
+  readInFlight = true
+  const read = await chatStore.markAsRead(convId, lastReadMessageId)
+  readInFlight = false
+  if (read && chatStore.currentConversation?.conversationId === convId) lastMarkedReadMessageId = lastReadMessageId
   updateUnreadBadge()
-  const sentByWs = wsManager?.isConnected()
-    ? wsManager.send('MESSAGE_READ', { conversationId: convId, lastReadMessageId })
-    : false
-  if (!sentByWs) {
-    void chatStore.markAsRead(convId, lastReadMessageId)
+  // Also handles messages arriving, or conversation switches, while the receipt is in flight.
+  if (!chatDisposed) {
+    clearTimeout(readRetryTimer)
+    readRetryTimer = setTimeout(() => void markCurrentConversationReadAtBottom(), read ? 0 : 5000)
   }
 }
 
@@ -3208,26 +3218,7 @@ async function onMessageScroll() {
 // Send message
 // 通过 WebSocket 发送消息，发送失败标记 FAILED 状态
 function sendOutgoingMessage(msg: Message) {
-  // Local optimistic messages enter the store first; this method only owns WebSocket delivery and failure marking.
-  if (!wsManager || !wsConnected.value || !wsManager.isConnected()) {
-    if (msg.clientMsgId) {
-      chatStore.setMessageStatus(msg.clientMsgId, 'FAILED')
-    }
-    return false
-  }
-  if (msg.clientMsgId) {
-    chatStore.setMessageStatus(msg.clientMsgId, 'SENDING')
-  }
-  const sent = wsManager.send('MESSAGE_SEND', {
-    conversationId: msg.conversationId,
-    messageType: msg.messageType,
-    content: msg.content,
-    clientMsgId: msg.clientMsgId,
-  })
-  if (!sent && msg.clientMsgId) {
-    chatStore.setMessageStatus(msg.clientMsgId, 'FAILED')
-  }
-  return sent
+  return messageSender.send(wsManager, msg)
 }
 
 // 重试发送失败的消息
@@ -3296,14 +3287,15 @@ async function recallCurrentMessage(msg: Message) {
 function sendTextMessage(
   conv: Conversation | null = chatStore.currentConversation,
   user: UserInfo | null = authStore.currentUser,
+  draft = conversationDrafts.snapshot(conv?.conversationId || ''),
 ) {
-  const text = messageText.value.trim()
+  const text = draft.text.trim()
   if (!text) return false
-  if (!conv || !wsManager || !user) return false
+  if (!conv || !wsManager || !user || authStore.currentUser?.userId !== user.userId) return false
 
   const clientMsgId = generateId()
-  const mentions = pruneDraftMentions()
-  const content = buildTextMessageContent(text, mentions, replyTarget.value)
+  const mentions = pruneDraftMentions(draft)
+  const content = buildTextMessageContent(text, mentions, draft.replyTo)
 
   const localMessage: Message = {
     messageId: '',
@@ -3316,7 +3308,7 @@ function sendTextMessage(
     content,
     displayContent: text,
     mentions,
-    replyTo: replyTarget.value,
+    replyTo: draft.replyTo,
     clientMsgId,
     createdAt: new Date().toISOString(),
     status: 'SENDING',
@@ -3325,9 +3317,7 @@ function sendTextMessage(
   chatStore.addMessage(localMessage)
   sendOutgoingMessage(localMessage)
 
-  messageText.value = ''
-  draftMentions.value = []
-  replyTarget.value = null
+  conversationDrafts.clearIfUnchanged(conv.conversationId, draft)
   closeMentionPicker()
   closeEmojiPanel()
   scrollToBottom(true)
@@ -3348,13 +3338,14 @@ async function handleSendMessage() {
   }
 
   isSendingMessage.value = true
+  const textDraft = conversationDrafts.snapshot(conversation.conversationId)
   try {
     const completed = await runAttachmentQueue(
       attachments,
       (draft) => processAttachmentDraft(draft, conversation, user),
     )
     if (!completed) return
-    if (hasText) sendTextMessage(conversation, user)
+    if (hasText) sendTextMessage(conversation, user, textDraft)
     if (attachments.length) setAttachmentFeedback('附件已加入发送队列')
   } finally {
     isSendingMessage.value = false
@@ -3590,24 +3581,36 @@ async function handleWsMessage(msg: WsMessage) {
       const isCurrentConversation =
         chatStore.currentConversation?.conversationId === receivedMessage.conversationId
       const wasAtBottom = isCurrentConversation && isMessageAreaNearBottom()
+      const wasBeingRead = canReadConversation(receivedMessage.conversationId)
+      const duplicate = chatStore.messages.get(receivedMessage.conversationId)?.some((item) => item.messageId === receivedMessage.messageId)
+      const receivingUserId = String(authStore.currentUser?.userId ?? '')
       const conv = await chatStore.receiveMessage(
         receivedMessage,
-        String(authStore.currentUser?.userId ?? ''),
-        !isCurrentConversation || !wasAtBottom
+        receivingUserId,
+        !wasBeingRead
       )
+      if (chatDisposed || authStore.currentUser?.userId !== receivingUserId) return
       if (!conv) {
         alert('收到新消息，但会话信息加载失败，请刷新后重试')
       }
       if (receivedMessage.messageId) {
-        wsManager?.send('MESSAGE_ACK', { messageId: receivedMessage.messageId })
+        try {
+          await upsertLocalMessage(receivedMessage, receivingUserId, true)
+          if (!chatDisposed && authStore.currentUser?.userId === receivingUserId) {
+            wsManager?.send('MESSAGE_ACK', { messageId: receivedMessage.messageId })
+          }
+        } catch (error) {
+          console.warn('消息尚未保存，将重新同步', error)
+        }
       }
-      if (conv && shouldNotifyMessage(receivedMessage, conv)) {
+      if (chatDisposed || authStore.currentUser?.userId !== receivingUserId) return
+      if (!duplicate && receivedMessage.senderId !== receivingUserId && conv && shouldNotifyMessage(receivedMessage, conv, wasBeingRead)) {
         const body = settingsStore.notification.showPreview
           ? receivedMessage.displayContent || receivedMessage.content
           : '收到一条新消息'
         showDesktopNotification(getConversationName(conv) || getMessageSenderName(receivedMessage), body, receivedMessage.conversationId)
       }
-      if (isCurrentConversation && wasAtBottom) {
+      if (chatStore.currentConversation?.conversationId === receivedMessage.conversationId && wasAtBottom) {
         scrollToBottom(true)
       }
       // 收到他人发来的窗口抖动消息时抖动本端窗口
@@ -3636,7 +3639,9 @@ async function handleWsMessage(msg: WsMessage) {
     }
     case 'MESSAGE_ACK': {
       const data = msg.data
-      chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
+      if (data?.clientMsgId && data.messageId && data.ok !== false && data.status !== 'FAILED') {
+        chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
+      }
       break
     }
     case 'MESSAGE_READ': {
@@ -3670,7 +3675,7 @@ async function handleWsMessage(msg: WsMessage) {
     case 'MESSAGE_SEND_REPLY': {
       // Server may also send reply for a send
       const data = msg.data
-      if (data.clientMsgId) {
+      if (data?.clientMsgId && data.messageId && data.ok !== false && data.status !== 'FAILED') {
         chatStore.updateMessageStatus(data.clientMsgId, data.messageId, data.status)
       }
       break
@@ -3717,6 +3722,34 @@ async function handleWsMessage(msg: WsMessage) {
 }
 
 // 初始化 WebSocket 连接：登录后建立连接、上报在线状态、拉取会话和消息
+let chatDisposed = false
+let syncGeneration = 0
+let pendingSyncTimer: ReturnType<typeof setTimeout> | undefined
+
+async function syncConnectedMessages(manager: WebSocketManager, epoch: number) {
+  const current = () => !chatDisposed && wsManager === manager && manager.isConnected() && epoch === syncGeneration
+  let retryDelay = 30000
+  try {
+    await chatStore.fetchPendingMessages()
+    if (!current()) return
+    await chatStore.fetchConversations()
+    if (!current()) return
+    const conversationId = chatStore.currentConversation?.conversationId
+    if (conversationId) {
+      const atBottom = isMessageAreaNearBottom()
+      await chatStore.fetchMessages(conversationId)
+      if (!current()) return
+      if (chatStore.currentConversation?.conversationId === conversationId && atBottom) scrollToBottom(true)
+    }
+    updateUnreadBadge()
+  } catch (error) {
+    retryDelay = 5000
+    console.warn('消息同步未完成，将自动重试', error)
+  } finally {
+    if (current()) pendingSyncTimer = setTimeout(() => void syncConnectedMessages(manager, epoch), retryDelay)
+  }
+}
+
 function initWebSocket() {
   // Reinitialization tears down stale managers first so login changes and reconnects cannot reuse old user state.
   if (!authStore.isLoggedIn) return
@@ -3727,11 +3760,13 @@ function initWebSocket() {
   if (!authStore.token) return
   wsManager = new WebSocketManager(createWebSocketTicket, handleWsMessage, (connected) => {
     wsConnected.value = connected
+    clearTimeout(pendingSyncTimer)
+    const epoch = ++syncGeneration
     if (connected) {
       const currentConvId = chatStore.currentConversation?.conversationId
       applySelfPresence(manualPresence.value)
       wsManager?.send('ONLINE_STATUS', { status: manualPresence.value })
-      chatStore.fetchConversations().then(() => {
+      void syncConnectedMessages(wsManager!, epoch).then(() => {
         // 批量刷新所有单聊会话的在线状态：
         // 服务端仅在状态变化时广播，登录前已在线/断连期间下线的联系人状态需主动查询，
         // 否则会话列表长期显示过期或缺失的在线状态
@@ -3745,11 +3780,6 @@ function initWebSocket() {
       if (currentConvId) {
         requestConversationPresence(currentConvId)
         void p2pTransferStore.refreshPeerStatus(currentConvId)
-        chatStore.fetchMessages(currentConvId).then(() => {
-          if (isMessageAreaNearBottom()) {
-            markCurrentConversationReadAtBottom()
-          }
-        })
       }
     }
   })
@@ -3758,10 +3788,12 @@ function initWebSocket() {
 }
 
 // 判断是否应该弹出桌面通知（免打扰、静音、仅 @ 我等条件判断）
-function shouldNotifyMessage(message: Message, conversation: Conversation) {
+function shouldNotifyMessage(message: Message, conversation: Conversation, wasBeingRead = false) {
   const notification = settingsStore.notification
   if (conversation.muted || notification.doNotDisturb || !notification.desktop) return false
-  if (chatStore.currentConversation?.conversationId === message.conversationId) return false
+  // Rendering the new bubble can move the scroll boundary before the scheduled auto-scroll.
+  if (canReadConversation(message.conversationId) || (wasBeingRead && isChatForeground()
+    && chatStore.currentConversation?.conversationId === message.conversationId)) return false
   if (notification.mentionOnly && !messageMentionsCurrentUser(message)) return false
   return true
 }
@@ -3837,6 +3869,8 @@ async function openConversationFromNotification(conversationId: string) {
 
 // 退出登录：断开 WebSocket、清除未读标记、清空聊天状态、跳转到登录页
 async function handleLogout() {
+  await conversationDrafts.flush()
+  messageSender.dispose()
   wsManager?.disconnect()
   p2pTransferStore.dispose()
   if (window.imDesktop?.setUnreadBadge) {
@@ -3860,6 +3894,8 @@ function handleGlobalShortcut(event: KeyboardEvent) {
 
 // 组件挂载：加载贴纸、注册全局事件、初始化认证、加载设置和数据、启动 WebSocket
 onMounted(async () => {
+  window.addEventListener('focus', handleChatVisibility)
+  document.addEventListener('visibilitychange', handleChatVisibility)
   await loadCustomStickerState()
   document.addEventListener('mousedown', handleDocumentMouseDown)
   window.addEventListener('mousemove', handleUserActivity)
@@ -3873,6 +3909,7 @@ onMounted(async () => {
     void openConversationFromNotification(conversationId)
   }) || null
   await authStore.init()
+  if (chatDisposed) return
   if (authStore.isLoggedIn) {
     try {
       await settingsStore.load()
@@ -3883,6 +3920,7 @@ onMounted(async () => {
       await window.imDesktop.setCloseBehavior(settingsStore.general.closeBehavior).catch(() => false)
     }
     await loadInitialChatData()
+    if (chatDisposed) return
     applySelfPresence(manualPresence.value)
     updateUnreadBadge()
     initWebSocket()
@@ -3892,6 +3930,14 @@ onMounted(async () => {
 
 // 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
+  chatDisposed = true
+  syncGeneration++
+  clearTimeout(pendingSyncTimer)
+  clearTimeout(readRetryTimer)
+  messageSender.dispose()
+  chatStore.cancelPendingSync()
+  window.removeEventListener('focus', handleChatVisibility)
+  document.removeEventListener('visibilitychange', handleChatVisibility)
   clearMessageHighlight()
   document.removeEventListener('mousedown', handleDocumentMouseDown)
   window.removeEventListener('mousemove', handleUserActivity)
@@ -3948,20 +3994,22 @@ watch(
 watch(
   () => authStore.isLoggedIn,
   (val) => {
-    if (val) {
-      applySelfPresence(manualPresence.value)
-      settingsStore.load().catch(() => {
-        // Keep defaults if settings cannot be loaded.
-      })
-      loadInitialChatData()
-      initWebSocket()
-    } else {
+    if (!val) {
+      messageSender.dispose()
+      wsManager?.disconnect()
+      chatStore.cancelPendingSync()
       attachmentDraftStore.clearAll()
       settingsStore.resetLocal()
       updateUnreadBadge()
     }
   }
 )
+
+function handleChatVisibility() {
+  if (isChatForeground()) void nextTick(() => markCurrentConversationReadAtBottom())
+}
+
+watch([showSettingsDialog, showProfileDialog, previewImage], handleChatVisibility)
 
 // 监听未读消息总数变化，更新系统托盘角标
 watch(totalUnreadCount, () => {

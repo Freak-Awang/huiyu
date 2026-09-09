@@ -25,6 +25,8 @@ import {
 import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
 import { assertP2pWriteBounds, resolveP2pEntryPath, safeP2pRelativePath } from './p2pReceiveSafety.js'
 import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
+import { createWindowModeController, LOGIN_WINDOW_SIZE } from './windowMode.js'
+import { listLocalDrafts, saveLocalDraft } from './localDrafts.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -36,6 +38,7 @@ function appIconPath(filename = 'app-icon.png') {
 
 /** 主窗口实例 */
 let mainWindow: BrowserWindow | null = null
+let setWindowMode: ReturnType<typeof createWindowModeController> | undefined
 
 /** 系统托盘实例 */
 let tray: Tray | null = null
@@ -346,12 +349,13 @@ function assertMainWindowSender(event: IpcMainInvokeEvent) {
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 820,
-    height: 720,
-    minWidth: 640,
-    minHeight: 580,
+    ...LOGIN_WINDOW_SIZE,
+    minWidth: LOGIN_WINDOW_SIZE.width,
+    minHeight: LOGIN_WINDOW_SIZE.height,
+    resizable: false,
+    maximizable: false,
     title: 'ArtTalk',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
     frame: false,
     icon: appIconPath(),
     webPreferences: {
@@ -361,6 +365,8 @@ function createMainWindow() {
       sandbox: true,
     },
   })
+
+  setWindowMode = createWindowModeController(mainWindow)
 
   // 监听原生最大化/还原事件，向渲染进程广播以同步自定义窗口控制按钮状态
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximize-changed', true))
@@ -495,6 +501,11 @@ ipcMain.handle('app:setCloseBehavior', (event, behavior: 'tray' | 'exit') => {
 })
 
 /** 自定义窗口控制 IPC：最小化、最大/恢复、关闭 */
+ipcMain.handle('window:setMode', (event, mode: unknown) => {
+  assertMainWindowSender(event)
+  return setWindowMode?.(mode) ?? false
+})
+
 ipcMain.handle('window:minimize', (event) => {
   assertMainWindowSender(event)
   mainWindow?.minimize()
@@ -503,7 +514,7 @@ ipcMain.handle('window:minimize', (event) => {
 
 ipcMain.handle('window:toggleMaximize', (event) => {
   assertMainWindowSender(event)
-  if (!mainWindow) return false
+  if (!mainWindow || !mainWindow.isMaximizable()) return false
   if (mainWindow.isMaximized()) {
     mainWindow.unmaximize()
   } else {
@@ -673,6 +684,16 @@ ipcMain.handle('messages:clear', (event, userId: string) => {
 ipcMain.handle('messages:clear-conversation', (event, userId: string, conversationId: string) => {
   assertMainWindowSender(event)
   return clearLocalConversationMessages(userId, conversationId)
+})
+
+ipcMain.handle('drafts:list', (event, userId: string) => {
+  assertMainWindowSender(event)
+  return listLocalDrafts(userId)
+})
+
+ipcMain.handle('drafts:save', (event, userId: string, conversationId: string, draft: Parameters<typeof saveLocalDraft>[2]) => {
+  assertMainWindowSender(event)
+  return saveLocalDraft(userId, conversationId, draft)
 })
 
 ipcMain.handle('p2p:receive-start', async (event, payload: P2pReceiveStartPayload) => {

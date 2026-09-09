@@ -294,21 +294,20 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
      * →回 ACK 给发送方→推送给会话其他在线成员。
      */
     private void handleMessageSend(WebSocketSession session, Long senderId, JsonNode root, String seq) {
+        String clientMsgId = root.path("data").path("clientMsgId").asText(null);
         try {
             // MessageService 统一处理 WebSocket 和 HTTP 发送，共享校验、幂等、投递行逻辑
             JsonNode data = root.get("data");
             if (data == null) {
-                return;
+                throw new BusinessException(400, "消息内容不能为空");
             }
 
             Long conversationId = data.has("conversationId") ? data.get("conversationId").asLong() : null;
             String messageType = data.has("messageType") ? data.get("messageType").asText() : "TEXT";
             String content = data.has("content") ? data.get("content").asText() : null;
-            String clientMsgId = data.has("clientMsgId") ? data.get("clientMsgId").asText() : null; // 客户端幂等 ID
 
             if (conversationId == null || content == null) {
-                log.warn("Invalid MESSAGE_SEND data: conversationId={}, content={}", conversationId, content);
-                return;
+                throw new BusinessException(400, "会话或消息内容无效");
             }
 
             SendMessageRequest request = new SendMessageRequest();
@@ -328,6 +327,16 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
 
         } catch (Exception e) {
             log.error("Error processing MESSAGE_SEND from userId={}", senderId, e);
+            ObjectNode reply = objectMapper.createObjectNode();
+            reply.put("cmd", "MESSAGE_SEND_REPLY");
+            if (seq != null) reply.put("seq", seq);
+            ObjectNode result = reply.putObject("data");
+            result.put("ok", false);
+            result.put("status", "FAILED");
+            result.put("clientMsgId", clientMsgId);
+            result.put("code", e instanceof BusinessException business ? business.getCode() : 500);
+            result.put("message", e instanceof BusinessException ? e.getMessage() : "消息发送失败，请重试");
+            sessionManager.sendToSession(session, reply.toString());
         }
     }
 

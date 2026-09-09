@@ -29,11 +29,12 @@ export interface LocalMessageStats {
  * @param message - 消息对象
  * @param userId - 用户ID（默认从 localStorage 获取）
  */
-export async function upsertLocalMessage(message: Message, userId = getLocalMessageUserId()) {
+export async function upsertLocalMessage(message: Message, userId = getLocalMessageUserId(), required = false) {
   if (!canUseLocalMessageStore() || !userId) return
   try {
     await window.imDesktop!.upsertMessage(userId, message)
   } catch (error) {
+    if (required) throw error
     console.warn('本地加密消息缓存不可用', error)
   }
 }

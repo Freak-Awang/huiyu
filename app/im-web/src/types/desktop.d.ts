@@ -25,6 +25,8 @@ interface DesktopUpdateState {
 declare global {
   interface Window {
     imDesktop?: {
+      listDrafts?: (userId: string) => Promise<Record<string, import('../stores/conversationDrafts').ConversationDraft>>
+      saveDraft?: (userId: string, conversationId: string, draft: import('../stores/conversationDrafts').ConversationDraft | null) => Promise<boolean>
       getVersion: () => Promise<string>
       getPlatform: () => Promise<string>
       openExternal: (url: string) => Promise<boolean>
@@ -108,6 +110,7 @@ declare global {
       quitAndInstallUpdate?: () => Promise<{ success: boolean; error?: string }>
       onUpdateStateChanged?: (handler: (state: DesktopUpdateState) => void) => () => void
       window?: {
+        setMode?: (mode: 'login' | 'chat') => Promise<boolean>
         minimize: () => Promise<boolean>
         toggleMaximize: () => Promise<boolean>
         close: () => Promise<boolean>

@@ -51,6 +51,9 @@ function nextP2pWriteRequestId() {
 }
 
 contextBridge.exposeInMainWorld('imDesktop', {
+  listDrafts: (userId: string) => ipcRenderer.invoke('drafts:list', userId),
+  saveDraft: (userId: string, conversationId: string, draft: unknown) =>
+    ipcRenderer.invoke('drafts:save', userId, conversationId, draft) as Promise<boolean>,
   /** 获取应用版本号 */
   getVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
 
@@ -247,6 +250,7 @@ contextBridge.exposeInMainWorld('imDesktop', {
 
   /** 自定义窗口控制：最小化、最大/恢复、关闭、查询当前最大化状态 */
   window: {
+    setMode: (mode: 'login' | 'chat') => ipcRenderer.invoke('window:setMode', mode) as Promise<boolean>,
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<boolean>,
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize') as Promise<boolean>,
     close: () => ipcRenderer.invoke('window:close') as Promise<boolean>,
