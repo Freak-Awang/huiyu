@@ -87,6 +87,9 @@ export const useUpdateStore = defineStore('update', () => {
       unsubscribe = window.imDesktop.onUpdateStateChanged((state) => applyState(state))
     }
     await window.imDesktop!.initUpdate!({ serverOrigin, token })
+    // 同步"退出时自动安装"偏好：主进程独立维护该开关，不推送会导致
+    // 界面上已勾选、退出时却不安装
+    await window.imDesktop?.setInstallOnQuit?.(installOnQuit.value)
     initialized = true
     // 恢复主进程已有状态（例如上次下载完成未安装）
     const state = await window.imDesktop!.getUpdateState!()

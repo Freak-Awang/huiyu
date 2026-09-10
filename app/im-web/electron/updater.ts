@@ -5,7 +5,7 @@
  * - 登录后 10 秒首次检测，之后每 4 小时定时检测，避免影响启动速度
  * - 普通更新后台静默下载（支持 Range 断点续传），下载完成仅提示
  * - 强制更新由渲染进程阻断式弹窗处理
- * - 安装时机为用户主动退出/重启应用时，通过 NSIS 安装包静默覆盖安装；
+ * - 安装时机为用户主动退出/重启应用时，通过 NSIS 安装包覆盖安装（安装向导可见）；
  *   手动点击"检查更新"时，下载校验完成后自动重启并安装
  *
  * 安全校验：下载完成校验 SHA256；若 userData 下存在 update-public-key.pem
@@ -86,7 +86,12 @@ let downloadedFilePath: string | null = null
 let lastError: string | undefined
 let receivedBytes = 0
 let totalBytes = 0
-let installOnQuit = false
+/**
+ * 是否在退出应用时静默安装已就绪的更新。
+ * 默认与渲染进程界面保持一致（弹窗中"退出时自动安装"默认勾选），
+ * 登录后渲染进程会再同步一次用户的实际选择。
+ */
+let installOnQuit = true
 /** 手动检查更新流程中：下载完成后自动重启安装（自动轮询检测不触发） */
 let manualCheckInProgress = false
 
@@ -431,8 +436,16 @@ async function verifySignature(data: string, signatureBase64: string) {
 }
 
 /**
- * 退出并安装：通过 cmd 串联执行 NSIS 静默覆盖安装（/S），安装结束后
- * 自动重新启动应用（回到登录页），随后退出当前进程。
+ * 退出并安装：拉起 NSIS 安装包（可见向导），随后退出当前进程。
+ *
+ * 安装包自身负责"等待/结束旧进程 → 覆盖安装 → 重新拉起应用"，因此不额外
+ * 生成等待脚本：cmd 的 timeout 在无控制台句柄时会立即失败，chcp 切换代码页
+ * 也可能打断批处理解析，均不可靠。
+ *
+ * - 不传 `/S`：展示安装向导与安装进度，安装结果对用户可见；
+ * - `--updated`：以"更新"语义执行（跳过安装目录/安装模式等向导页，沿用原安装
+ *   位置与快捷方式，并给旧进程留出优雅退出时间后再结束它）；该参数还会被安装
+ *   向导"运行 ArtTalk"完成页透传给重新拉起的应用，以普通用户身份启动。
  */
 async function quitAndInstall() {
   if (!downloadedFilePath || status !== 'downloaded') {
@@ -441,18 +454,14 @@ async function quitAndInstall() {
   try {
     setStatus('installing')
     const installer = downloadedFilePath
-    if (installer.toLowerCase().endsWith('.exe')) {
-      // 先静默安装，安装成功后再拉起新版本应用（覆盖安装路径与 process.execPath 一致）
-      const command = `"${installer}" /S && start "" "${process.execPath}"`
-      const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      })
-      child.unref()
-    } else {
+    if (!installer.toLowerCase().endsWith('.exe')) {
       throw new Error('未知的更新包格式')
     }
+    const child = spawn(installer, ['--updated'], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
     void report('install_success')
     await rm(stateFilePath(), { force: true }).catch(() => undefined)
     setTimeout(() => {
@@ -567,7 +576,7 @@ export function registerUpdateHandlers(deps: {
   })
 }
 
-/** 应用退出前调用：若用户选择"退出时自动安装"且更新已就绪，则静默安装 */
+/** 应用退出前调用：若用户选择"退出时自动安装"且更新已就绪，则安装更新 */
 export async function installPendingUpdateOnQuit() {
   if (installOnQuit && status === 'downloaded' && downloadedFilePath) {
     installOnQuit = false

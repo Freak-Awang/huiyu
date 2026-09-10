@@ -283,6 +283,18 @@ ipcMain.handle('app:getPlatform', (event) => {
   return process.platform
 })
 
+/** 更新安装后重启：命令行携带 --show-login（或安装包重新拉起时透传的
+ *  --updated）时返回 true（一次性消费），登录页据此跳过本次自动登录，
+ *  停留在登录界面（QQ/微信式更新体验） */
+let showLoginAfterUpdate = process.argv.includes('--show-login')
+  || process.argv.includes('--updated')
+ipcMain.handle('app:consumeShowLogin', (event) => {
+  assertMainWindowSender(event)
+  const flag = showLoginAfterUpdate
+  showLoginAfterUpdate = false
+  return flag
+})
+
 /** 设置关闭按钮行为：最小化到托盘 或 直接退出 */
 ipcMain.handle('app:setCloseBehavior', (event, behavior: 'tray' | 'exit') => {
   assertMainWindowSender(event)
