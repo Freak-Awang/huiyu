@@ -292,8 +292,9 @@
               v-for="user in searchedUsers"
               :key="user.userId || user.id"
               class="contact-item"
+              @dblclick="startSingleChat(user)"
             >
-              <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
+              <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                 <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                 <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                 <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
@@ -321,8 +322,9 @@
                   v-for="user in deptUsersMap[dept.deptId]"
                   :key="user.userId || user.id"
                   class="contact-item"
+                  @dblclick="startSingleChat(user)"
                 >
-                  <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
+                  <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                     <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                     <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                     <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
@@ -349,8 +351,9 @@
                       v-for="user in deptUsersMap[child.deptId]"
                       :key="user.userId || user.id"
                       class="contact-item"
+                      @dblclick="startSingleChat(user)"
                     >
-                      <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)">
+                      <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                         <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
                         <span v-else>{{ (getResolvedUser(user).nickname || getResolvedUser(user).username || '?')[0] }}</span>
                         <span v-if="!isUserOffline(user)" class="online-dot" :class="`presence-${getUserPresence(user)}`"></span>
@@ -1342,6 +1345,7 @@ import { getDeptTree, type DeptNode } from '../api/dept'
 import { getUserProfile, getUsersByDept, searchUsers } from '../api/user'
 import {
   addMembers,
+  createConversation,
   disbandGroup,
   muteConversation,
   normalizeConversation,
@@ -4062,6 +4066,26 @@ async function handleGroupCreated(conversation: Conversation) {
   await nextTick()
   messageInputRef.value?.focus()
   scrollToBottom(true)
+}
+
+// 通讯录双击联系人：创建（或复用）与该用户的单聊会话并跳转过去。
+async function startSingleChat(user: any) {
+  const targetUserId = getUserId(user)
+  if (!targetUserId || targetUserId === String(authStore.currentUser?.userId ?? '')) return
+  try {
+    const existing = chatStore.conversations.find(
+      (conv) => conv.type !== 'GROUP' && getConversationPeerId(conv) === targetUserId,
+    )
+    const conversation = existing || (await createConversation({ type: 'SINGLE', targetUserId })).data
+    chatStore.upsertConversation(conversation)
+    activeTab.value = 'chat'
+    await chatStore.selectConversation(conversation.conversationId)
+    await nextTick()
+    messageInputRef.value?.focus()
+    scrollToBottom(true)
+  } catch (err: any) {
+    alert(err?.response?.data?.message || '创建会话失败')
+  }
 }
 
 // Utility
