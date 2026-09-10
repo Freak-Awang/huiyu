@@ -4,7 +4,8 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { login as loginApi, logout as logoutApi } from '../api/auth'
+import { login as loginApi, logout as logoutApi, refreshSession } from '../api/auth'
+import { isAuthenticationError } from '../api'
 import { getProfile } from '../api/user'
 import { toServerUrl } from '../config/runtime'
 import { useUserProfileStore } from './userProfiles'
@@ -48,8 +49,13 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref('')
   /** 当前登录用户信息 */
   const user = ref<UserInfo | null>(null)
+  const authState = ref<'initializing' | 'authenticated' | 'unauthenticated'>('initializing')
+  const restoreError = ref('')
+  const restoring = ref(false)
+  let restorePromise: Promise<void> | null = null
+  let generation = 0
 
-  const isLoggedIn = computed(() => !!token.value)
+  const isLoggedIn = computed(() => authState.value === 'authenticated' && !!token.value)
   const currentUser = computed(() => user.value)
 
   /**
@@ -58,7 +64,9 @@ export const useAuthStore = defineStore('auth', () => {
    * @param password 密码
    */
   async function login(username: string, password: string) {
+    const loginGeneration = ++generation
     const res = await loginApi(username, password)
+    if (loginGeneration !== generation) return
     const data = res.data
     token.value = data.token
     localStorage.setItem('token', data.token)
@@ -81,31 +89,75 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('imCurrentUserId', user.value.userId)
       useUserProfileStore().upsertProfile(user.value)
     }
+    authState.value = 'authenticated'
+    restoreError.value = ''
   }
 
   /** 用户登出：调用登出接口并清理本地状态与缓存 */
   async function logout() {
+    const previousToken = token.value
+    clearAuth()
     try {
-      await logoutApi()
+      await logoutApi(previousToken)
     } catch {
       // ignore logout API errors
     }
+  }
+
+  /** 仅显式退出账号或确定的认证失效调用，不用于应用退出/网络失败。 */
+  function clearAuth() {
+    generation++
     token.value = ''
     user.value = null
     useUserProfileStore().clear()
     localStorage.removeItem('token')
     localStorage.removeItem('imCurrentUserId')
+    authState.value = 'unauthenticated'
+    restoreError.value = ''
   }
 
   /** 从 localStorage 恢复登录状态，并拉取最新用户资料 */
-  async function loadFromStorage() {
+  function restoreSession(force = false): Promise<void> {
+    if (restorePromise) return restorePromise
+    if (!force && authState.value !== 'initializing') return Promise.resolve()
+    restorePromise = restore().finally(() => { restorePromise = null; restoring.value = false })
+    return restorePromise
+  }
+
+  async function restore() {
+    const restoreGeneration = generation
     const savedToken = localStorage.getItem('token')
-    if (!savedToken) return
+    if (!savedToken) { clearAuth(); return }
+    console.info('[Auth] restoring session')
+    authState.value = 'initializing'
+    restoring.value = true
+    restoreError.value = ''
     token.value = savedToken
     try {
-      const res = await getProfile()
+      let res
+      try {
+        res = await getProfile({ skipAuthRecovery: true })
+        console.info('[Auth] access token valid')
+      } catch (error) {
+        if (!isAuthenticationError(error)) throw error
+        if (restoreGeneration !== generation) return
+        console.info('[Auth] refreshing token')
+        const refreshed = await refreshSession(savedToken)
+        if (restoreGeneration !== generation) return
+        if (!refreshed.data?.token || typeof refreshed.data.token !== 'string') {
+          clearAuth()
+          console.info('[Auth] session invalid')
+          return
+        }
+        // 轮换成功后立即保存；后续 profile 网络失败也不能丢掉新 token。
+        token.value = refreshed.data.token
+        localStorage.setItem('token', token.value)
+        res = await getProfile({ skipAuthRecovery: true })
+      }
+      if (restoreGeneration !== generation) return
       const body = res.data as any
       const data = body.data || body
+      if (!data.userId && !data.id) { clearAuth(); console.info('[Auth] session invalid'); return }
       user.value = {
         userId: String(data.userId || data.id || ''),
         username: data.username || '',
@@ -122,18 +174,24 @@ export const useAuthStore = defineStore('auth', () => {
       }
       localStorage.setItem('imCurrentUserId', user.value.userId)
       useUserProfileStore().upsertProfile({ ...user.value, updatedAt: data.updatedAt || data.updateTime || '' })
-    } catch {
-      token.value = ''
-      user.value = null
-      localStorage.removeItem('token')
-      localStorage.removeItem('imCurrentUserId')
-      useUserProfileStore().clear()
+      authState.value = 'authenticated'
+      console.info('[Auth] session restored')
+    } catch (error) {
+      if (restoreGeneration !== generation) return
+      if (isAuthenticationError(error)) {
+        clearAuth()
+        console.info('[Auth] session invalid')
+      } else {
+        // 暂不可验证：保留所有凭据，停留启动页重试，不挂载依赖用户资料的聊天页。
+        restoreError.value = '暂时无法连接服务器，正在等待重试。'
+        console.info('[Auth] network unavailable')
+      }
     }
   }
 
   /** 初始化认证状态（应用启动时调用） */
   function init() {
-    return loadFromStorage()
+    return restoreSession()
   }
 
   /**
@@ -154,5 +212,6 @@ export const useAuthStore = defineStore('auth', () => {
     return avatar ? toServerUrl(avatar) : ''
   }
 
-  return { token, user, isLoggedIn, currentUser, login, logout, loadFromStorage, init, updateCurrentUser }
+  return { token, user, authState, restoreError, restoring, isLoggedIn, currentUser,
+    login, logout, clearAuth, restoreSession, loadFromStorage: restoreSession, init, updateCurrentUser }
 })

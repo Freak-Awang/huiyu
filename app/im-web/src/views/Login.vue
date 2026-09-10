@@ -1,4 +1,4 @@
-<!-- 登录页面：用户认证入口，支持记住账号、自动登录，服务器使用运行时配置 -->
+<!-- 登录页面：无可恢复会话时的认证入口，支持记住账号 -->
 <template>
   <div class="login-page">
     <DesktopWindowControls transparent hide-maximize />
@@ -37,10 +37,6 @@
               <input v-model="rememberMe" type="checkbox" />
               <span>记住账号</span>
             </label>
-            <label class="checkbox-label">
-              <input v-model="autoLogin" type="checkbox" />
-              <span>自动进入</span>
-            </label>
           </div>
           <button class="login-btn" type="submit" :disabled="loading">
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
@@ -54,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-// 登录页：处理用户认证、记住账号/自动登录
+// 会话恢复由应用 Bootstrap 完成，登录页只处理用户主动登录。
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import DesktopWindowControls from '../components/DesktopWindowControls.vue'
@@ -68,7 +64,6 @@ const authStore = useAuthStore()
 const username = ref('')
 const password = ref('')
 const rememberMe = ref(false) // 是否记住账号
-const autoLogin = ref(false) // 是否自动登录
 const loading = ref(false) // 登录加载状态
 const errorMsg = ref('') // 错误提示信息
 
@@ -89,7 +84,7 @@ function handleLogin() {
   loading.value = true
   errorMsg.value = ''
 
-  // 调用认证接口，成功后保存记住账号/自动登录偏好并跳转到主页
+  // 调用认证接口，成功后保存记住账号偏好并跳转到主页
   authStore.login(username.value, password.value).then(() => {
     if (rememberMe.value) {
       localStorage.setItem('savedUsername', username.value)
@@ -98,7 +93,6 @@ function handleLogin() {
       localStorage.removeItem('savedUsername')
       localStorage.removeItem('rememberMe')
     }
-    localStorage.setItem('autoLogin', autoLogin.value ? 'true' : 'false')
     router.push('/')
   }).catch((err) => {
     errorMsg.value = err.response?.data?.message || err.message || '登录失败'
@@ -107,11 +101,10 @@ function handleLogin() {
   })
 }
 
-// 挂载时恢复保存的账号信息和自动登录状态
-onMounted(async () => {
+// 挂载时恢复保存的账号信息
+onMounted(() => {
   const savedUsername = localStorage.getItem('savedUsername')
   const savedRemember = localStorage.getItem('rememberMe')
-  const savedAutoLogin = localStorage.getItem('autoLogin')
   localStorage.removeItem('savedPassword') // 安全起见清除保存的密码
 
   if (savedRemember === 'true') {
@@ -121,19 +114,7 @@ onMounted(async () => {
 
   if (!getServerOrigin()) {
     errorMsg.value = '服务器配置不可用，请联系管理员'
-    autoLogin.value = savedAutoLogin === 'true'
     return
-  }
-
-  // 自动登录：已有 token 时直接进入主页
-  if (savedAutoLogin === 'true') {
-    autoLogin.value = true
-    if (localStorage.getItem('token')) {
-      await authStore.init()
-      if (authStore.isLoggedIn) {
-        router.push('/')
-      }
-    }
   }
 
 })

@@ -35,15 +35,14 @@ export const useUpdateStore = defineStore('update', () => {
   const installOnQuit = ref(true)
   /** 手动检查更新时强制展示弹窗 */
   const manualCheckVisible = ref(false)
-  /** 手动检查触发的下载：完成后主进程将自动重启安装 */
-  const manualAutoInstall = ref(false)
+  const installRequested = ref(false)
   const checking = ref(false)
 
   let initialized = false
   let unsubscribe: (() => void) | null = null
 
   const supported = computed(() => !!window.imDesktop?.initUpdate)
-  const hasUpdate = computed(() => ['available', 'downloading', 'downloaded'].includes(status.value))
+  const hasUpdate = computed(() => ['available', 'downloading', 'downloaded', 'installing'].includes(status.value))
   const isForce = computed(() => updateType.value === 'force' && hasUpdate.value)
   const progressPercent = computed(() => {
     if (!total.value || total.value <= 0) return 0
@@ -51,6 +50,8 @@ export const useUpdateStore = defineStore('update', () => {
   })
   /** 是否应展示更新弹窗：强制更新始终展示；普通更新尊重"稍后提醒" */
   const dialogVisible = computed(() => {
+    if (installRequested.value || status.value === 'installing') return true
+    if (status.value === 'failed') return !dismissed.value
     if (!hasUpdate.value) return false
     if (isForce.value) return true
     if (manualCheckVisible.value) return true
@@ -72,10 +73,6 @@ export const useUpdateStore = defineStore('update', () => {
     if (state.status !== 'checking') {
       checking.value = false
     }
-    // 流程结束（无更新/失败/已安装退出）后清除手动自动安装标记
-    if (['idle', 'failed', 'installing'].includes(state.status)) {
-      manualAutoInstall.value = false
-    }
   }
 
   /** 登录成功后初始化更新检测（10 秒首次检测 + 每 4 小时轮询） */
@@ -86,7 +83,11 @@ export const useUpdateStore = defineStore('update', () => {
     if (!unsubscribe && window.imDesktop?.onUpdateStateChanged) {
       unsubscribe = window.imDesktop.onUpdateStateChanged((state) => applyState(state))
     }
-    await window.imDesktop!.initUpdate!({ serverOrigin, token })
+    const result = await window.imDesktop!.initUpdate!({ serverOrigin, token }).catch(() => ({ success: false }))
+    if (!result.success) {
+      applyState({ status: 'failed', error: '更新失败，请稍后重试。' })
+      return
+    }
     // 同步"退出时自动安装"偏好：主进程独立维护该开关，不推送会导致
     // 界面上已勾选、退出时却不安装
     await window.imDesktop?.setInstallOnQuit?.(installOnQuit.value)
@@ -101,18 +102,21 @@ export const useUpdateStore = defineStore('update', () => {
     if (!initialized || !window.imDesktop?.stopUpdate) return
     await window.imDesktop.stopUpdate()
     initialized = false
-    applyState({ status: 'idle' })
+    const state = await window.imDesktop.getUpdateState?.()
+    if (state) applyState(state)
   }
 
   /** 手动检查更新（设置页"检查更新"按钮） */
   async function checkNow() {
-    if (!supported.value || !window.imDesktop?.checkUpdateNow) return
+    if (!supported.value || !window.imDesktop?.checkUpdateNow || checking.value || installRequested.value) return
     checking.value = true
     manualCheckVisible.value = true
-    manualAutoInstall.value = true
+    dismissed.value = false
     try {
       const state = await window.imDesktop.checkUpdateNow()
       applyState(state)
+    } catch {
+      applyState({ status: 'failed', error: '更新失败，请稍后重试。' })
     } finally {
       checking.value = false
     }
@@ -120,8 +124,23 @@ export const useUpdateStore = defineStore('update', () => {
 
   /** 立即重启并安装更新 */
   async function quitAndInstall() {
-    if (!window.imDesktop?.quitAndInstallUpdate) return
-    await window.imDesktop.quitAndInstallUpdate()
+    if (!window.imDesktop?.quitAndInstallUpdate || installRequested.value || status.value !== 'downloaded') return
+    installRequested.value = true
+    error.value = ''
+    try {
+      const result = await window.imDesktop.quitAndInstallUpdate()
+      if (!result.success) {
+        const state = await window.imDesktop.getUpdateState?.()
+        if (state) applyState(state)
+        error.value = result.error || '更新失败，请稍后重试。'
+        if (state?.status !== 'installing') installRequested.value = false
+      }
+    } catch {
+      error.value = '更新失败，请稍后重试。'
+      // IPC 断开可能表示正在退出；只在主进程确认尚未安装时开放重试。
+      const state = await window.imDesktop.getUpdateState?.().catch(() => undefined)
+      if (state && state.status !== 'installing') { applyState(state); installRequested.value = false }
+    }
   }
 
   /** 切换"退出时自动安装" */
@@ -130,20 +149,16 @@ export const useUpdateStore = defineStore('update', () => {
     await window.imDesktop?.setInstallOnQuit?.(enabled)
   }
 
-  /** 关闭弹窗（稍后提醒）：普通更新本次运行不再自动弹出；
-   *  若手动检查的下载仍在进行，同时取消下载完成后的自动安装 */
+  /** 稍后只关闭提示；普通退出是否安装仍遵循现有复选框。 */
   function dismiss() {
+    if (installRequested.value || status.value === 'installing') return
     dismissed.value = true
     manualCheckVisible.value = false
-    if (manualAutoInstall.value) {
-      manualAutoInstall.value = false
-      void window.imDesktop?.cancelAutoInstall?.()
-    }
   }
 
   return {
     status, updateType, targetVersion, changelog, received, total, error,
-    installOnQuit, checking, manualAutoInstall, supported, hasUpdate, isForce, progressPercent, dialogVisible,
+    installOnQuit, checking, installRequested, supported, hasUpdate, isForce, progressPercent, dialogVisible,
     init, stop, checkNow, quitAndInstall, toggleInstallOnQuit, dismiss,
   }
 })

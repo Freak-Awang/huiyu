@@ -19,7 +19,7 @@ import {
   upsertLocalMessage,
   type LocalMessageRecord,
 } from './localMessages.js'
-import { installPendingUpdateOnQuit, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
+import { installPendingUpdateOnQuit, isInstallingUpdate, isUpdateInstallRequested, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
 import { registerP2pHandlers } from './p2pNative.js'
 import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
 import { createWindowModeController, LOGIN_WINDOW_SIZE } from './windowMode.js'
@@ -164,7 +164,7 @@ function createMainWindow() {
 
   // 关闭窗口时：非退出状态且配置为最小化到托盘，则隐藏而非关闭
   mainWindow.on('close', (event) => {
-    if (!isQuitting && closeBehavior === 'tray') {
+    if (!isQuitting && !isInstallingUpdate() && closeBehavior === 'tray') {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -281,18 +281,6 @@ ipcMain.handle('app:getVersion', (event) => {
 ipcMain.handle('app:getPlatform', (event) => {
   assertMainWindowSender(event)
   return process.platform
-})
-
-/** 更新安装后重启：命令行携带 --show-login（或安装包重新拉起时透传的
- *  --updated）时返回 true（一次性消费），登录页据此跳过本次自动登录，
- *  停留在登录界面（QQ/微信式更新体验） */
-let showLoginAfterUpdate = process.argv.includes('--show-login')
-  || process.argv.includes('--updated')
-ipcMain.handle('app:consumeShowLogin', (event) => {
-  assertMainWindowSender(event)
-  const flag = showLoginAfterUpdate
-  showLoginAfterUpdate = false
-  return flag
 })
 
 /** 设置关闭按钮行为：最小化到托盘 或 直接退出 */
@@ -507,6 +495,7 @@ const p2pNative = registerP2pHandlers({ assertTrusted: assertMainWindowSender,
 app.setAppUserModelId('com.im.desktop')
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
   try {
     configureInternalCertificateTrust()
   } catch (error) {
@@ -529,6 +518,10 @@ app.whenReady().then(async () => {
     getMainWindow: () => mainWindow,
     assertSender: assertMainWindowSender,
     onTrayProgress: (text) => tray?.setToolTip(text),
+    prepareToInstall: async () => {
+      await prepareForQuit()
+      isQuitting = true
+    },
   })
 
   // macOS：点击 Dock 图标时，若无窗口则重新创建
@@ -547,22 +540,39 @@ if (!hasSingleInstanceLock) {
   app.quit()
 } else {
   // 第二个实例启动时，聚焦已有实例的主窗口
-  app.on('second-instance', () => focusMainWindow())
+  app.on('second-instance', () => {
+    if (!isInstallingUpdate()) focusMainWindow()
+  })
 }
 
 // Flush durable P2P checkpoints before quitting or installing an update.
 let p2pQuitReady = false
 let p2pQuitPending = false
+let quitPreparation: Promise<void> | null = null
+function prepareForQuit() {
+  if (p2pQuitReady) return Promise.resolve()
+  if (!quitPreparation) {
+    quitPreparation = p2pNative.suspendAll().then(() => { p2pQuitReady = true })
+      .finally(() => { quitPreparation = null })
+  }
+  return quitPreparation
+}
 app.on('before-quit', (event) => {
   isQuitting = true
+  // 更新器调用前已保存传输进度，此时必须允许真正退出。
+  if (isInstallingUpdate()) return
+  if (isUpdateInstallRequested()) { event.preventDefault(); return }
   if (p2pQuitReady) return
   event.preventDefault()
   if (p2pQuitPending) return
   p2pQuitPending = true
-  void p2pNative.suspendAll().then(async () => {
-    p2pQuitReady = true
-    if (shouldInstallOnQuit()) await installPendingUpdateOnQuit()
-    else app.quit()
+  void prepareForQuit().then(async () => {
+    if (shouldInstallOnQuit()) {
+      const result = await installPendingUpdateOnQuit()
+      if (!result.success) {
+        p2pQuitPending = p2pQuitReady = isQuitting = false
+      }
+    } else app.quit()
   }).catch((error) => {
     p2pQuitPending = false
     isQuitting = false

@@ -272,9 +272,6 @@ contextBridge.exposeInMainWorld('imDesktop', {
   quitAndInstallUpdate: () =>
     ipcRenderer.invoke('update:quit-and-install') as Promise<{ success: boolean; error?: string }>,
 
-  /** 取消手动检查更新下载完成后的自动安装（用户选择"稍后提醒"时调用） */
-  cancelAutoInstall: () => ipcRenderer.invoke('update:cancel-auto-install') as Promise<boolean>,
-
   /** 监听更新状态变化，返回取消监听的函数 */
   onUpdateStateChanged: (handler: (state: {
     status: string

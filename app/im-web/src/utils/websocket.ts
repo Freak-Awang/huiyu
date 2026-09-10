@@ -129,8 +129,8 @@ export class WebSocketManager {
         this.connectionHandler?.(false)
         console.error('WebSocket 错误:', err)
       }
-    } catch (error) {
-      console.error('获取 WebSocket ticket 失败:', error)
+    } catch {
+      console.warn('获取 WebSocket ticket 失败，将自动重试')
       this.connectionHandler?.(false)
       if (!this.intentionalClose) this.scheduleReconnect()
     }

@@ -11,7 +11,7 @@ import http from './index'
  * @returns 包含 token 与用户信息的响应
  */
 export function login(username: string, password: string) {
-  return http.post('/api/auth/login', { username, password })
+  return http.post('/api/auth/login', { username, password }, { skipAuthRecovery: true })
 }
 
 /**
@@ -19,8 +19,17 @@ export function login(username: string, password: string) {
  * 调用 POST /api/auth/logout
  * @returns 登出结果
  */
-export function logout() {
-  return http.post('/api/auth/logout')
+export function logout(token?: string) {
+  return http.post('/api/auth/logout', undefined, {
+    skipAuthRecovery: true, headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+/** 现有协议以旧 JWT 刷新 JWT，没有独立 refreshToken 字段。 */
+export function refreshSession(token: string) {
+  return http.post<{ token: string }>('/api/auth/refresh', undefined, {
+    skipAuthRecovery: true, headers: { Authorization: `Bearer ${token}` },
+  })
 }
 
 /**

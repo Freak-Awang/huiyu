@@ -3,6 +3,7 @@
  * 密码修改与资料更新等接口，并提供用户数据规范化转换。
  */
 import http from './index'
+import type { AxiosRequestConfig } from 'axios'
 import { toServerUrl } from '../config/runtime'
 
 /**
@@ -44,8 +45,8 @@ export interface UserProfile {
  * 调用 GET /api/users/me
  * @returns 规范化后的用户资料
  */
-export function getProfile() {
-  return http.get<UserProfile>('/api/users/me').then((res) => ({
+export function getProfile(config?: AxiosRequestConfig) {
+  return http.get<UserProfile>('/api/users/me', config).then((res) => ({
     ...res,
     data: normalizeUserProfile(res.data),
   }))

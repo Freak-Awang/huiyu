@@ -88,7 +88,7 @@ function getInternalCaPath(): string {
 }
 
 /** Register strict, app-local trust for the Huiyu intranet server. */
-export function configureInternalCertificateTrust(): void {
+export function configureInternalCertificateTrust(targetSession = session.defaultSession): void {
   const caPath = getInternalCaPath()
   let caPem: string
 
@@ -107,7 +107,7 @@ export function configureInternalCertificateTrust(): void {
     throw new Error(`内置 CA 证书无效：${reason}`)
   }
 
-  session.defaultSession.setCertificateVerifyProc((request, callback) => {
+  targetSession.setCertificateVerifyProc((request, callback) => {
     callback(getCertificateVerifyResult(request.hostname, request.certificate.data, ca))
   })
 }

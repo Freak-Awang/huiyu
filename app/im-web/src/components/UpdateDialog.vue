@@ -7,11 +7,17 @@
         <div class="update-header">
           <span class="update-icon">📦</span>
           <div class="update-title">
-            <template v-if="updateStore.status === 'downloaded'">新版本 {{ updateStore.targetVersion }} 已就绪</template>
+            <template v-if="installing">正在重启并安装更新...</template>
+            <template v-else-if="updateStore.status === 'downloaded'">更新完成</template>
+            <template v-else-if="updateStore.status === 'failed'">更新失败</template>
             <template v-else-if="updateStore.status === 'downloading'">正在下载更新 {{ updateStore.targetVersion }}</template>
             <template v-else>发现新版本 {{ updateStore.targetVersion }}</template>
           </div>
         </div>
+        <p v-if="installing" class="update-message" role="status">正在安装新版本，应用将在安装完成后自动重新启动。</p>
+        <p v-else-if="updateStore.status === 'downloaded'" class="update-message">
+          新版本已下载完成，是否立即重启体验新版本？
+        </p>
 
         <div v-if="updateStore.changelog.length" class="update-changelog">
           <div class="changelog-title">更新内容：</div>
@@ -23,12 +29,11 @@
             <div class="progress-bar" :style="{ width: updateStore.progressPercent + '%' }"></div>
           </div>
           <div class="progress-text">{{ updateStore.progressPercent }}%（{{ formatSize(updateStore.received) }} / {{ formatSize(updateStore.total) }}）</div>
-          <div v-if="updateStore.manualAutoInstall" class="auto-install-tip">下载完成后将自动重启并安装</div>
         </div>
 
         <div v-if="updateStore.error" class="update-error">{{ updateStore.error }}</div>
 
-        <label v-if="!updateStore.isForce && updateStore.status !== 'downloading'" class="install-on-quit">
+        <label v-if="!updateStore.isForce && updateStore.status === 'downloaded' && !installing" class="install-on-quit">
           <input
             type="checkbox"
             :checked="updateStore.installOnQuit"
@@ -38,16 +43,14 @@
         </label>
 
         <div class="update-actions">
+          <button v-if="!updateStore.isForce" class="btn" :disabled="installing" @click="updateStore.dismiss()">稍后</button>
           <button
-            v-if="updateStore.status === 'downloaded'"
+            v-if="updateStore.status === 'downloaded' || installing"
             class="btn primary"
+            :disabled="installing"
             @click="updateStore.quitAndInstall()"
-          >立即重启更新</button>
-          <button
-            v-if="!updateStore.isForce"
-            class="btn"
-            @click="updateStore.dismiss()"
-          >稍后提醒</button>
+          >{{ installing ? '正在重启并安装更新...' : '立即重启' }}</button>
+          <button v-if="updateStore.status === 'failed'" class="btn primary" @click="updateStore.checkNow()">重试</button>
         </div>
 
         <div v-if="updateStore.isForce" class="force-tip">本次为强制安全更新，完成后方可继续使用</div>
@@ -65,6 +68,7 @@ import { useUpdateStore } from '../stores/update'
 
 const updateStore = useUpdateStore()
 const visible = computed(() => updateStore.dialogVisible)
+const installing = computed(() => updateStore.installRequested || updateStore.status === 'installing')
 
 function formatSize(bytes?: number) {
   const value = bytes || 0
@@ -161,9 +165,10 @@ function formatSize(bytes?: number) {
   color: #86909c;
 }
 
-.auto-install-tip {
-  font-size: 12px;
-  color: #3370ff;
+.update-message {
+  font-size: 13px;
+  color: #4e5969;
+  line-height: 1.6;
 }
 
 .update-error {
@@ -200,6 +205,7 @@ function formatSize(bytes?: number) {
 .btn:hover {
   background: #f2f3f5;
 }
+.btn:disabled { cursor: wait; opacity: 0.65; }
 
 .btn.primary {
   background: #3370ff;

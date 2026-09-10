@@ -4179,8 +4179,7 @@ onMounted(async () => {
   removeNotificationOpenListener = window.imDesktop?.onNotificationOpenConversation?.((conversationId) => {
     void openConversationFromNotification(conversationId)
   }) || null
-  await authStore.init()
-  if (chatDisposed) return
+  // 路由进入前已完成统一的 Session Restore，避免再次验证导致重复初始化。
   if (authStore.isLoggedIn) {
     try {
       await settingsStore.load()

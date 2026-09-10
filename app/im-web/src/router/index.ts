@@ -26,16 +26,21 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
+  await authStore.restoreSession()
+  // 网络失败时由 App 的启动页承载重试，不能显示 Login 或未认证的 Chat。
+  if (authStore.authState === 'initializing') return
   if (to.meta.requiresAuth !== false && !authStore.isLoggedIn) {
     return '/login'
   }
+  if (to.name === 'Login' && authStore.isLoggedIn) return '/'
 })
 
 // 仅同步已完成的导航，覆盖手动登录、自动进入、退出和认证失效跳转。
 router.afterEach((to, _from, failure) => {
   if (failure) return
+  if (useAuthStore().authState === 'initializing') return
   void window.imDesktop?.window?.setMode?.(to.name === 'Login' ? 'login' : 'chat')
     .catch((error) => console.error('同步桌面窗口模式失败', error))
 })

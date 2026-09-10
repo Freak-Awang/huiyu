@@ -1,37 +1,21 @@
 /**
- * 客户端在线更新模块（Electron 主进程）
- *
- * 参照 QQ/微信桌面版更新体验：
- * - 登录后 10 秒首次检测，之后每 4 小时定时检测，避免影响启动速度
- * - 普通更新后台静默下载（支持 Range 断点续传），下载完成仅提示
- * - 强制更新由渲染进程阻断式弹窗处理
- * - 安装时机为用户主动退出/重启应用时，通过 NSIS 安装包覆盖安装（安装向导可见）；
- *   手动点击"检查更新"时，下载校验完成后自动重启并安装
- *
- * 安全校验：下载完成校验 SHA256；若 userData 下存在 update-public-key.pem
- * 则额外进行 RSA（SHA256withRSA）签名验证，防止本地篡改。
+ * 保留内部更新 API / 灰度设备 ID / SHA256 与 RSA 协议，
+ * 使用 electron-updater 6.8.9 管理下载、NSIS 静默安装和安装后启动。
  */
 import { app, ipcMain, net } from 'electron'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
-import { spawn } from 'node:child_process'
+import updater from 'electron-updater'
+import type { AppUpdater, UpdateInfo } from 'electron-updater'
+import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider.js'
+import { resolveFiles } from 'electron-updater/out/providers/Provider.js'
 import { createHash, randomUUID, verify as cryptoVerify, createPublicKey } from 'node:crypto'
-import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Readable, Transform } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
+import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
 
-/** 更新状态机 */
-export type UpdateStatus =
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'downloading'
-  | 'downloaded'
-  | 'installing'
-  | 'failed'
-
-/** 服务端更新检查响应 */
+const { NsisUpdater, Provider } = updater
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'failed'
 interface UpdateCheckResult {
   hasUpdate: boolean
   updateType: 'none' | 'incremental' | 'full' | 'force'
@@ -39,557 +23,318 @@ interface UpdateCheckResult {
   targetBuild?: number
   changelog?: string[]
   downloadInfo?: {
-    packageId: number
-    packageType: 'full' | 'patch'
-    url: string
-    size: number
-    checksum: string
-    signature: string
-    fromVersion?: string
-    fileName: string
+    packageId: number; packageType: 'full' | 'patch'; url: string; size: number
+    checksum: string; signature: string; fromVersion?: string; fileName: string
   }
 }
-
-/** 暴露给渲染进程的更新状态快照 */
 export interface UpdateStateSnapshot {
   status: UpdateStatus
-  updateType?: string
-  targetVersion?: string
-  changelog?: string[]
-  received?: number
-  total?: number
-  fileName?: string
-  error?: string
+  updateType?: string; targetVersion?: string; changelog?: string[]
+  received?: number; total?: number; fileName?: string; error?: string
 }
-
-/** 初始化载荷（渲染进程登录后传入） */
-interface UpdateInitPayload {
-  serverOrigin: string
-  token: string
-  channel?: string
-}
-
-const CHECK_FIRST_DELAY_MS = 10_000
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
-
+interface UpdateInitPayload { serverOrigin: string; token: string; channel?: string }
+const UPDATE_ERROR = '更新失败，请稍后重试。'
 let getMainWindow: () => BrowserWindow | null = () => null
 let guardSender: (event: IpcMainInvokeEvent) => void = () => undefined
-
+let prepareToInstall: () => Promise<void> = async () => undefined
+let trayProgressHook: ((text: string) => void) | undefined
+let autoUpdater: InstanceType<typeof NsisUpdater> | undefined
+let registered = false
 let serverOrigin = ''
 let authToken = ''
 let channel = 'stable'
 let deviceId = ''
-
 let status: UpdateStatus = 'idle'
 let pendingInfo: UpdateCheckResult | null = null
 let downloadedFilePath: string | null = null
 let lastError: string | undefined
 let receivedBytes = 0
 let totalBytes = 0
-/**
- * 是否在退出应用时静默安装已就绪的更新。
- * 默认与渲染进程界面保持一致（弹窗中"退出时自动安装"默认勾选），
- * 登录后渲染进程会再同步一次用户的实际选择。
- */
 let installOnQuit = true
-/** 手动检查更新流程中：下载完成后自动重启安装（自动轮询检测不触发） */
-let manualCheckInProgress = false
+let updateInstallStarted = false
+let installingUpdate = false
+let checkPromise: Promise<UpdateStateSnapshot> | null = null
+let firstCheckTimer: NodeJS.Timeout | undefined
+let intervalTimer: NodeJS.Timeout | undefined
+let activeRequest: AbortController | undefined
+let cancelDownload: (() => void) | undefined
+let generation = 0
 
-let firstCheckTimer: NodeJS.Timeout | null = null
-let intervalTimer: NodeJS.Timeout | null = null
-let downloadAbort: AbortController | null = null
-
-/** 托盘进度回调（由 main.ts 注入，用于托盘 tooltip 展示下载进度） */
-let trayProgressHook: ((text: string) => void) | null = null
-
-function updatesDir() {
-  return join(app.getPath('userData'), 'updates')
-}
-
-function stateFilePath() {
-  return join(updatesDir(), 'update-state.json')
-}
-
-function deviceIdPath() {
-  return join(app.getPath('userData'), 'device-id.txt')
-}
-
-/** 读取或生成设备唯一标识（持久化到 userData，灰度哈希的一致性依赖它保持稳定） */
 async function ensureDeviceId() {
-  if (deviceId) return deviceId
-  try {
-    deviceId = (await readFile(deviceIdPath(), 'utf8')).trim()
-    if (deviceId) return deviceId
-  } catch {
-    // 首次运行，生成新设备 ID
-  }
+  if (deviceId) return
+  const path = join(app.getPath('userData'), 'device-id.txt')
+  try { deviceId = (await readFile(path, 'utf8')).trim() } catch { /* 首次运行 */ }
+  if (deviceId) return
   deviceId = randomUUID()
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(deviceIdPath(), deviceId, { encoding: 'utf8', mode: 0o600 })
-  return deviceId
+  await writeFile(path, deviceId, { encoding: 'utf8', mode: 0o600 })
 }
 
-/** 将版本号 x.y.z 换算为数字构建号（与服务端 buildNumber 对齐的兜底方案） */
-function buildNumberFromVersion(version: string) {
-  const parts = version.split('.').map((part) => Number.parseInt(part, 10) || 0)
-  return (parts[0] || 0) * 1_000_000 + (parts[1] || 0) * 1_000 + (parts[2] || 0)
+function authorizedHeaders() {
+  const parts = app.getVersion().split('.').map((part) => Number.parseInt(part, 10) || 0)
+  return {
+    Authorization: `Bearer ${authToken}`,
+    'X-Client-Version': app.getVersion(),
+    'X-Client-Build': String((parts[0] || 0) * 1_000_000 + (parts[1] || 0) * 1_000 + (parts[2] || 0)),
+    'X-Device-ID': deviceId, 'X-Channel': channel, 'X-Support-Patch': 'false',
+  }
 }
 
 function snapshot(): UpdateStateSnapshot {
-  return {
-    status,
-    updateType: pendingInfo?.updateType,
-    targetVersion: pendingInfo?.targetVersion,
-    changelog: pendingInfo?.changelog ?? [],
-    received: receivedBytes,
-    total: totalBytes,
-    fileName: pendingInfo?.downloadInfo?.fileName,
-    error: lastError,
-  }
+  return { status, updateType: pendingInfo?.updateType, targetVersion: pendingInfo?.targetVersion,
+    changelog: pendingInfo?.changelog ?? [], received: receivedBytes, total: totalBytes,
+    fileName: pendingInfo?.downloadInfo?.fileName, error: lastError }
 }
-
-/** 向渲染进程广播状态变化，并同步托盘提示 */
 function broadcastState() {
-  const state = snapshot()
   const window = getMainWindow()
-  if (window && !window.isDestroyed()) {
-    window.webContents.send('update:state-changed', state)
-  }
-  if (trayProgressHook) {
-    if (status === 'downloading' && totalBytes > 0) {
-      const percent = Math.floor((receivedBytes / totalBytes) * 100)
-      trayProgressHook(`ArtTalk - 正在下载更新 ${percent}%`)
-    } else if (status === 'downloaded') {
-      trayProgressHook('ArtTalk - 新版本已就绪，退出后自动安装')
-    } else {
-      trayProgressHook('ArtTalk')
-    }
-  }
+  if (window && !window.isDestroyed()) window.webContents.send('update:state-changed', snapshot())
+  trayProgressHook?.(status === 'downloading' && totalBytes > 0
+    ? `ArtTalk - 正在下载更新 ${Math.floor(receivedBytes / totalBytes * 100)}%`
+    : status === 'downloaded' ? 'ArtTalk - 更新完成，可重启安装' : 'ArtTalk')
 }
-
 function setStatus(next: UpdateStatus, error?: string) {
   status = next
   lastError = error
   broadcastState()
 }
-
-/** 持久化"已下载待安装"状态，应用重启后可恢复 */
-async function persistPendingState() {
-  try {
-    await mkdir(updatesDir(), { recursive: true })
-    if (pendingInfo && downloadedFilePath) {
-      await writeFile(stateFilePath(), JSON.stringify({
-        info: pendingInfo,
-        filePath: downloadedFilePath,
-      }), { encoding: 'utf8', mode: 0o600 })
-    } else {
-      await rm(stateFilePath(), { force: true })
-    }
-  } catch {
-    // 状态持久化失败不影响主流程
-  }
-}
-
-/** 应用启动时恢复上次下载完成但未安装的更新 */
-async function restorePendingState() {
-  try {
-    const raw = JSON.parse(await readFile(stateFilePath(), 'utf8')) as {
-      info?: UpdateCheckResult
-      filePath?: string
-    }
-    if (raw?.info?.hasUpdate && raw.filePath) {
-      await stat(raw.filePath)
-      pendingInfo = raw.info
-      downloadedFilePath = raw.filePath
-      setStatus('downloaded')
-    }
-  } catch {
-    pendingInfo = null
-    downloadedFilePath = null
-  }
-}
-
-function authorizedHeaders(): Record<string, string> {
-  return {
-    Authorization: `Bearer ${authToken}`,
-    'X-Client-Version': app.getVersion(),
-    'X-Client-Build': String(buildNumberFromVersion(app.getVersion())),
-    'X-Device-ID': deviceId,
-    'X-Channel': channel,
-    // 当前客户端不具备 xdelta3 补丁合并能力，始终请求全量包
-    'X-Support-Patch': 'false',
-  }
-}
-
-/** 上报更新遥测事件（失败静默忽略） */
-async function report(eventType: string, errorMessage?: string) {
+async function report(eventType: string) {
   if (!serverOrigin || !authToken) return
   try {
-    await net.fetch(new URL('/api/v1/update/report', serverOrigin).toString(), {
-      method: 'POST',
-      headers: { ...authorizedHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deviceId,
-        currentVersion: app.getVersion(),
-        targetVersion: pendingInfo?.targetVersion,
-        eventType,
-        errorMessage,
-        channel,
-      }),
+    await net.fetch(new URL('/api/v1/update/report', serverOrigin).href, {
+      method: 'POST', headers: { ...authorizedHeaders(), 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15_000), redirect: 'error',
+      body: JSON.stringify({ deviceId, currentVersion: app.getVersion(),
+        targetVersion: pendingInfo?.targetVersion, eventType, channel }),
     })
-  } catch {
-    // 遥测失败不影响更新流程
+  } catch { /* 遥测不阻塞客户端，不记录凭据或完整请求对象 */ }
+}
+async function verifyPackageSignature(checksum: string, signature?: string) {
+  let pem: string
+  try { pem = await readFile(join(app.getPath('userData'), 'update-public-key.pem'), 'utf8') }
+  catch (error) {
+    // 仅未配置公钥时使用 SHA256；公钥不可读/非法时不得降级放行。
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw new Error('更新公钥读取失败')
+  }
+  if (!signature?.startsWith('rsa:') || !cryptoVerify('RSA-SHA256',
+    Buffer.from(checksum), createPublicKey(pem), Buffer.from(signature.slice(4), 'base64'))) {
+    throw new Error('更新包签名验证失败')
   }
 }
 
-/** 执行一次更新检查 */
-async function checkForUpdates(manual = false): Promise<UpdateStateSnapshot> {
-  if (!serverOrigin || !authToken) {
-    return snapshot()
-  }
-  await ensureDeviceId()
-  // 已有就绪的更新时不重复检查（手动触发除外）
-  if (status === 'downloaded' && !manual) {
-    return snapshot()
-  }
-  // 记录手动触发标记，本次下载完成后自动进入安装
-  if (manual) {
-    manualCheckInProgress = true
-  }
-  setStatus('checking')
-  try {
-    const response = await net.fetch(new URL('/api/v1/update/check', serverOrigin).toString(), {
-      headers: authorizedHeaders(),
-    })
-    if (!response.ok) throw new Error(`检查更新失败 (${response.status})`)
-    const body = await response.json() as { code: number; data: UpdateCheckResult }
-    if (body.code !== 200 || !body.data) throw new Error('检查更新响应异常')
-
-    if (!body.data.hasUpdate || !body.data.downloadInfo) {
-      manualCheckInProgress = false
-      pendingInfo = null
-      setStatus('idle')
-      return snapshot()
-    }
-
-    pendingInfo = body.data
-    setStatus('available')
-
-    // 增量补丁需要客户端 xdelta3 支持，当前仅接受全量包
-    if (body.data.downloadInfo.packageType !== 'full') {
-      manualCheckInProgress = false
-      pendingInfo = null
-      setStatus('idle')
-      return snapshot()
-    }
-
-    await startDownload()
-    return snapshot()
-  } catch (error) {
-    if (manual) {
-      manualCheckInProgress = false
-    }
-    const message = error instanceof Error ? error.message : String(error)
-    setStatus(manual ? 'failed' : 'idle', message)
-    return snapshot()
-  }
-}
-
-/** 后台静默下载更新包，支持断点续传（.part 文件 + Range 头） */
-async function startDownload() {
-  const info = pendingInfo?.downloadInfo
-  if (!info || downloadAbort) return
-
-  await mkdir(updatesDir(), { recursive: true })
-  const safeName = info.fileName.replace(/[<>:"/\\|?*]/g, '_')
-  const finalPath = join(updatesDir(), safeName)
-  const partialPath = `${finalPath}.part`
-
-  const controller = new AbortController()
-  downloadAbort = controller
-  setStatus('downloading')
-
-  try {
-    // 已完成下载的文件直接复用
+/** 适配现有 JSON API，不要求服务器增加 latest.yml 接口。 */
+class InternalUpdateProvider extends Provider<UpdateInfo> {
+  constructor(_options: unknown, _updater: AppUpdater, runtime: ProviderRuntimeOptions) { super(runtime) }
+  async getLatestVersion(): Promise<UpdateInfo> {
+    const requestGeneration = generation
+    const controller = new AbortController()
+    activeRequest = controller
     try {
-    const existing = await stat(finalPath)
-    if (existing.size === info.size) {
-      receivedBytes = totalBytes = info.size
-      await finishDownload(finalPath)
-      return
-    }
-    } catch {
-      // 文件不存在，走正常下载
-    }
+      const response = await net.fetch(new URL('/api/v1/update/check', serverOrigin).href, {
+        headers: authorizedHeaders(), redirect: 'error',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+      })
+      if (!response.ok) throw new Error('更新检查失败')
+      const body = await response.json() as { code: number; data: UpdateCheckResult }
+      if (requestGeneration !== generation) throw new Error('更新检查已取消')
+      if (body.code !== 200 || !body.data) throw new Error('更新响应无效')
+      const result = body.data
+      if (!result.hasUpdate || !result.downloadInfo || result.downloadInfo.packageType !== 'full') {
+        pendingInfo = null
+        return { version: app.getVersion(), files: [], path: '', sha512: '', releaseDate: '' }
+      }
+      const info = result.downloadInfo
+      const url = new URL(info.url, serverOrigin)
+      const checksum = info.checksum.replace(/^sha256:/i, '').trim().toLowerCase()
+      if (url.origin !== serverOrigin || url.username || url.password
+        || !/^[a-f0-9]{64}$/.test(checksum) || !/^[^<>:"/\\|?*]+\.exe$/i.test(info.fileName)
+        || !Number.isSafeInteger(info.size) || info.size <= 0 || !result.targetVersion) {
+        throw new Error('更新包信息无效')
+      }
+      await verifyPackageSignature(checksum, info.signature)
+      if (requestGeneration !== generation) throw new Error('更新检查已取消')
+      pendingInfo = result
+      // 6.8.9 的 Provider/HTTP 下载器支持 sha2（SHA256）旧协议。
+      // 不伪造 SHA512；跨进程缓存没有 SHA512 时 updater 会重新下载并校验。
+      return { version: result.targetVersion, files: [], path: info.fileName, sha2: checksum,
+        releaseDate: '', releaseNotes: result.changelog?.join('\n') } as unknown as UpdateInfo
+    } finally { if (activeRequest === controller) activeRequest = undefined }
+  }
+  resolveFiles(info: UpdateInfo) {
+    const download = pendingInfo?.downloadInfo
+    if (!download) throw new Error('没有更新包')
+    return resolveFiles(info, new URL(serverOrigin), () => download.url)
+  }
+}
 
-    let resumeFrom = 0
+function getUpdater() {
+  if (autoUpdater) return autoUpdater
+  const instance = new NsisUpdater()
+  instance.autoDownload = false
+  // 退出自动安装由 main 保存传输进度后触发，保持原偏好且避免两个 quit 安装入口。
+  instance.autoInstallOnAppQuit = false
+  instance.disableDifferentialDownload = true
+  instance.disableWebInstaller = true
+  // 默认日志可能包含完整 HTTP 错误，改为只记录本模块的生命周期日志。
+  instance.logger = null
+  configureInternalCertificateTrust(instance.netSession)
+  instance.netSession.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: new URL(details.url).origin !== serverOrigin })
+  })
+  instance.setFeedURL({ provider: 'custom', updateProvider: InternalUpdateProvider })
+  instance.on('checking-for-update', () => { console.info('[Updater] checking'); setStatus('checking') })
+  instance.on('update-available', () => { console.info('[Updater] update available'); setStatus('available') })
+  instance.on('update-not-available', () => { pendingInfo = null; setStatus('idle') })
+  instance.on('download-progress', (progress) => {
+    receivedBytes = progress.transferred; totalBytes = progress.total; broadcastState()
+  })
+  instance.on('update-downloaded', (event) => {
+    if (!pendingInfo?.downloadInfo) return
+    downloadedFilePath = event.downloadedFile
+    receivedBytes = totalBytes = pendingInfo?.downloadInfo?.size || 0
+    console.info('[Updater] downloaded')
+    setStatus('downloaded')
+    void report('download_success')
+  })
+  instance.on('error', () => {
+    if (!authToken && !installingUpdate) return
+    console.warn('[Updater] update failed')
+    if (!installingUpdate) setStatus('failed', UPDATE_ERROR)
+    else { lastError = UPDATE_ERROR; broadcastState() }
+  })
+  autoUpdater = instance
+  return instance
+}
+function checkForUpdates(): Promise<UpdateStateSnapshot> {
+  if (!app.isPackaged || process.platform !== 'win32') {
+    console.info('[Updater] check skipped in development or unsupported platform')
+    return Promise.resolve(snapshot())
+  }
+  if (!serverOrigin || !authToken || updateInstallStarted || status === 'downloaded') return Promise.resolve(snapshot())
+  if (checkPromise) return checkPromise
+  const requestGeneration = generation
+  checkPromise = (async () => {
     try {
-      resumeFrom = (await stat(partialPath)).size
+      await ensureDeviceId()
+      const instance = getUpdater()
+      instance.requestHeaders = authorizedHeaders()
+      const result = await instance.checkForUpdates()
+      if (requestGeneration !== generation || !result?.isUpdateAvailable) return snapshot()
+      console.info('[Updater] downloading')
+      receivedBytes = 0; totalBytes = pendingInfo?.downloadInfo?.size || 0
+      setStatus('downloading')
+      cancelDownload = () => result.cancellationToken?.cancel()
+      await instance.downloadUpdate(result.cancellationToken)
     } catch {
-      resumeFrom = 0
-    }
-
-    const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` }
-    if (resumeFrom > 0 && resumeFrom < info.size) {
-      headers.Range = `bytes=${resumeFrom}-`
-    } else {
-      resumeFrom = 0
-    }
-
-    const downloadUrl = new URL(info.url, serverOrigin).toString()
-    const response = await net.fetch(downloadUrl, { headers, signal: controller.signal })
-    if (!response.ok && response.status !== 206) {
-      throw new Error(`下载失败 (${response.status})`)
-    }
-    if (!response.body) throw new Error('下载响应为空')
-
-    // 服务端不支持续传时从头下载
-    if (resumeFrom > 0 && response.status === 200) {
-      resumeFrom = 0
-    }
-
-    receivedBytes = resumeFrom
-    totalBytes = info.size
-    const writer = createWriteStream(partialPath, { flags: resumeFrom > 0 ? 'a' : 'w' })
-    let lastBroadcast = 0
-    const counter = new Transform({
-      transform(chunk, _encoding, callback) {
-        receivedBytes += chunk.length
-        const now = Date.now()
-        if (now - lastBroadcast > 500) {
-          lastBroadcast = now
-          broadcastState()
-        }
-        callback(null, chunk)
-      },
-    })
-    await pipeline(Readable.fromWeb(response.body as never), counter, writer)
-    await rename(partialPath, finalPath)
-    await finishDownload(finalPath)
-  } catch (error) {
-    if (controller.signal.aborted) return
-    const message = error instanceof Error ? error.message : String(error)
-    setStatus('failed', message)
-    void report('download_failed', message)
-  } finally {
-    downloadAbort = null
-  }
+      if (requestGeneration === generation) { setStatus('failed', UPDATE_ERROR); void report('download_failed') }
+    } finally { checkPromise = null; cancelDownload = undefined }
+    return snapshot()
+  })()
+  return checkPromise
 }
-
-/** 下载完成：校验 SHA256 与 RSA 签名，进入待安装状态 */
-async function finishDownload(filePath: string) {
-  const info = pendingInfo?.downloadInfo
-  if (!info) return
-
-  const expectedSha256 = info.checksum.replace(/^sha256:/i, '').trim().toLowerCase()
-  const actualSha256 = await sha256File(filePath)
-  if (actualSha256 !== expectedSha256) {
-    manualCheckInProgress = false
-    await rm(filePath, { force: true }).catch(() => undefined)
-    setStatus('failed', '更新包校验和不匹配')
-    void report('download_failed', 'checksum mismatch')
-    return
-  }
-
-  // 可选 RSA 验签：userData 下放置 update-public-key.pem 即启用
-  if (info.signature?.startsWith('rsa:')) {
-    const verified = await verifySignature(expectedSha256, info.signature.slice(4))
-    if (!verified) {
-      manualCheckInProgress = false
-      await rm(filePath, { force: true }).catch(() => undefined)
-      setStatus('failed', '更新包签名验证失败')
-      void report('download_failed', 'signature verification failed')
-      return
-    }
-  }
-
-  downloadedFilePath = filePath
-  receivedBytes = totalBytes = info.size
-  setStatus('downloaded')
-  await persistPendingState()
-  void report('download_success')
-
-  // 手动检查更新：下载校验完成后自动重启并安装
-  if (manualCheckInProgress) {
-    manualCheckInProgress = false
-    await quitAndInstall()
-  }
-}
-
-async function sha256File(filePath: string) {
-  const hash = createHash('sha256')
-  for await (const chunk of createReadStream(filePath)) {
-    hash.update(chunk as Buffer)
-  }
-  return hash.digest('hex')
-}
-
-/** 使用内置公钥验证 RSA 签名；未配置公钥时视为通过（降级为仅 SHA256 校验） */
-async function verifySignature(data: string, signatureBase64: string) {
-  try {
-    const publicKeyPem = await readFile(join(app.getPath('userData'), 'update-public-key.pem'), 'utf8')
-    const key = createPublicKey(publicKeyPem)
-    return cryptoVerify('RSA-SHA256', Buffer.from(data, 'utf8'), key, Buffer.from(signatureBase64, 'base64'))
-  } catch {
-    return true
-  }
-}
-
-/**
- * 退出并安装：拉起 NSIS 安装包（可见向导），随后退出当前进程。
- *
- * 安装包自身负责"等待/结束旧进程 → 覆盖安装 → 重新拉起应用"，因此不额外
- * 生成等待脚本：cmd 的 timeout 在无控制台句柄时会立即失败，chcp 切换代码页
- * 也可能打断批处理解析，均不可靠。
- *
- * - 不传 `/S`：展示安装向导与安装进度，安装结果对用户可见；
- * - `--updated`：以"更新"语义执行（跳过安装目录/安装模式等向导页，沿用原安装
- *   位置与快捷方式，并给旧进程留出优雅退出时间后再结束它）；该参数还会被安装
- *   向导"运行 ArtTalk"完成页透传给重新拉起的应用，以普通用户身份启动。
- */
 async function quitAndInstall() {
-  if (!downloadedFilePath || status !== 'downloaded') {
-    return { success: false, error: '没有待安装的更新' }
+  if (!app.isPackaged || process.platform !== 'win32') {
+    console.info('[Updater] quitAndInstall skipped in development mode')
+    return { success: false, error: '开发环境不会安装正式更新。' }
   }
+  if (updateInstallStarted) return { success: true }
+  if (!downloadedFilePath || status !== 'downloaded' || !autoUpdater) return { success: false, error: '没有待安装的更新' }
+  updateInstallStarted = true
+  console.info('[Updater] install requested')
+  setStatus('installing')
+  let packageValidated = false
   try {
-    setStatus('installing')
-    const installer = downloadedFilePath
-    if (!installer.toLowerCase().endsWith('.exe')) {
-      throw new Error('未知的更新包格式')
-    }
-    const child = spawn(installer, ['--updated'], {
-      detached: true,
-      stdio: 'ignore',
-    })
-    child.unref()
-    void report('install_success')
-    await rm(stateFilePath(), { force: true }).catch(() => undefined)
-    setTimeout(() => {
-      app.removeAllListeners('window-all-closed')
-      app.exit(0)
-    }, 500)
+    // 不信任旧版 update-state.json；安装前重新检查磁盘文件，防止下载后的本地篡改。
+    const info = pendingInfo!.downloadInfo!
+    if ((await stat(downloadedFilePath)).size !== info.size) throw new Error('更新包大小不匹配')
+    const hash = createHash('sha256')
+    for await (const chunk of createReadStream(downloadedFilePath)) hash.update(chunk)
+    const checksum = info.checksum.replace(/^sha256:/i, '').trim().toLowerCase()
+    if (hash.digest('hex') !== checksum) throw new Error('更新包校验失败')
+    await verifyPackageSignature(checksum, info.signature)
+    packageValidated = true
+    await prepareToInstall()
+    installingUpdate = true
+    clearTimers()
+    console.info('[Updater] quitting for update')
+    autoUpdater.quitAndInstall(true, true)
     return { success: true }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    setStatus('failed', message)
-    void report('install_failed', message)
-    return { success: false, error: message }
+  } catch {
+    if (!installingUpdate) {
+      updateInstallStarted = false
+      if (!packageValidated) {
+        await rm(downloadedFilePath, { force: true }).catch(() => undefined)
+        downloadedFilePath = null
+      }
+      setStatus(packageValidated ? 'downloaded' : 'failed', UPDATE_ERROR)
+    }
+    else { lastError = UPDATE_ERROR; broadcastState() }
+    void report('install_failed')
+    return { success: false, error: UPDATE_ERROR }
   }
 }
-
 function clearTimers() {
-  if (firstCheckTimer) clearTimeout(firstCheckTimer)
-  if (intervalTimer) clearInterval(intervalTimer)
-  firstCheckTimer = null
-  intervalTimer = null
+  clearTimeout(firstCheckTimer); clearInterval(intervalTimer)
+  firstCheckTimer = intervalTimer = undefined
 }
-
-/** 登录成功后初始化：10 秒首次检测 + 每 4 小时定时检测 */
 async function initialize(payload: UpdateInitPayload) {
-  if (!payload?.serverOrigin || !payload?.token) {
-    return { success: false, error: '更新初始化参数缺失' }
-  }
+  if (!payload?.token) return { success: false, error: '更新初始化参数缺失' }
   try {
     const origin = new URL(payload.serverOrigin)
-    const loopback = origin.protocol === 'http:'
-      && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-    if (origin.protocol !== 'https:' && !loopback) throw new Error('invalid origin')
+    if (origin.protocol !== 'https:' && !(origin.protocol === 'http:'
+      && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname))) throw new Error()
+    if (serverOrigin && serverOrigin !== origin.origin) {
+      stop()
+      pendingInfo = null
+      downloadedFilePath = null
+      setStatus('idle')
+    }
     serverOrigin = origin.origin
-  } catch {
-    return { success: false, error: '服务器地址非法' }
-  }
+  } catch { return { success: false, error: '服务器地址非法' } }
   authToken = payload.token
   channel = payload.channel || 'stable'
-  await ensureDeviceId()
-
+  if (autoUpdater) autoUpdater.requestHeaders = authorizedHeaders()
   clearTimers()
-  firstCheckTimer = setTimeout(() => void checkForUpdates(), CHECK_FIRST_DELAY_MS)
-  intervalTimer = setInterval(() => void checkForUpdates(), CHECK_INTERVAL_MS)
+  if (app.isPackaged && process.platform === 'win32') {
+    firstCheckTimer = setTimeout(() => void checkForUpdates(), 10_000)
+    intervalTimer = setInterval(() => void checkForUpdates(), 4 * 60 * 60 * 1000)
+  }
   return { success: true }
 }
-
-/** 登出时停止更新检测并中止下载 */
 function stop() {
+  if (updateInstallStarted) return
   clearTimers()
-  downloadAbort?.abort()
-  downloadAbort = null
   authToken = ''
-  pendingInfo = null
-  downloadedFilePath = null
-  installOnQuit = false
-  manualCheckInProgress = false
-  setStatus('idle')
-  void persistPendingState()
+  if (status !== 'downloaded') {
+    generation++
+    activeRequest?.abort()
+    cancelDownload?.()
+    pendingInfo = null
+    downloadedFilePath = null
+    setStatus('idle')
+  }
+  // 已下载更新属于应用，退出账号不删除它，也不改变退出安装偏好。
 }
-
-/**
- * 注册更新模块 IPC 处理器。
- * 在 app ready 后调用，同时恢复上次下载完成未安装的更新。
- */
 export function registerUpdateHandlers(deps: {
   getMainWindow: () => BrowserWindow | null
   assertSender: (event: IpcMainInvokeEvent) => void
+  prepareToInstall: () => Promise<void>
   onTrayProgress?: (text: string) => void
 }) {
-  getMainWindow = deps.getMainWindow
-  guardSender = deps.assertSender
-  trayProgressHook = deps.onTrayProgress ?? null
-  void restorePendingState().then(() => broadcastState())
-
-  ipcMain.handle('update:init', async (event, payload: UpdateInitPayload) => {
-    guardSender(event)
-    return initialize(payload)
-  })
-
-  ipcMain.handle('update:stop', (event) => {
-    guardSender(event)
-    stop()
-    return true
-  })
-
-  ipcMain.handle('update:check-now', async (event) => {
-    guardSender(event)
-    return checkForUpdates(true)
-  })
-
-  ipcMain.handle('update:get-state', (event) => {
-    guardSender(event)
-    return snapshot()
-  })
-
+  if (registered) return
+  registered = true
+  getMainWindow = deps.getMainWindow; guardSender = deps.assertSender
+  prepareToInstall = deps.prepareToInstall; trayProgressHook = deps.onTrayProgress
+  ipcMain.handle('update:init', (event, payload: UpdateInitPayload) => { guardSender(event); return initialize(payload) })
+  ipcMain.handle('update:stop', (event) => { guardSender(event); stop(); return true })
+  ipcMain.handle('update:check-now', (event) => { guardSender(event); return checkForUpdates() })
+  ipcMain.handle('update:get-state', (event) => { guardSender(event); return snapshot() })
   ipcMain.handle('update:set-install-on-quit', (event, enabled: boolean) => {
-    guardSender(event)
-    installOnQuit = enabled === true
-    return true
+    guardSender(event); installOnQuit = enabled === true; return true
   })
-
-  ipcMain.handle('update:cancel-auto-install', (event) => {
-    guardSender(event)
-    // 用户选择"稍后提醒"：取消手动检查下载完成后的自动安装
-    manualCheckInProgress = false
-    return true
-  })
-
-  ipcMain.handle('update:quit-and-install', async (event) => {
-    guardSender(event)
-    return quitAndInstall()
-  })
+  ipcMain.handle('update:quit-and-install', (event) => { guardSender(event); return quitAndInstall() })
 }
-
-/** 应用退出前调用：若用户选择"退出时自动安装"且更新已就绪，则安装更新 */
-export async function installPendingUpdateOnQuit() {
-  if (installOnQuit && status === 'downloaded' && downloadedFilePath) {
-    installOnQuit = false
-    await quitAndInstall()
-  }
-}
-
-/** 是否有待安装的更新（供 main.ts 退出提示使用） */
-export function hasPendingUpdate() {
-  return status === 'downloaded' && !!downloadedFilePath
-}
-
-/** 用户是否选择了"退出时自动安装"且更新已就绪（供 before-quit 判断） */
-export function shouldInstallOnQuit() {
-  return installOnQuit && hasPendingUpdate()
-}
+export function isInstallingUpdate() { return installingUpdate }
+export function isUpdateInstallRequested() { return updateInstallStarted }
+export function shouldInstallOnQuit() { return installOnQuit && status === 'downloaded' && !!downloadedFilePath }
+export async function installPendingUpdateOnQuit() { return quitAndInstall() }
