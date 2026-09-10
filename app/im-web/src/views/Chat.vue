@@ -61,6 +61,17 @@
         </button>
         <button
           class="nav-item"
+          :class="{ active: activeTab === 'groups' }"
+          :aria-current="activeTab === 'groups' ? 'page' : undefined"
+          type="button"
+          @click="activeTab = 'groups'"
+          title="群聊"
+        >
+          <img :src="groupIcon" class="nav-icon" alt="群聊" />
+          <span class="nav-label">群聊</span>
+        </button>
+        <button
+          class="nav-item"
           :class="{ active: activeTab === 'contacts' }"
           :aria-current="activeTab === 'contacts' ? 'page' : undefined"
           type="button"
@@ -72,7 +83,9 @@
         </button>
       </nav>
       <div class="sidebar-footer">
-        <button class="settings-btn" type="button" @click="showTransferCenter = true" title="文件传输中心" aria-label="文件传输中心">⇅</button>
+        <button class="settings-btn" type="button" @click="showTransferCenter = true" title="文件传输中心" aria-label="文件传输中心">
+          <img :src="transferIcon" alt="文件传输中心" />
+        </button>
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
           <img :src="sidebarMoreIcon" alt="更多" />
         </button>
@@ -82,7 +95,7 @@
     <TransferCenter :open="showTransferCenter" :items="transferCenterItems" :busy-ids="transferBusyIds" @close="showTransferCenter = false" @action="handleTransferAction" @conversation="openConversationFromNotification" />
 
     <!-- 中间面板：会话列表 或 通讯录 -->
-    <aside class="middle-panel" :aria-label="activeTab === 'chat' ? '会话列表' : '通讯录'">
+    <aside class="middle-panel" :aria-label="activeTab === 'chat' ? '会话列表' : activeTab === 'groups' ? '群聊列表' : '通讯录'">
       <!-- Chat List -->
       <template v-if="activeTab === 'chat'">
         <div class="panel-header">
@@ -193,6 +206,68 @@
           </div>
           <div v-if="chatStore.conversations.length === 0" class="empty-hint">
             暂无会话
+          </div>
+        </div>
+      </template>
+
+      <!-- Groups -->
+      <template v-if="activeTab === 'groups'">
+        <div class="panel-header">
+          <span class="panel-title">群聊</span>
+          <button
+            class="new-chat-btn"
+            type="button"
+            title="创建群聊"
+            aria-label="创建群聊"
+            @click="showCreateGroupDialog = true"
+          >
+            <img :src="newChatIcon" alt="" />
+          </button>
+        </div>
+        <div class="search-bar">
+          <input
+            v-model="groupSearchKeyword"
+            type="text"
+            placeholder="搜索群聊..."
+            aria-label="搜索群聊"
+            class="search-input"
+          />
+        </div>
+        <div class="conversation-list">
+          <div
+            v-for="conv in filteredGroups"
+            :key="conv.conversationId"
+            class="conv-item"
+            :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
+            @click="handleSelectConv(conv)"
+          >
+            <ConversationAvatar
+              class="conv-avatar"
+              :type="conv.type"
+              :src="getConversationAvatar(conv)"
+              :name="getConversationName(conv)"
+              :alt="`${getConversationName(conv)}头像`"
+            />
+            <div class="conv-info">
+              <div class="conv-top">
+                <span class="conv-name">{{ getConversationName(conv) }}</span>
+                <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
+              </div>
+              <div class="conv-bottom">
+                <span class="conv-preview">{{ conv.memberCount ? `${conv.memberCount}人` : '群聊' }}</span>
+                <span
+                  v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
+                  class="mention-badge"
+                >@我</span>
+                <span
+                  v-if="chatStore.getUnreadCount(conv.conversationId)"
+                  class="unread-badge"
+                >{{ chatStore.getUnreadCount(conv.conversationId) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="filteredGroups.length === 0" class="empty-hint">
+            {{ groupSearchKeyword ? '无结果' : '暂无群聊' }}
           </div>
         </div>
       </template>
@@ -1335,16 +1410,18 @@ import {
   normalizePresenceStatus,
   type PresenceStatus,
 } from '../utils/presence'
-import messageIcon from '../assets/icons/message.svg'
-import contactsIcon from '../assets/icons/contacts.svg'
-import moreIcon from '../assets/icons/更多.svg'
-import sidebarMoreIcon from '../assets/icons/more.svg'
-import newChatIcon from '../assets/icons/new chat.svg'
+import messageIcon from '../assets/icons/消息.svg'
+import contactsIcon from '../assets/icons/联系人.svg'
+import groupIcon from '../assets/icons/群聊.svg'
+import moreIcon from '../assets/icons/三横点.svg'
+import sidebarMoreIcon from '../assets/icons/三横杠.svg'
+import transferIcon from '../assets/icons/文件传输.svg'
+import newChatIcon from '../assets/icons/新建会话.svg'
 import pinIcon from '../assets/icons/置顶.svg'
 import emojiIcon from '../assets/icons/emoji.svg'
-import fileIcon from '../assets/icons/file.svg'
-import imageIcon from '../assets/icons/image.svg'
-import shakeIcon from '../assets/icons/shake.svg'
+import fileIcon from '../assets/icons/文件夹.svg'
+import imageIcon from '../assets/icons/图片.svg'
+import shakeIcon from '../assets/icons/窗口抖动.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -1360,7 +1437,7 @@ const transferNotificationStates = new Map<string, string>()
 const attachmentTaskPersistence = createAttachmentTaskPersistence()
 let attachmentAccountGeneration = 0
 
-const activeTab = ref<'chat' | 'contacts'>('chat') // 左侧导航当前激活标签
+const activeTab = ref<'chat' | 'groups' | 'contacts'>('chat') // 左侧导航当前激活标签
 const showSettingsDialog = ref(false) // 设置弹窗可见性
 const showProfileDialog = ref(false) // 用户资料弹窗可见性
 const selectedProfileUserId = ref('')
@@ -1370,6 +1447,7 @@ const selectedProfileUser = computed<any | null>(() => {
   return userProfileStore.resolveProfile(selectedProfileFallback.value || selectedProfileUserId.value)
 })
 const searchKeyword = ref('') // 会话搜索关键词
+const groupSearchKeyword = ref('') // 群聊搜索关键词
 const contactSearchKeyword = ref('') // 通讯录搜索关键词
 const failedAvatars = ref(new Set<string>()) // 加载失败的头像 URL 集合
 const manualPresence = ref<PresenceStatus>('online') // 用户手动设置的在线状态
@@ -1388,6 +1466,14 @@ const filteredConversations = computed(() => {
   return chatStore.unpinnedConversations.filter(
     (c) => getConversationName(c).toLowerCase().includes(kw)
   )
+})
+
+// 我创建或加入的所有群聊（GROUP 类型会话），支持按群名搜索
+const filteredGroups = computed(() => {
+  const groups = chatStore.conversations.filter((c) => c.type === 'GROUP')
+  if (!groupSearchKeyword.value) return groups
+  const kw = groupSearchKeyword.value.toLowerCase()
+  return groups.filter((c) => getConversationName(c).toLowerCase().includes(kw))
 })
 
 // 部门树数据
@@ -4220,8 +4306,8 @@ watch(
 
 /* Left Sidebar */
 .left-sidebar {
-  width: 76px;
-  min-width: 76px;
+  width: 60px;
+  min-width: 60px;
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
@@ -4398,8 +4484,8 @@ watch(
 
 /* Middle Panel */
 .middle-panel {
-  width: 310px;
-  min-width: 310px;
+  width: 250px;
+  min-width: 250px;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
@@ -4590,7 +4676,7 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 190px;
+  max-width: 170px;
 }
 
 .unread-badge {
@@ -6689,16 +6775,16 @@ button.more-field-row:hover {
 
 @media (max-width: 1180px) {
   .middle-panel {
-    width: 276px;
-    min-width: 276px;
+    width: 230px;
+    min-width: 230px;
   }
 
   .conv-name {
-    max-width: 155px;
+    max-width: 140px;
   }
 
   .conv-preview {
-    max-width: 166px;
+    max-width: 150px;
   }
 }
 

@@ -40,7 +40,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import minimizeIcon from '../assets/icons/最小化.svg'
 import maximizeIcon from '../assets/icons/最大化.svg'
 import restoreIcon from '../assets/icons/还原.svg'
-import closeIcon from '../assets/icons/关  闭.svg'
+import closeIcon from '../assets/icons/大关闭.svg'
 
 defineProps<{
   transparent?: boolean

@@ -117,7 +117,7 @@
 <script setup lang="ts">
 // 用户资料弹窗：展示/编辑个人资料、上传头像
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import closeIcon from '../assets/icons/关闭.svg'
+import closeIcon from '../assets/icons/小关闭.svg'
 import { uploadAvatar } from '../api/file'
 import { updateProfile, type UserProfile } from '../api/user'
 import { useAuthStore, type UserInfo } from '../stores/auth'

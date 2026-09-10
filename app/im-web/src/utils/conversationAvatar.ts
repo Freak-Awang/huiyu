@@ -5,7 +5,7 @@
  * - 群聊：优先自定义头像，加载失败回退到默认群头像，再失败显示文字回退
  * - 单聊：优先对方头像，加载失败显示首字回退
  */
-import defaultGroupAvatar from '../assets/default-group-avatar.svg'
+import defaultGroupAvatar from '../assets/默认群头像.svg'
 
 export { defaultGroupAvatar }
 
