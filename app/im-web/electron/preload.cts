@@ -231,7 +231,7 @@ contextBridge.exposeInMainWorld('imDesktop', {
       error?: string
     }>,
 
-  /** 初始化在线更新（登录成功后调用，启动 30 秒后首次检测） */
+  /** 初始化在线更新（登录成功后调用，启动 10 秒后首次检测） */
   initUpdate: (payload: { serverOrigin: string; token: string; channel?: string }) =>
     ipcRenderer.invoke('update:init', payload) as Promise<{ success: boolean; error?: string }>,
 
@@ -271,6 +271,9 @@ contextBridge.exposeInMainWorld('imDesktop', {
   /** 立即退出并安装已下载的更新 */
   quitAndInstallUpdate: () =>
     ipcRenderer.invoke('update:quit-and-install') as Promise<{ success: boolean; error?: string }>,
+
+  /** 取消手动检查更新下载完成后的自动安装（用户选择"稍后提醒"时调用） */
+  cancelAutoInstall: () => ipcRenderer.invoke('update:cancel-auto-install') as Promise<boolean>,
 
   /** 监听更新状态变化，返回取消监听的函数 */
   onUpdateStateChanged: (handler: (state: {

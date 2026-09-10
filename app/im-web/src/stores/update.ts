@@ -35,6 +35,8 @@ export const useUpdateStore = defineStore('update', () => {
   const installOnQuit = ref(true)
   /** 手动检查更新时强制展示弹窗 */
   const manualCheckVisible = ref(false)
+  /** 手动检查触发的下载：完成后主进程将自动重启安装 */
+  const manualAutoInstall = ref(false)
   const checking = ref(false)
 
   let initialized = false
@@ -70,9 +72,13 @@ export const useUpdateStore = defineStore('update', () => {
     if (state.status !== 'checking') {
       checking.value = false
     }
+    // 流程结束（无更新/失败/已安装退出）后清除手动自动安装标记
+    if (['idle', 'failed', 'installing'].includes(state.status)) {
+      manualAutoInstall.value = false
+    }
   }
 
-  /** 登录成功后初始化更新检测（30 秒首次检测 + 每 4 小时轮询） */
+  /** 登录成功后初始化更新检测（10 秒首次检测 + 每 4 小时轮询） */
   async function init(token: string) {
     if (!supported.value || !token) return
     const serverOrigin = getServerOrigin()
@@ -100,6 +106,7 @@ export const useUpdateStore = defineStore('update', () => {
     if (!supported.value || !window.imDesktop?.checkUpdateNow) return
     checking.value = true
     manualCheckVisible.value = true
+    manualAutoInstall.value = true
     try {
       const state = await window.imDesktop.checkUpdateNow()
       applyState(state)
@@ -120,15 +127,20 @@ export const useUpdateStore = defineStore('update', () => {
     await window.imDesktop?.setInstallOnQuit?.(enabled)
   }
 
-  /** 关闭弹窗（稍后提醒）：普通更新本次运行不再自动弹出 */
+  /** 关闭弹窗（稍后提醒）：普通更新本次运行不再自动弹出；
+   *  若手动检查的下载仍在进行，同时取消下载完成后的自动安装 */
   function dismiss() {
     dismissed.value = true
     manualCheckVisible.value = false
+    if (manualAutoInstall.value) {
+      manualAutoInstall.value = false
+      void window.imDesktop?.cancelAutoInstall?.()
+    }
   }
 
   return {
     status, updateType, targetVersion, changelog, received, total, error,
-    installOnQuit, checking, supported, hasUpdate, isForce, progressPercent, dialogVisible,
+    installOnQuit, checking, manualAutoInstall, supported, hasUpdate, isForce, progressPercent, dialogVisible,
     init, stop, checkNow, quitAndInstall, toggleInstallOnQuit, dismiss,
   }
 })

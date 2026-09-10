@@ -2,10 +2,11 @@
  * 客户端在线更新模块（Electron 主进程）
  *
  * 参照 QQ/微信桌面版更新体验：
- * - 登录后 30 秒首次检测，之后每 4 小时定时检测，避免影响启动速度
+ * - 登录后 10 秒首次检测，之后每 4 小时定时检测，避免影响启动速度
  * - 普通更新后台静默下载（支持 Range 断点续传），下载完成仅提示
  * - 强制更新由渲染进程阻断式弹窗处理
- * - 安装时机为用户主动退出/重启应用时，通过 NSIS 安装包静默覆盖安装
+ * - 安装时机为用户主动退出/重启应用时，通过 NSIS 安装包静默覆盖安装；
+ *   手动点击"检查更新"时，下载校验完成后自动重启并安装
  *
  * 安全校验：下载完成校验 SHA256；若 userData 下存在 update-public-key.pem
  * 则额外进行 RSA（SHA256withRSA）签名验证，防止本地篡改。
@@ -68,7 +69,7 @@ interface UpdateInitPayload {
   channel?: string
 }
 
-const CHECK_FIRST_DELAY_MS = 30_000
+const CHECK_FIRST_DELAY_MS = 10_000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 let getMainWindow: () => BrowserWindow | null = () => null
@@ -86,6 +87,8 @@ let lastError: string | undefined
 let receivedBytes = 0
 let totalBytes = 0
 let installOnQuit = false
+/** 手动检查更新流程中：下载完成后自动重启安装（自动轮询检测不触发） */
+let manualCheckInProgress = false
 
 let firstCheckTimer: NodeJS.Timeout | null = null
 let intervalTimer: NodeJS.Timeout | null = null
@@ -244,6 +247,10 @@ async function checkForUpdates(manual = false): Promise<UpdateStateSnapshot> {
   if (status === 'downloaded' && !manual) {
     return snapshot()
   }
+  // 记录手动触发标记，本次下载完成后自动进入安装
+  if (manual) {
+    manualCheckInProgress = true
+  }
   setStatus('checking')
   try {
     const response = await net.fetch(new URL('/api/v1/update/check', serverOrigin).toString(), {
@@ -254,6 +261,7 @@ async function checkForUpdates(manual = false): Promise<UpdateStateSnapshot> {
     if (body.code !== 200 || !body.data) throw new Error('检查更新响应异常')
 
     if (!body.data.hasUpdate || !body.data.downloadInfo) {
+      manualCheckInProgress = false
       pendingInfo = null
       setStatus('idle')
       return snapshot()
@@ -264,6 +272,7 @@ async function checkForUpdates(manual = false): Promise<UpdateStateSnapshot> {
 
     // 增量补丁需要客户端 xdelta3 支持，当前仅接受全量包
     if (body.data.downloadInfo.packageType !== 'full') {
+      manualCheckInProgress = false
       pendingInfo = null
       setStatus('idle')
       return snapshot()
@@ -272,6 +281,9 @@ async function checkForUpdates(manual = false): Promise<UpdateStateSnapshot> {
     await startDownload()
     return snapshot()
   } catch (error) {
+    if (manual) {
+      manualCheckInProgress = false
+    }
     const message = error instanceof Error ? error.message : String(error)
     setStatus(manual ? 'failed' : 'idle', message)
     return snapshot()
@@ -367,6 +379,7 @@ async function finishDownload(filePath: string) {
   const expectedSha256 = info.checksum.replace(/^sha256:/i, '').trim().toLowerCase()
   const actualSha256 = await sha256File(filePath)
   if (actualSha256 !== expectedSha256) {
+    manualCheckInProgress = false
     await rm(filePath, { force: true }).catch(() => undefined)
     setStatus('failed', '更新包校验和不匹配')
     void report('download_failed', 'checksum mismatch')
@@ -377,6 +390,7 @@ async function finishDownload(filePath: string) {
   if (info.signature?.startsWith('rsa:')) {
     const verified = await verifySignature(expectedSha256, info.signature.slice(4))
     if (!verified) {
+      manualCheckInProgress = false
       await rm(filePath, { force: true }).catch(() => undefined)
       setStatus('failed', '更新包签名验证失败')
       void report('download_failed', 'signature verification failed')
@@ -389,6 +403,12 @@ async function finishDownload(filePath: string) {
   setStatus('downloaded')
   await persistPendingState()
   void report('download_success')
+
+  // 手动检查更新：下载校验完成后自动重启并安装
+  if (manualCheckInProgress) {
+    manualCheckInProgress = false
+    await quitAndInstall()
+  }
 }
 
 async function sha256File(filePath: string) {
@@ -411,8 +431,8 @@ async function verifySignature(data: string, signatureBase64: string) {
 }
 
 /**
- * 退出并安装：启动 NSIS 安装包（/S 静默覆盖安装），随后退出当前进程。
- * 安装程序会替换应用文件并重启新版本。
+ * 退出并安装：通过 cmd 串联执行 NSIS 静默覆盖安装（/S），安装结束后
+ * 自动重新启动应用（回到登录页），随后退出当前进程。
  */
 async function quitAndInstall() {
   if (!downloadedFilePath || status !== 'downloaded') {
@@ -422,7 +442,13 @@ async function quitAndInstall() {
     setStatus('installing')
     const installer = downloadedFilePath
     if (installer.toLowerCase().endsWith('.exe')) {
-      const child = spawn(installer, ['/S'], { detached: true, stdio: 'ignore' })
+      // 先静默安装，安装成功后再拉起新版本应用（覆盖安装路径与 process.execPath 一致）
+      const command = `"${installer}" /S && start "" "${process.execPath}"`
+      const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      })
       child.unref()
     } else {
       throw new Error('未知的更新包格式')
@@ -449,7 +475,7 @@ function clearTimers() {
   intervalTimer = null
 }
 
-/** 登录成功后初始化：30 秒首次检测 + 每 4 小时定时检测 */
+/** 登录成功后初始化：10 秒首次检测 + 每 4 小时定时检测 */
 async function initialize(payload: UpdateInitPayload) {
   if (!payload?.serverOrigin || !payload?.token) {
     return { success: false, error: '更新初始化参数缺失' }
@@ -482,6 +508,7 @@ function stop() {
   pendingInfo = null
   downloadedFilePath = null
   installOnQuit = false
+  manualCheckInProgress = false
   setStatus('idle')
   void persistPendingState()
 }
@@ -524,6 +551,13 @@ export function registerUpdateHandlers(deps: {
   ipcMain.handle('update:set-install-on-quit', (event, enabled: boolean) => {
     guardSender(event)
     installOnQuit = enabled === true
+    return true
+  })
+
+  ipcMain.handle('update:cancel-auto-install', (event) => {
+    guardSender(event)
+    // 用户选择"稍后提醒"：取消手动检查下载完成后的自动安装
+    manualCheckInProgress = false
     return true
   })
 

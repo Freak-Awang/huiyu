@@ -23,6 +23,7 @@
             <div class="progress-bar" :style="{ width: updateStore.progressPercent + '%' }"></div>
           </div>
           <div class="progress-text">{{ updateStore.progressPercent }}%（{{ formatSize(updateStore.received) }} / {{ formatSize(updateStore.total) }}）</div>
+          <div v-if="updateStore.manualAutoInstall" class="auto-install-tip">下载完成后将自动重启并安装</div>
         </div>
 
         <div v-if="updateStore.error" class="update-error">{{ updateStore.error }}</div>
@@ -158,6 +159,11 @@ function formatSize(bytes?: number) {
 .progress-text {
   font-size: 12px;
   color: #86909c;
+}
+
+.auto-install-tip {
+  font-size: 12px;
+  color: #3370ff;
 }
 
 .update-error {

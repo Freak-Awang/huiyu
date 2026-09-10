@@ -208,6 +208,7 @@ declare global {
       getUpdateState?: () => Promise<DesktopUpdateState>
       setInstallOnQuit?: (enabled: boolean) => Promise<boolean>
       quitAndInstallUpdate?: () => Promise<{ success: boolean; error?: string }>
+      cancelAutoInstall?: () => Promise<boolean>
       onUpdateStateChanged?: (handler: (state: DesktopUpdateState) => void) => () => void
       window?: {
         setMode?: (mode: 'login' | 'chat') => Promise<boolean>
