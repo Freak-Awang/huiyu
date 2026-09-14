@@ -66,12 +66,15 @@ onUnmounted(() => {
   border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit;
   font-size: var(--font-base); font-weight: 400; text-align: left; cursor: default;
 }
-.context-menu-panel button.active { background: var(--bg-hover-light); }
+.context-menu-panel button.active { background: var(--menu-hover); }
+.context-menu-panel button.active .context-menu-icon { color: var(--accent); }
 .context-menu-panel button.danger.active { background: var(--danger-bg); color: var(--danger); }
 .context-menu-panel button[aria-disabled='true'] { color: var(--text-disabled); }
 .context-menu-label { flex: 1; overflow-wrap: anywhere; }
 .context-menu-shortcut { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
 .context-menu-icon, .context-menu-arrow { width: 15px; height: 15px; flex: 0 0 15px; }
+.context-menu-icon { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+.context-menu-icon svg { width: 100%; height: 100%; display: block; fill: currentColor; }
 .context-menu-arrow { stroke: currentColor; fill: none; stroke-width: 1.5; }
 .context-menu-separator { height: 1px; margin: 4px 6px; background: var(--border-subtle); }
 .context-menu-leave-active { transition: opacity 80ms ease-in; pointer-events: none; }

@@ -12,7 +12,7 @@
         type="button"
         @click="minimize"
       >
-        <img :src="minimizeIcon" alt="最小化" />
+        <AppIcon :svg="minimizeIcon" label="最小化" />
       </button>
       <button
         v-if="!hideMaximize"
@@ -21,7 +21,7 @@
         type="button"
         @click="toggleMaximize"
       >
-        <img :src="isMaximized ? restoreIcon : maximizeIcon" alt="最大化/还原" />
+        <AppIcon :svg="isMaximized ? restoreIcon : maximizeIcon" label="最大化/还原" />
       </button>
       <button
         class="desktop-window-button desktop-window-close"
@@ -29,7 +29,7 @@
         type="button"
         @click="closeWindow"
       >
-        <img :src="closeIcon" alt="关闭" />
+        <AppIcon :svg="closeIcon" label="关闭" />
       </button>
     </div>
   </div>
@@ -37,10 +37,11 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import minimizeIcon from '../assets/icons/最小化.svg'
-import maximizeIcon from '../assets/icons/最大化.svg'
-import restoreIcon from '../assets/icons/还原.svg'
-import closeIcon from '../assets/icons/大关闭.svg'
+import AppIcon from './AppIcon.vue'
+import minimizeIcon from '../assets/icons/最小化.svg?raw'
+import maximizeIcon from '../assets/icons/最大化.svg?raw'
+import restoreIcon from '../assets/icons/还原.svg?raw'
+import closeIcon from '../assets/icons/大关闭.svg?raw'
 
 defineProps<{
   transparent?: boolean
@@ -115,27 +116,15 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-tertiary, #777);
   cursor: pointer;
-  transition: background var(--transition-normal, 0.2s), color var(--transition-normal, 0.2s);
-}
-
-.desktop-window-button img {
-  width: 16px;
-  height: 16px;
+  font-size: 16px;
   opacity: 0.7;
-  transition: opacity var(--transition-normal, 0.2s);
-}
-
-.desktop-window-button:hover img {
-  opacity: 1;
-}
-
-.desktop-window-close:hover img {
-  filter: invert(1) brightness(2);
+  transition: background var(--transition-normal, 0.2s), color var(--transition-normal, 0.2s), opacity var(--transition-normal, 0.2s);
 }
 
 .desktop-window-button:hover {
   background: var(--bg-hover-light, #e0e0e0);
   color: var(--text-primary, #333);
+  opacity: 1;
 }
 
 .desktop-window-close:hover {
@@ -144,7 +133,7 @@ onBeforeUnmount(() => {
 }
 
 .desktop-window-button:focus-visible {
-  outline: 2px solid var(--accent, #667eea);
+  outline: 2px solid var(--accent, #F87B08);
   outline-offset: -2px;
 }
 </style>

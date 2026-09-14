@@ -10,7 +10,7 @@
         :aria-expanded="item.children?.length ? submenuId === item.id : undefined"
         :class="{ active: active === index && !item.disabled, danger: item.danger }"
         @mouseenter="activate(index, $event)" @click.stop="choose(item, $event)">
-        <img v-if="item.icon" :src="item.icon" class="context-menu-icon" alt="" />
+        <span v-if="item.icon" class="context-menu-icon" aria-hidden="true" v-html="item.icon"></span>
         <span class="context-menu-label">{{ item.label }}</span>
         <span v-if="item.shortcut" class="context-menu-shortcut">{{ item.shortcut }}</span>
         <svg v-if="item.children?.length" class="context-menu-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>

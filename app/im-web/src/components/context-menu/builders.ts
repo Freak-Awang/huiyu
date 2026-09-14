@@ -1,9 +1,9 @@
 import type { Message } from '../../api/message'
 import type { Conversation, ConversationMember } from '../../api/conversation'
 import type { ContextMenuItem } from './types'
-import imageIcon from '../../assets/icons/图片.svg'
-import folderIcon from '../../assets/icons/文件夹.svg'
-import pinIcon from '../../assets/icons/置顶.svg'
+import imageIcon from '../../assets/icons/图片.svg?raw'
+import folderIcon from '../../assets/icons/文件夹.svg?raw'
+import pinIcon from '../../assets/icons/置顶.svg?raw'
 
 export type MenuAction = () => void | Promise<unknown>
 export type MessageCommand = 'reply' | 'copy' | 'forward' | 'favorite' | 'select' | 'recall' | 'delete' | 'view' | 'copyImage' | 'save' | 'open' | 'reveal' | 'download' | 'copyLink' | 'openLink' | 'retry'

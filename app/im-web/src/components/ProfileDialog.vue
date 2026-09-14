@@ -5,7 +5,7 @@
       <!-- 头像区域：展示头像、在线状态 -->
       <header class="profile-cover">
         <button type="button" class="profile-close" title="关闭" @click="close">
-          <img :src="closeIcon" alt="关闭" />
+          <AppIcon :svg="closeIcon" label="关闭" />
         </button>
         <button
           v-if="isSelf"
@@ -117,7 +117,8 @@
 <script setup lang="ts">
 // 用户资料弹窗：展示/编辑个人资料、上传头像
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import closeIcon from '../assets/icons/小关闭.svg'
+import AppIcon from './AppIcon.vue'
+import closeIcon from '../assets/icons/小关闭.svg?raw'
 import { uploadAvatar } from '../api/file'
 import { updateProfile, type UserProfile } from '../api/user'
 import { useAuthStore, type UserInfo } from '../stores/auth'
@@ -355,7 +356,7 @@ function revokeAvatarObjectUrl() {
   align-items: center;
   gap: 16px;
   padding: 24px;
-  background: linear-gradient(135deg, #4f7cff, #24a19c);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: #fff;
 }
 
@@ -372,18 +373,13 @@ function revokeAvatarObjectUrl() {
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
+  color: #fff;
+  font-size: 19px;
+  transition: color 0.2s ease;
 }
 
-.profile-close img {
-  display: block;
-  width: 19px;
-  height: 19px;
-  filter: brightness(0) invert(1);
-  transition: filter 0.2s ease;
-}
-
-.profile-close:hover img {
-  filter: sepia(1) saturate(50) hue-rotate(350deg);
+.profile-close:hover {
+  color: var(--accent);
 }
 
 .profile-avatar {
@@ -396,7 +392,7 @@ function revokeAvatarObjectUrl() {
   justify-content: center;
   border: 3px solid rgba(255, 255, 255, 0.75);
   border-radius: 50%;
-  background: #667eea;
+  background: var(--accent-avatar);
   color: #fff;
   padding: 0;
   font-family: inherit;
@@ -451,16 +447,16 @@ function revokeAvatarObjectUrl() {
   bottom: 2px;
   width: 14px;
   height: 14px;
-  border: 2px solid #fff;
+  border: 2px solid var(--bg-surface);
   border-radius: 50%;
-  background: #9ca3af;
+  background: var(--presence-offline);
   z-index: 1;
 }
 
-.presence-online { background: #22c55e; }
-.presence-busy { background: #ef4444; }
-.presence-away { background: #f59e0b; }
-.presence-offline { background: #9ca3af; }
+.presence-online { background: var(--presence-online); }
+.presence-busy { background: var(--presence-busy); }
+.presence-away { background: var(--presence-away); }
+.presence-offline { background: var(--presence-offline); }
 
 .profile-title h2 {
   margin: 0 0 6px;
@@ -533,7 +529,7 @@ function revokeAvatarObjectUrl() {
 
 .profile-field input:focus,
 .profile-field textarea:focus {
-  border-color: #4f7cff;
+  border-color: var(--accent);
   outline: none;
 }
 
@@ -582,8 +578,8 @@ function revokeAvatarObjectUrl() {
 
 .save-btn {
   min-width: 86px;
-  background: #4f7cff;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text-on);
 }
 
 .cancel-btn:disabled,

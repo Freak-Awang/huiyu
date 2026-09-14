@@ -82,7 +82,7 @@ function formatSize(bytes?: number) {
 .update-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -95,10 +95,10 @@ function formatSize(bytes?: number) {
 
 .update-dialog {
   width: 380px;
-  background: #fff;
-  border-radius: 10px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
   padding: 20px 24px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-dialog);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -117,15 +117,15 @@ function formatSize(bytes?: number) {
 .update-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--text-primary);
 }
 
 .update-changelog {
-  background: #f5f6f7;
-  border-radius: 6px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--text-secondary);
   max-height: 160px;
   overflow-y: auto;
 }
@@ -133,7 +133,7 @@ function formatSize(bytes?: number) {
 .changelog-title {
   font-weight: 600;
   margin-bottom: 4px;
-  color: #1f2329;
+  color: var(--text-primary);
 }
 
 .changelog-item {
@@ -148,32 +148,32 @@ function formatSize(bytes?: number) {
 
 .progress-track {
   height: 6px;
-  background: #e5e6eb;
+  background: var(--bg-hover-subtle);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
-  background: #3370ff;
+  background: var(--accent);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
 
 .progress-text {
   font-size: 12px;
-  color: #86909c;
+  color: var(--text-muted);
 }
 
 .update-message {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
 .update-error {
   font-size: 12px;
-  color: #f53f3f;
+  color: var(--danger);
 }
 
 .install-on-quit {
@@ -181,7 +181,7 @@ function formatSize(bytes?: number) {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
 }
@@ -194,32 +194,33 @@ function formatSize(bytes?: number) {
 
 .btn {
   padding: 7px 16px;
-  border: 1px solid #e5e6eb;
-  border-radius: 6px;
-  background: #fff;
-  color: #4e5969;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
 }
 
 .btn:hover {
-  background: #f2f3f5;
+  background: var(--bg-hover-light);
 }
 .btn:disabled { cursor: wait; opacity: 0.65; }
 
 .btn.primary {
-  background: #3370ff;
-  border-color: #3370ff;
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text-on);
 }
 
 .btn.primary:hover {
-  background: #2860e1;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .force-tip {
   text-align: center;
   font-size: 12px;
-  color: #86909c;
+  color: var(--text-muted);
 }
 </style>

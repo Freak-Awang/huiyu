@@ -298,7 +298,7 @@ function statusText(draft: AttachmentDraft) {
 }
 
 .has-error .attachment-draft-meta.is-status {
-  color: #a52f2a;
+  color: var(--danger);
 }
 
 .attachment-draft-image-status {
@@ -317,7 +317,7 @@ function statusText(draft: AttachmentDraft) {
 }
 
 .has-error .attachment-draft-image-status {
-  background: rgba(165, 47, 42, 0.9);
+  background: color-mix(in srgb, var(--danger) 90%, transparent);
 }
 
 .attachment-draft-controls {
@@ -348,14 +348,14 @@ function statusText(draft: AttachmentDraft) {
 .attachment-draft-action {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 999px;
-  color: #4053bf;
+  color: var(--accent);
   font-size: 11px;
   min-height: 22px;
   padding: 2px 7px;
 }
 
 .attachment-draft-action:hover:not(:disabled) {
-  background: #fff;
+  background: var(--bg-surface);
   color: var(--accent-hover);
 }
 
@@ -370,38 +370,16 @@ function statusText(draft: AttachmentDraft) {
 }
 
 :global(.dark-theme) .attachment-draft-item {
-  background: #303642;
-  border-color: #4c5362;
-}
-
-:global(.dark-theme) .attachment-draft-item.has-error {
-  border-color: #f08b84;
-}
-
-:global(.dark-theme) .attachment-draft-name {
-  color: #edf0f5;
+  background: var(--bg-surface);
+  border-color: var(--border-light);
 }
 
 :global(.dark-theme) .attachment-draft-meta {
-  color: #bdc4d1;
-}
-
-:global(.dark-theme) .attachment-draft-meta.is-status,
-:global(.dark-theme) .attachment-draft-action {
-  color: #aeb8ff;
-}
-
-:global(.dark-theme) .has-error .attachment-draft-meta.is-status {
-  color: #ffaaa4;
-}
-
-:global(.dark-theme) .attachment-draft-icon {
-  background: #41495c;
-  color: #c4ccff;
+  color: var(--text-secondary);
 }
 
 :global(.dark-theme) .attachment-draft-action {
-  background: rgba(48, 54, 66, 0.92);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
 }
 
 @media (max-width: 760px) {

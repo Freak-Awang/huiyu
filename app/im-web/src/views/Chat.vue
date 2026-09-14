@@ -63,7 +63,7 @@
           @click="activeTab = 'chat'"
           title="消息"
         >
-          <img :src="messageIcon" class="nav-icon" alt="消息" />
+          <AppIcon :svg="messageIcon" class="nav-icon" label="消息" />
           <span class="nav-label">消息</span>
         </button>
         <button
@@ -74,7 +74,7 @@
           @click="activeTab = 'groups'"
           title="群聊"
         >
-          <img :src="groupIcon" class="nav-icon" alt="群聊" />
+          <AppIcon :svg="groupIcon" class="nav-icon" label="群聊" />
           <span class="nav-label">群聊</span>
         </button>
         <button
@@ -85,7 +85,7 @@
           @click="activeTab = 'contacts'"
           title="通讯录"
         >
-          <img :src="contactsIcon" class="nav-icon" alt="通讯录" />
+          <AppIcon :svg="contactsIcon" class="nav-icon" label="通讯录" />
           <span class="nav-label">通讯录</span>
         </button>
       </nav>
@@ -94,10 +94,10 @@
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" /></svg>
         </button>
         <button class="settings-btn" type="button" @click="showTransferCenter = true" title="文件传输中心" aria-label="文件传输中心">
-          <img :src="transferIcon" alt="文件传输中心" />
+          <AppIcon :svg="transferIcon" label="文件传输中心" />
         </button>
         <button class="settings-btn" type="button" @click="showSettingsDialog = true" title="更多">
-          <img :src="sidebarMoreIcon" alt="更多" />
+          <AppIcon :svg="sidebarMoreIcon" label="更多" />
         </button>
       </div>
     </aside>
@@ -117,7 +117,7 @@
             aria-label="创建群聊"
             @click="showCreateGroupDialog = true"
           >
-            <img :src="newChatIcon" alt="" />
+            <AppIcon :svg="newChatIcon" />
           </button>
         </div>
         <div class="search-bar">
@@ -172,7 +172,7 @@
                   >{{ chatStore.getUnreadCount(conv.conversationId) }}</span>
                 </div>
               </div>
-              <img :src="pinIcon" class="pin-icon" alt="置顶" />
+              <AppIcon :svg="pinIcon" class="pin-icon" label="置顶" />
             </div>
           </template>
           <!-- Unpinned -->
@@ -233,7 +233,7 @@
             aria-label="创建群聊"
             @click="showCreateGroupDialog = true"
           >
-            <img :src="newChatIcon" alt="" />
+            <AppIcon :svg="newChatIcon" />
           </button>
         </div>
         <div class="search-bar">
@@ -411,7 +411,7 @@
           </div>
           <div class="chat-header-actions">
             <button class="action-btn" type="button" title="更多" aria-label="会话设置" @click="toggleMoreDrawer">
-              <img :src="moreIcon" alt="更多" />
+              <AppIcon :svg="moreIcon" label="更多" />
             </button>
           </div>
         </div>
@@ -526,7 +526,7 @@
                   </template>
                   <template v-else-if="msg.messageType === 'SHAKE'">
                     <div class="text-bubble shake-bubble">
-                      <img :src="shakeIcon" alt="" class="shake-bubble-icon" />
+                      <AppIcon :svg="shakeIcon" class="shake-bubble-icon" />
                       <span>{{ msg.senderId === String(authStore.currentUser?.userId ?? '') ? '你' : getMessageSenderName(msg) }}发送了一个窗口抖动</span>
                     </div>
                   </template>
@@ -583,7 +583,7 @@
             class="attachment-drop-overlay"
             aria-hidden="true"
           >
-            <img :src="fileIcon" alt="" />
+            <AppIcon :svg="fileIcon" class="attachment-drop-icon" />
             <strong>松开以添加到当前会话</strong>
             <span>图片、视频和文件将在点击发送后上传</span>
           </div>
@@ -608,7 +608,17 @@
                   class="attachment-feedback"
                   :class="{ error: attachmentFeedbackIsError }"
                   role="alert"
-                >{{ attachmentFeedback }}</p>
+                >
+                  <span>{{ attachmentFeedback }}</span>
+                  <button
+                    type="button"
+                    class="attachment-feedback-close"
+                    aria-label="关闭附件提示"
+                    @click="setAttachmentFeedback('')"
+                  >
+                    ×
+                  </button>
+                </p>
                 <p v-if="draftSaveError" class="attachment-feedback error" role="alert">{{ draftSaveError }}</p>
                 <textarea
                   ref="messageInputRef"
@@ -632,7 +642,7 @@
                   type="button"
                   @click="toggleEmojiPanel"
                 >
-                  <img :src="emojiIcon" alt="表情" />
+                  <AppIcon :svg="emojiIcon" label="表情" />
                 </button>
                 <label
                   class="tool-btn"
@@ -644,7 +654,7 @@
                   @keydown.enter.prevent="activateFileLabel"
                   @keydown.space.prevent="activateFileLabel"
                 >
-                  <img :src="imageIcon" alt="" />
+                  <AppIcon :svg="imageIcon" />
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp"
@@ -665,7 +675,7 @@
                   @keydown.space.prevent="activateFileLabel"
                   @click.capture="guardP2pPicker"
                 >
-                  <img :src="fileIcon" alt="" />
+                  <AppIcon :svg="fileIcon" />
                   <input type="file" multiple hidden :disabled="isSendingMessage" @change="onSendFile" />
                 </label>
                 <label
@@ -691,7 +701,7 @@
                   :disabled="isSendingMessage"
                   @click="sendShakeMessage()"
                 >
-                  <img :src="shakeIcon" alt="窗口抖动" />
+                  <AppIcon :svg="shakeIcon" label="窗口抖动" />
                 </button>
               </div>
               <button
@@ -837,7 +847,7 @@
 
       <template v-else>
         <div class="no-conversation">
-          <img :src="messageIcon" class="no-conv-icon" alt="消息" />
+          <AppIcon :svg="messageIcon" class="no-conv-icon" label="消息" />
           <p>选择一个会话开始聊天</p>
         </div>
       </template>
@@ -1420,18 +1430,19 @@ import {
   normalizePresenceStatus,
   type PresenceStatus,
 } from '../utils/presence'
-import messageIcon from '../assets/icons/消息.svg'
-import contactsIcon from '../assets/icons/联系人.svg'
-import groupIcon from '../assets/icons/群聊.svg'
-import moreIcon from '../assets/icons/三横点.svg'
-import sidebarMoreIcon from '../assets/icons/三横杠.svg'
-import transferIcon from '../assets/icons/文件传输.svg'
-import newChatIcon from '../assets/icons/新建会话.svg'
-import pinIcon from '../assets/icons/置顶.svg'
-import emojiIcon from '../assets/icons/emoji.svg'
-import fileIcon from '../assets/icons/文件夹.svg'
-import imageIcon from '../assets/icons/图片.svg'
-import shakeIcon from '../assets/icons/窗口抖动.svg'
+import AppIcon from '../components/AppIcon.vue'
+import messageIcon from '../assets/icons/消息.svg?raw'
+import contactsIcon from '../assets/icons/联系人.svg?raw'
+import groupIcon from '../assets/icons/群聊.svg?raw'
+import moreIcon from '../assets/icons/三横点.svg?raw'
+import sidebarMoreIcon from '../assets/icons/三横杠.svg?raw'
+import transferIcon from '../assets/icons/文件传输.svg?raw'
+import newChatIcon from '../assets/icons/新建会话.svg?raw'
+import pinIcon from '../assets/icons/置顶.svg?raw'
+import emojiIcon from '../assets/icons/emoji.svg?raw'
+import fileIcon from '../assets/icons/文件夹.svg?raw'
+import imageIcon from '../assets/icons/图片.svg?raw'
+import shakeIcon from '../assets/icons/窗口抖动.svg?raw'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -2103,10 +2114,24 @@ function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
   return Array.from(clipboardData.files).filter((file) => file.type.startsWith('image/'))
 }
 
+const SUBMITTED_ATTACHMENT_FEEDBACK = '附件正在后台准备，可在文件传输中心查看'
+const ACTIVE_ATTACHMENT_DRAFT_STATUSES = new Set(['queued', 'hashing', 'uploading'])
+
 // 设置附件操作反馈信息
 function setAttachmentFeedback(message: string, isError = false) {
   attachmentFeedback.value = message
   attachmentFeedbackIsError.value = isError
+}
+
+function clearSubmittedAttachmentFeedback(conversationId: string) {
+  if (
+    chatStore.currentConversation?.conversationId !== conversationId
+    || attachmentFeedback.value !== SUBMITTED_ATTACHMENT_FEEDBACK
+  ) return
+  const hasActiveDrafts = attachmentDraftStore
+    .draftsFor(conversationId)
+    .some((draft) => draft.submitted && ACTIVE_ATTACHMENT_DRAFT_STATUSES.has(draft.status))
+  if (!hasActiveDrafts) setAttachmentFeedback('')
 }
 
 function p2pAttachmentBlockReason(conversationId = chatStore.currentConversation?.conversationId) {
@@ -3594,7 +3619,7 @@ async function handleSendMessage() {
   try {
     if (textDraft.text.trim()) sendTextMessage(conversation, user, textDraft)
     for (const draft of attachments) enqueueAttachmentDraft(draft)
-    if (attachments.length) setAttachmentFeedback('附件正在后台准备，可在文件传输中心查看')
+    if (attachments.length) setAttachmentFeedback(SUBMITTED_ATTACHMENT_FEEDBACK)
   } finally { isSendingMessage.value = false }
 }
 
@@ -3723,6 +3748,7 @@ async function processAttachmentDraft(
     }
     attachmentDraftStore.removeDraft(conversation.conversationId, draft.id)
     await deleteNativeDraftTask(draft)
+    clearSubmittedAttachmentFeedback(conversation.conversationId)
     return true
   } catch (error: any) {
     if (!stillCurrentAccount()) return false
@@ -4452,31 +4478,35 @@ watch(
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
-  color: #9ba7bd;
+  color: var(--sidebar-text);
   transition: background-color var(--transition-normal), color var(--transition-normal);
   gap: 5px;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
 }
 
 .nav-item.active {
-  background: rgba(112, 126, 240, 0.24);
-  color: #fff;
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-text-strong);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .nav-icon {
   width: 21px;
   height: 21px;
-  filter: invert(1);
-  opacity: 0.68;
+  color: var(--sidebar-icon);
+  transition: color var(--transition-normal);
 }
 
-.nav-item:hover .nav-icon,
+.nav-item:hover .nav-icon {
+  color: var(--sidebar-text-strong);
+}
+
 .nav-item.active .nav-icon {
-  opacity: 1;
+  color: var(--accent);
 }
 
 .nav-label {
@@ -4517,7 +4547,7 @@ watch(
 }
 
 .user-avatar-sidebar:hover {
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.34);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .sidebar-presence-dot {
@@ -4580,26 +4610,18 @@ watch(
   height: 42px;
   border-radius: 12px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--sidebar-icon);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.settings-btn img {
-  width: 18px;
-  height: 18px;
-  filter: invert(1);
-  opacity: 0.68;
+  font-size: 18px;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 .settings-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.settings-btn:hover img {
-  opacity: 1;
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
 }
 
 /* Middle Panel */
@@ -4645,9 +4667,12 @@ watch(
   color: var(--text-secondary);
 }
 
-.new-chat-btn img {
-  width: 18px;
-  height: 18px;
+.new-chat-btn {
+  font-size: 18px;
+}
+
+.new-chat-btn:hover {
+  color: var(--accent);
 }
 
 .new-chat-btn:hover {
@@ -4664,14 +4689,18 @@ watch(
   padding: 0 13px;
   border: 1px solid transparent;
   border-radius: 11px;
-  background: var(--bg-input-rest);
+  background: var(--bg-search);
   font-size: var(--font-base);
   color: var(--text-primary);
   transition: background-color var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
+.search-input:hover:not(:focus) {
+  background: var(--bg-search-hover);
+}
+
 .search-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-placeholder);
 }
 
 .search-input:focus {
@@ -4715,10 +4744,15 @@ watch(
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.conv-item.active:hover {
+  background: var(--accent-bg-active-hover);
+}
+
 .pin-icon {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  color: var(--accent);
 }
 
 .conv-avatar {
@@ -4800,7 +4834,7 @@ watch(
 }
 
 .unread-badge {
-  background: var(--danger);
+  background: var(--accent);
   color: #fff;
   font-size: var(--font-2xs);
   font-weight: 600;
@@ -5017,14 +5051,10 @@ watch(
   padding: 8px;
   border-radius: 10px;
   color: var(--text-tertiary);
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.action-btn img {
-  width: 18px;
-  height: 18px;
 }
 
 .action-btn:hover {
@@ -5062,7 +5092,8 @@ watch(
 .message-selection-toolbar button:disabled { color: var(--text-disabled); cursor: default; }
 .menu-feedback { position: fixed; z-index: 12000; top: 46px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 48px); padding: 10px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-md); font-size: 13px; pointer-events: none; }
 .menu-feedback.error { color: var(--danger); }
-.text-bubble a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
+.text-bubble a { color: var(--info); text-decoration: underline; overflow-wrap: anywhere; }
+.text-bubble a:hover { color: var(--info-hover); }
 
 .message-item.message-highlighted {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -5117,7 +5148,7 @@ watch(
 }
 
 .text-bubble {
-  background: var(--bg-surface);
+  background: var(--bg-bubble-inbound);
   padding: 10px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 4px 14px 14px;
@@ -5130,11 +5161,11 @@ watch(
 }
 
 .message-self .text-bubble {
-  background: var(--accent);
-  color: #fff;
-  border-color: transparent;
+  background: var(--bg-bubble-outbound);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: 14px 4px 14px 14px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
 .recalled-bubble {
@@ -5143,7 +5174,7 @@ watch(
 }
 
 .reply-preview {
-  border-left: 3px solid #c4c9f8;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 32%, var(--border));
   color: var(--text-secondary);
   font-size: var(--font-sm);
   margin-bottom: 6px;
@@ -5156,11 +5187,11 @@ watch(
 }
 
 .message-self .mention {
-  color: #fff4a3;
+  color: var(--accent);
 }
 
 .mention-self {
-  background: rgba(255, 122, 69, 0.16);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
   border-radius: var(--radius-sm);
   padding: 0 2px;
 }
@@ -5202,7 +5233,7 @@ watch(
 }
 
 .file-bubble:hover {
-  border-color: #c8cef8;
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
   background: var(--accent-bg-light);
 }
 
@@ -5302,7 +5333,7 @@ watch(
 }
 
 .message-read-receipt {
-  color: #9aa0b5;
+  color: var(--text-muted);
 }
 
 .message-retry {
@@ -5317,7 +5348,7 @@ watch(
 .message-action-link {
   border: none;
   background: none;
-  color: #8c95d9;
+  color: var(--accent);
   cursor: pointer;
   font-size: var(--font-xs);
   padding: 0 0 0 6px;
@@ -5333,15 +5364,15 @@ watch(
 }
 
 .input-area.is-file-drag-active {
-  border-color: #4053bf;
+  border-color: var(--accent);
 }
 
 .attachment-drop-overlay {
   align-items: center;
-  background: rgba(241, 244, 255, 0.96);
-  border: 2px dashed #4053bf;
+  background: color-mix(in srgb, var(--accent-bg-light) 96%, transparent);
+  border: 2px dashed var(--accent);
   border-radius: 10px;
-  color: #263ca8;
+  color: var(--accent-hover);
   display: flex;
   flex-direction: column;
   inset: 6px;
@@ -5352,10 +5383,11 @@ watch(
   z-index: 30;
 }
 
-.attachment-drop-overlay img {
+.attachment-drop-icon {
   height: 28px;
   margin-bottom: 6px;
   width: 28px;
+  color: var(--accent);
 }
 
 .attachment-drop-overlay strong {
@@ -5363,28 +5395,64 @@ watch(
 }
 
 .attachment-drop-overlay span {
-  color: #475166;
+  color: var(--text-secondary);
   font-size: 12px;
   margin-top: 3px;
 }
 
 .attachment-feedback {
-  color: #4053bf;
+  align-items: center;
+  color: var(--accent);
+  display: flex;
   font-size: 12px;
+  gap: 6px;
   line-height: 1.4;
   margin: 0 12px 4px;
 }
 
+.attachment-feedback > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-feedback-close {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  font-size: 14px;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 18px;
+}
+
+.attachment-feedback-close:hover,
+.attachment-feedback-close:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
+
 .attachment-feedback.error {
-  color: #a52f2a;
+  color: var(--danger-strong);
+}
+
+.attachment-feedback.error .attachment-feedback-close:hover,
+.attachment-feedback.error .attachment-feedback-close:focus-visible {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .reply-target {
   align-items: center;
-  background: #fff;
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  color: #666;
+  color: var(--text-secondary);
   display: flex;
   font-size: 12px;
   justify-content: space-between;
@@ -5395,7 +5463,7 @@ watch(
 .reply-target button {
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -5420,18 +5488,15 @@ watch(
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   border: none;
   background: none;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.tool-btn img {
-  width: 18px;
-  height: 18px;
+  color: #69717B;
+  font-size: 18px;
 }
 
 .tool-folder-icon {
@@ -5442,6 +5507,7 @@ watch(
 
 .tool-btn:hover {
   background: var(--bg-hover-light);
+  color: var(--accent);
 }
 
 .tool-btn:disabled {
@@ -5455,7 +5521,7 @@ watch(
 }
 
 .tool-btn:focus-visible {
-  outline: 2px solid #4053bf;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -5481,7 +5547,7 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
 }
 
 .shake-bubble-icon {
@@ -5590,7 +5656,7 @@ watch(
 }
 
 .send-btn:disabled {
-  background: #a9b2ee;
+  background: var(--accent-disabled);
   cursor: not-allowed;
 }
 
@@ -5717,8 +5783,8 @@ watch(
 .sticker-manage-btn {
   border: none;
   border-radius: 5px;
-  background: #eef3ff;
-  color: #4f63d8;
+  background: var(--accent-bg-light);
+  color: var(--accent);
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
@@ -5738,25 +5804,25 @@ watch(
 .custom-sticker-actions button {
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 11px;
   padding: 2px 3px;
 }
 
 .custom-sticker-actions button:hover {
-  color: #4f63d8;
+  color: var(--accent);
 }
 
 .sticker-empty,
 .sticker-error-text {
-  color: #8a8f99;
+  color: var(--text-muted);
   font-size: 12px;
   padding: 8px 0;
 }
 
 .sticker-error-text {
-  color: #d93026;
+  color: var(--danger-strong);
 }
 
 .mention-option {
@@ -5825,6 +5891,7 @@ watch(
   padding: 11px;
   border-radius: 15px;
   background: var(--accent-bg-active);
+  color: var(--accent);
   opacity: 0.78;
 }
 
@@ -6342,7 +6409,7 @@ button.more-field-row:hover {
 }
 
 .more-switch.active {
-  background: #1296db;
+  background: var(--accent);
 }
 
 .more-switch.active > span {
@@ -6538,8 +6605,8 @@ button.more-field-row:hover {
 
 .group-setting-field input:disabled,
 .group-setting-field textarea:disabled {
-  background: #f6f7f9;
-  color: #777;
+  background: var(--bg-app);
+  color: var(--text-muted);
 }
 
 .compact-submit {
@@ -6553,7 +6620,7 @@ button.more-field-row:hover {
 }
 
 .group-settings-status {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.4;
   margin: -2px 0 0;
@@ -6615,8 +6682,8 @@ button.more-field-row:hover {
 }
 
 .member-role-owner {
-  background: rgba(255, 122, 61, 0.12);
-  color: #ff7a3d;
+  background: var(--warning-surface);
+  color: var(--warning);
 }
 
 .member-role-admin {

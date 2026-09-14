@@ -6,8 +6,7 @@
       <section class="login-card" aria-labelledby="login-title">
         <div class="login-heading">
           <p class="login-kicker">欢迎回来</p>
-          <h2 id="login-title">登录绘语</h2>
-          <p>使用你的团队账号继续</p>
+          <h2 id="login-title">登录绘聊</h2>
         </div>
 
         <!-- 登录表单 -->
@@ -162,12 +161,6 @@ onMounted(() => {
   line-height: 1.25;
   color: var(--text-primary);
   letter-spacing: -0.02em;
-}
-
-.login-heading > p:last-child {
-  margin-top: 8px;
-  color: var(--text-tertiary);
-  font-size: var(--font-md);
 }
 
 .login-form {

@@ -77,12 +77,17 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  color: #4e5969;
+  color: var(--text-secondary);
 }
 .auth-bootstrap button {
   padding: 8px 20px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   cursor: pointer;
+  color: var(--accent);
+}
+.auth-bootstrap button:hover {
+  background: var(--accent-bg-hover);
+  border-color: var(--accent);
 }
 </style>

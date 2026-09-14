@@ -520,7 +520,7 @@ app.whenReady().then(async () => {
     const reason = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox(
       '内部证书初始化失败',
-      `绘语无法安全连接公司服务器，应用将退出。\n\n${reason}`,
+      `绘聊无法安全连接公司服务器，应用将退出。\n\n${reason}`,
     )
     app.quit()
     return

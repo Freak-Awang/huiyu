@@ -1,4 +1,4 @@
-<!-- 桌面设置中心：参考主流桌面 IM 的分栏结构，集中管理账号、通用、通知、快捷键、存储与更新。 -->
+<!-- 桌面设置中心：参考主流桌面 IM 的分栏结构，集中管理账号、通知、快捷键、存储与更新。 -->
 <template>
   <div class="settings-overlay" @click.self="emit('close')">
     <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -88,70 +88,6 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7" /></svg>
                   已保护
                 </span>
-              </div>
-            </div>
-          </section>
-
-          <section v-else-if="activeSection === 'general'" class="settings-page">
-            <h3 class="group-title">外观</h3>
-            <div class="setting-card">
-              <div class="setting-card-row">
-                <div class="setting-copy">
-                  <strong>界面主题</strong>
-                  <small>选择适合当前环境的显示外观</small>
-                </div>
-                <div class="segmented-control" aria-label="界面主题">
-                  <button
-                    type="button"
-                    :class="{ active: settingsStore.general.theme === 'light' }"
-                    :disabled="settingsStore.saving"
-                    @click="saveGeneral({ theme: 'light' })"
-                  >
-                    浅色
-                  </button>
-                  <button
-                    type="button"
-                    :class="{ active: settingsStore.general.theme === 'dark' }"
-                    :disabled="settingsStore.saving"
-                    @click="saveGeneral({ theme: 'dark' })"
-                  >
-                    深色
-                  </button>
-                </div>
-              </div>
-              <label class="setting-card-row">
-                <span class="setting-copy">
-                  <strong>紧凑模式</strong>
-                  <small>缩小会话列表和消息区域的间距，显示更多内容</small>
-                </span>
-                <input
-                  class="switch-input"
-                  type="checkbox"
-                  :checked="settingsStore.general.compactMode"
-                  :disabled="settingsStore.saving"
-                  @change="saveGeneral({ compactMode: ($event.target as HTMLInputElement).checked })"
-                />
-                <span class="switch-control" aria-hidden="true"></span>
-              </label>
-            </div>
-
-            <h3 class="group-title">窗口</h3>
-            <div class="setting-card">
-              <div class="setting-card-row">
-                <div class="setting-copy">
-                  <strong>关闭主窗口时</strong>
-                  <small>选择继续在后台接收消息，或直接退出应用</small>
-                </div>
-                <select
-                  class="setting-select"
-                  aria-label="关闭主窗口时"
-                  :value="settingsStore.general.closeBehavior"
-                  :disabled="settingsStore.saving"
-                  @change="saveGeneral({ closeBehavior: ($event.target as HTMLSelectElement).value as CloseBehavior })"
-                >
-                  <option value="tray">最小化到托盘</option>
-                  <option value="exit">退出 ArtTalk</option>
-                </select>
               </div>
             </div>
           </section>
@@ -353,7 +289,6 @@ import {
 } from '../utils/localMessageStore'
 import { clearRecentUsageCache } from '../utils/recentUsage'
 import type {
-  CloseBehavior,
   GeneralSettings,
   NotificationSettings,
   SendShortcut,
@@ -367,7 +302,7 @@ const emit = defineEmits<{
   localCacheCleared: []
 }>()
 
-type SectionKey = 'account' | 'general' | 'notification' | 'shortcuts' | 'storage' | 'about'
+type SectionKey = 'account' | 'notification' | 'shortcuts' | 'storage' | 'about'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
@@ -389,12 +324,6 @@ const sections: Array<{ key: SectionKey; label: string; hint: string; icon: stri
     label: '账号与安全',
     hint: '管理个人资料、登录状态与本地数据保护',
     icon: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
-  },
-  {
-    key: 'general',
-    label: '通用',
-    hint: '设置界面外观、布局和窗口行为',
-    icon: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6',
   },
   {
     key: 'notification',
@@ -726,9 +655,13 @@ function flashStatus(text: string) {
 }
 
 .settings-nav-item.active {
-  background: var(--accent-bg-light);
-  color: var(--accent);
+  background: var(--accent-bg-active);
+  color: var(--brand-700);
   font-weight: 600;
+}
+
+.settings-nav-item.active svg {
+  color: var(--accent);
 }
 
 .settings-nav-item svg,
@@ -974,7 +907,7 @@ label.setting-card-row {
   height: 22px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--bg-input-rest);
+  background: var(--switch-off, #CDD1D6);
   transition: background var(--transition-fast);
 }
 
