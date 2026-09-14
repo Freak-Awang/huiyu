@@ -26,6 +26,7 @@ import {
   upsertLocalMessage,
 } from '../utils/localMessageStore'
 import { useUserProfileStore } from './userProfiles'
+import { useMessageLibraryStore } from './messageLibrary'
 
 /**
  * 聊天核心 Store：集中管理会话与消息状态。
@@ -35,6 +36,7 @@ import { useUserProfileStore } from './userProfiles'
  */
 export const useChatStore = defineStore('chat', () => {
   const userProfiles = useUserProfileStore()
+  const messageLibrary = useMessageLibraryStore()
   /** 会话列表 */
   const conversations = ref<Conversation[]>([])
   /** 当前选中会话 */
@@ -52,7 +54,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const currentMessages = computed(() => {
     if (!currentConversation.value) return []
-    return messages.value.get(currentConversation.value.conversationId) || []
+    return (messages.value.get(currentConversation.value.conversationId) || []).filter(message => !messageLibrary.isDeleted(message))
   })
 
   const pinnedConversations = computed(() =>
@@ -591,6 +593,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function seedMessageProfile(message: Message) {
+    messageLibrary.recalled(message)
     userProfiles.seedSnapshot({
       userId: message.senderId,
       nickname: message.senderName,

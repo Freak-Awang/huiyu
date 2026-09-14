@@ -1,4 +1,4 @@
-<!-- 登录页面：无可恢复会话时的认证入口，支持记住账号 -->
+<!-- 登录页面：支持记住账号及用户主动选择自动登录 -->
 <template>
   <div class="login-page">
     <DesktopWindowControls transparent hide-maximize />
@@ -37,6 +37,10 @@
               <input v-model="rememberMe" type="checkbox" />
               <span>记住账号</span>
             </label>
+            <label class="checkbox-label">
+              <input v-model="autoLogin" type="checkbox" :disabled="loading" />
+              <span>自动登录</span>
+            </label>
           </div>
           <button class="login-btn" type="submit" :disabled="loading">
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
@@ -64,6 +68,7 @@ const authStore = useAuthStore()
 const username = ref('')
 const password = ref('')
 const rememberMe = ref(false) // 是否记住账号
+const autoLogin = ref(false) // 默认关闭，仅在用户选择后恢复会话
 const loading = ref(false) // 登录加载状态
 const errorMsg = ref('') // 错误提示信息
 
@@ -85,7 +90,7 @@ function handleLogin() {
   errorMsg.value = ''
 
   // 调用认证接口，成功后保存记住账号偏好并跳转到主页
-  authStore.login(username.value, password.value).then(() => {
+  authStore.login(username.value, password.value, autoLogin.value).then(() => {
     if (rememberMe.value) {
       localStorage.setItem('savedUsername', username.value)
       localStorage.setItem('rememberMe', 'true')
@@ -105,6 +110,7 @@ function handleLogin() {
 onMounted(() => {
   const savedUsername = localStorage.getItem('savedUsername')
   const savedRemember = localStorage.getItem('rememberMe')
+  autoLogin.value = localStorage.getItem('autoLogin') === 'true'
   localStorage.removeItem('savedPassword') // 安全起见清除保存的密码
 
   if (savedRemember === 'true') {

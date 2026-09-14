@@ -29,6 +29,14 @@ public class MessageController {
     @Autowired
     private MessageService messageService;
 
+    /** Shared with recall validation; clients cache this outside the context-menu open path. */
+    @GetMapping("/policy")
+    public Result<java.util.Map<String, Long>> getPolicy() {
+        return Result.success(java.util.Map.of(
+                "recallWindowMs", messageService.getRecallWindowMs(),
+                "serverTime", System.currentTimeMillis()));
+    }
+
     /**
      * 分页查询会话消息。
      *

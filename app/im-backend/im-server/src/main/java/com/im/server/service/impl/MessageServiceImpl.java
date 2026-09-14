@@ -50,6 +50,11 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements MessageService {
 
     private static final int RECALL_LIMIT_MINUTES = 2;
+
+    @Override
+    public long getRecallWindowMs() {
+        return RECALL_LIMIT_MINUTES * 60_000L;
+    }
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_PENDING_LIMIT = 500;
     private static final String MESSAGE_TYPE_TEXT = "TEXT";

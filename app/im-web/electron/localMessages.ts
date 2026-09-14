@@ -34,7 +34,61 @@ export interface LocalMessageRecord {
 interface LocalMessageStore {
   users: Record<string, {
     conversations: Record<string, LocalMessageRecord[]>
+    deleted?: Record<string, string[]>
+    favorites?: LocalMessageRecord[]
   }>
+}
+
+export interface LocalMessageLibrary {
+  deleted: Record<string, string[]>
+  favorites: LocalMessageRecord[]
+}
+
+function assertLibraryId(value: string) {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value) || ['__proto__', 'constructor', 'prototype'].includes(value)) {
+    throw new Error('消息或账号标识无效')
+  }
+}
+function messageKeys(message: LocalMessageRecord) {
+  return [message.messageId && `id:${message.messageId}`, message.clientMsgId && `client:${message.clientMsgId}`].filter(Boolean) as string[]
+}
+function deletedInStore(store: LocalMessageStore, userId: string, message: LocalMessageRecord) {
+  const keys = store.users[userId]?.deleted?.[message.conversationId] || []
+  return messageKeys(message).some(key => keys.includes(key))
+}
+export async function getLocalMessageLibrary(userId: string): Promise<LocalMessageLibrary> {
+  assertLibraryId(userId)
+  const user = (await readStore()).users[userId]
+  return { deleted: user?.deleted || {}, favorites: user?.favorites || [] }
+}
+export async function updateLocalMessageLibrary(userId: string, action: 'delete' | 'favorite' | 'unfavorite', messages: LocalMessageRecord[]) {
+  assertLibraryId(userId)
+  if (!['delete', 'favorite', 'unfavorite'].includes(action) || !Array.isArray(messages) || !messages.length || messages.length > 100) throw new Error('批量操作无效')
+  for (const message of messages) {
+    assertLibraryId(message?.conversationId)
+    if (message.messageId) assertLibraryId(message.messageId)
+    if (message.clientMsgId) assertLibraryId(message.clientMsgId)
+    if (!messageKeys(message).length || typeof message.content !== 'string' || message.content.length > 2_000_000) throw new Error('消息数据无效')
+  }
+  return mutateStore(store => {
+    store.users[userId] ||= { conversations: {} }
+    const user = store.users[userId]
+    user.deleted ||= {}
+    user.favorites ||= []
+    for (const message of messages) {
+      const matches = (item: LocalMessageRecord) => item.conversationId === message.conversationId
+        && messageKeys(item).some(key => messageKeys(message).includes(key))
+      if (action === 'delete') {
+        user.deleted[message.conversationId] = [...new Set([...(user.deleted[message.conversationId] || []), ...messageKeys(message)])]
+        user.conversations[message.conversationId] = (user.conversations[message.conversationId] || []).filter(item => !matches(item))
+      } else {
+        if (action === 'favorite' && user.conversations[message.conversationId]?.some(item => matches(item) && item.status === 'RECALLED')) throw new Error('消息已撤回，无法收藏')
+        user.favorites = user.favorites.filter(item => !matches(item))
+        if (action === 'favorite' && message.status !== 'RECALLED') user.favorites.push(message)
+      }
+    }
+    return { deleted: user.deleted, favorites: user.favorites }
+  })
 }
 
 /** 本地缓存统计信息 */
@@ -67,9 +121,10 @@ async function readStoreUnlocked(): Promise<LocalMessageStore> {
       : safeStorage.decryptString(raw)
     const parsed = JSON.parse(serialized) as LocalMessageStore
     return parsed && parsed.users ? parsed : { users: {} }
-  } catch {
-    // 缓存损坏或缺失不应阻塞桌面应用，服务端同步可重新填充
-    return { users: {} }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { users: {} }
+    // Favorites and deletion markers are user data: never overwrite a damaged/encryption-locked store.
+    throw new Error('本机消息存储无法读取，已保留原文件', { cause: error })
   }
 }
 
@@ -141,6 +196,11 @@ function sortMessages(messages: LocalMessageRecord[]) {
 export async function upsertLocalMessage(userId: string, message: LocalMessageRecord) {
   if (!userId || !message?.conversationId) return
   await mutateStore((store) => {
+    // A recall must also erase the saved snapshot. A late ACK/history sync cannot resurrect a local deletion.
+    if (message.status === 'RECALLED' && store.users[userId]?.favorites) {
+      store.users[userId].favorites = store.users[userId].favorites!.filter(item => !messageKeys(item).some(key => messageKeys(message).includes(key)))
+    }
+    if (deletedInStore(store, userId, message)) return
     const bucket = getConversationBucket(store, userId, message.conversationId)
     const key = messageKey(message)
     const index = bucket.findIndex((item) => {
@@ -243,7 +303,8 @@ export async function getLocalMessageStats(userId: string): Promise<LocalMessage
 export async function clearLocalMessages(userId: string) {
   if (!userId) return false
   return mutateStore((store) => {
-    delete store.users[userId]
+    // Cache cleanup must not erase deliberate deletions or a user's saved collection.
+    if (store.users[userId]) store.users[userId].conversations = {}
     return true
   })
 }

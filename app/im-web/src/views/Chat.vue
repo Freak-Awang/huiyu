@@ -10,6 +10,13 @@
     }"
   >
     <DesktopWindowControls />
+    <ContextMenu :dark="settingsStore.general.theme === 'dark'" @error="showMenuFeedback($event, true)" />
+    <div v-if="menuFeedback" class="menu-feedback" :class="{ error: menuFeedbackError }" role="status">{{ menuFeedback }}</div>
+    <MessageActionDialog v-if="forwardMessages.length" mode="forward" :messages="forwardMessages" :conversations="targetConversations" :busy="forwarding"
+      @close="forwardMessages = []" @forward="confirmForward" />
+    <MessageActionDialog v-else-if="showFavorites" mode="favorites" :messages="messageLibrary.favorites" :conversations="[]"
+      @close="showFavorites = false" @copy="runMenuAction(() => copyMessageText($event.displayContent))"
+      @view="runMenuAction(() => viewMenuImage($event))" @unfavorite="runMenuAction(() => favoriteMessages([$event], true))" />
 
     <!-- 左侧导航栏：消息/通讯录切换、在线状态、更多、退出 -->
     <aside class="left-sidebar" aria-label="主导航">
@@ -83,6 +90,9 @@
         </button>
       </nav>
       <div class="sidebar-footer">
+        <button v-if="messageLibrary.ready" class="settings-btn" type="button" title="本机收藏" aria-label="本机收藏" @click="showFavorites = true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" /></svg>
+        </button>
         <button class="settings-btn" type="button" @click="showTransferCenter = true" title="文件传输中心" aria-label="文件传输中心">
           <img :src="transferIcon" alt="文件传输中心" />
         </button>
@@ -129,6 +139,7 @@
               class="conv-item"
               :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
               @click="handleSelectConv(conv)"
+              @contextmenu="openConversationMenu($event, conv)"
             >
               <ConversationAvatar
                 class="conv-avatar"
@@ -150,7 +161,7 @@
                   <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
                 </div>
                 <div class="conv-bottom">
-                  <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
+                  <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : conversationPreview(conv) }}</span>
                   <span
                     v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                     class="mention-badge"
@@ -171,6 +182,7 @@
             class="conv-item"
             :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
             @click="handleSelectConv(conv)"
+            @contextmenu="openConversationMenu($event, conv)"
           >
             <ConversationAvatar
               class="conv-avatar"
@@ -192,7 +204,7 @@
                 <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
               </div>
               <div class="conv-bottom">
-                <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : getMessagePreviewContent(conv.lastMessage) || '暂无消息' }}</span>
+                <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : conversationPreview(conv) }}</span>
                 <span
                   v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                   class="mention-badge"
@@ -240,6 +252,7 @@
             class="conv-item"
             :class="{ active: chatStore.currentConversation?.conversationId === conv.conversationId }"
             @click="handleSelectConv(conv)"
+            @contextmenu="openConversationMenu($event, conv)"
           >
             <ConversationAvatar
               class="conv-avatar"
@@ -293,6 +306,7 @@
               :key="user.userId || user.id"
               class="contact-item"
               @dblclick="startSingleChat(user)"
+              @contextmenu="openUserMenu($event, user)"
             >
               <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                 <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -323,6 +337,7 @@
                   :key="user.userId || user.id"
                   class="contact-item"
                   @dblclick="startSingleChat(user)"
+                  @contextmenu="openUserMenu($event, user)"
                 >
                   <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                     <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -352,6 +367,7 @@
                       :key="user.userId || user.id"
                       class="contact-item"
                       @dblclick="startSingleChat(user)"
+                      @contextmenu="openUserMenu($event, user)"
                     >
                       <div class="contact-avatar" :class="{ offline: isUserOffline(user) }" @click.stop="openUserProfile(user)" @dblclick.stop>
                         <img v-if="getUserAvatar(user) && !failedAvatars.has(getUserAvatar(user))" :src="getUserAvatar(user)" @error="failedAvatars.add(getUserAvatar(user))" alt="" />
@@ -401,6 +417,7 @@
         </div>
 
         <div class="message-area" ref="messageAreaRef" @scroll="onMessageScroll">
+          <button v-if="!chatStore.currentMessages.length && chatStore.messages.get(chatStore.currentConversation.conversationId)?.length" type="button" class="message-action-link" @click="onMessageScroll">加载更早消息</button>
           <div class="message-list">
             <div
               v-for="msg in chatStore.currentMessages"
@@ -412,10 +429,13 @@
                 'message-highlighted': highlightedMessageId === msg.messageId,
               }"
             >
+              <input v-if="selecting" class="message-checkbox" type="checkbox" :aria-label="`选择${getMessageSenderName(msg)}的消息`"
+                :checked="selected.has(messageIdentity(msg))" :disabled="msg.status === 'SENDING'" @change="toggleSelected(msg)" />
               <div
                 class="message-avatar"
                 :title="getUserSignatureTitle(getMessageSenderName(msg), getMessageSenderSignature(msg))"
                 @click="openMessageProfile(msg)"
+                @contextmenu="openUserMenu($event, getMessageSenderProfile(msg))"
               >
                 <img v-if="getMessageSenderAvatar(msg) && !failedAvatars.has(getMessageSenderAvatar(msg))" :src="getMessageSenderAvatar(msg)" @error="failedAvatars.add(getMessageSenderAvatar(msg))" alt="" />
                 <span v-else>{{ (getMessageSenderName(msg) || 'U')[0] }}</span>
@@ -424,20 +444,20 @@
                 <div class="message-sender" :title="getUserSignatureTitle(getMessageSenderName(msg), getMessageSenderSignature(msg))">
                   {{ getMessageSenderName(msg) }}
                 </div>
-                <div class="message-content">
+                <div class="message-content" @contextmenu="openMessageMenu($event, msg)">
                   <template v-if="msg.status === 'RECALLED'">
-                    <div class="text-bubble recalled-bubble">消息已撤回</div>
+                    <div class="text-bubble recalled-bubble">{{ msg.senderId === authStore.currentUser?.userId ? '你' : getMessageSenderName(msg) }}撤回了一条消息</div>
                   </template>
                   <template v-else-if="msg.messageType === 'TEXT'">
                     <div class="text-bubble">
                       <div v-if="msg.replyTo" class="reply-preview">
                         {{ msg.replyTo.senderName }}：{{ msg.replyTo.text }}
                       </div>
-                      <span
-                        v-for="(segment, index) in renderTextSegments(msg)"
+                      <template
+                        v-for="(segment, index) in renderMessageSegments(msg)"
                         :key="index"
-                        :class="{ mention: segment.mention, 'mention-self': segment.self }"
-                      >{{ segment.text }}</span>
+                      ><a v-if="!segment.mention && safeHttpUrl(segment.text)" :href="safeHttpUrl(segment.text)!" @click.prevent="runMenuAction(() => openMessageLink(segment.text))">{{ segment.text }}</a>
+                        <span v-else :class="{ mention: segment.mention, 'mention-self': segment.self }">{{ segment.text }}</span></template>
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'IMAGE'">
@@ -559,6 +579,13 @@
           </div>
         </div>
 
+        <div v-if="selecting" class="message-selection-toolbar" role="toolbar" aria-label="消息批量操作">
+          <span>已选 {{ selectedMessages.length }} 条</span>
+          <button type="button" :disabled="!selectedMessages.length || !selectedMessages.every(canShare)" @click="runMenuAction(() => requestForward(selectedMessages))">转发</button>
+          <button type="button" :disabled="!messageLibrary.ready || !selectedMessages.length" @click="runMenuAction(() => favoriteMessages(selectedMessages))">收藏</button>
+          <button type="button" class="danger" :disabled="!messageLibrary.ready || !selectedMessages.length" @click="runMenuAction(() => deleteMessages(selectedMessages))">删除</button>
+          <button type="button" @click="cancelSelection">取消</button>
+        </div>
         <div
           class="input-area"
           :class="{ 'is-file-drag-active': isAttachmentDragActive }"
@@ -578,7 +605,7 @@
           </div>
           <div v-if="replyTarget" class="reply-target">
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
-            <button type="button" @click="replyTarget = null">✕</button>
+            <button type="button" aria-label="取消回复" @click="replyTarget = null">✕</button>
           </div>
           <div class="input-box">
             <div class="message-field">
@@ -610,6 +637,7 @@
                   @input="onMessageInput"
                   @keydown="handleMessageKeydown"
                   @paste="handleMessagePaste"
+                  @contextmenu="openInputMenu"
                 ></textarea>
               </div>
               <div class="input-toolbar">
@@ -871,6 +899,7 @@
               v-for="member in filteredGroupMembers"
               :key="member.userId"
               class="member-row"
+              @contextmenu="openMemberMenu($event, member)"
             >
               <button class="member-profile-button" type="button" @click="openUserProfile(member)">
                 <span class="member-avatar" :class="{ offline: isUserOffline(member) }">
@@ -896,8 +925,8 @@
                 class="member-menu-trigger"
                 type="button"
                 :aria-label="`管理${getMemberName(member)}`"
-                :aria-expanded="activeMemberActionsId === member.userId"
-                @click.stop="toggleMemberActions(member.userId)"
+                aria-haspopup="menu"
+                @click.stop="openMemberMenu($event, member)"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="5" cy="12" r="1.5" />
@@ -905,22 +934,6 @@
                   <circle cx="19" cy="12" r="1.5" />
                 </svg>
               </button>
-              <div v-if="activeMemberActionsId === member.userId" class="member-action-menu">
-                <button v-if="canUpdateMemberRole(member)" type="button" @click="toggleMemberRole(member)">
-                  {{ member.role === 'admin' ? '取消管理员' : '设为管理员' }}
-                </button>
-                <button v-if="canTransferGroupOwner(member)" type="button" @click="transferGroupOwner(member)">
-                  转让群主
-                </button>
-                <button
-                  v-if="canRemoveGroupMember(member)"
-                  type="button"
-                  class="danger"
-                  @click="removeGroupMember(member)"
-                >
-                  {{ member.userId === String(authStore.currentUser?.userId ?? '') ? '退出群聊' : '移除成员' }}
-                </button>
-              </div>
             </div>
             <div v-if="filteredGroupMembers.length === 0" class="member-empty">未找到相关成员</div>
           </div>
@@ -1152,6 +1165,7 @@
                   type="button"
                   :title="getMemberName(member)"
                   @click="openUserProfile(member)"
+                  @contextmenu="openMemberMenu($event, member)"
                 >
                   <span class="more-member-avatar" :class="{ offline: isUserOffline(member) }">
                     <img
@@ -1232,7 +1246,7 @@
               </svg>
             </button>
             <button type="button" class="more-delete-row" @click="clearCurrentConversationRecords">
-              删除聊天记录
+              清理本机消息缓存
             </button>
           </section>
 
@@ -1339,6 +1353,14 @@ import TransferCenter, { transferActions, primaryTransferAction, transferStatusL
 import ConversationAvatar from '../components/ConversationAvatar.vue'
 import CreateGroupDialog from '../components/CreateGroupDialog.vue'
 import DesktopWindowControls from '../components/DesktopWindowControls.vue'
+import ContextMenu from '../components/context-menu/ContextMenu.vue'
+import MessageActionDialog from '../components/MessageActionDialog.vue'
+import { useChatContextMenus } from '../components/context-menu/useChatContextMenus'
+import { closeContextMenu } from '../components/context-menu/useContextMenu'
+import { safeHttpUrl } from '../components/context-menu/builders'
+import { messageIdentity } from '../stores/messageLibrary'
+import { copyMessageText, messageImageBlob, openMessageLink } from '../utils/messageMenuActions'
+import { splitTextLinks } from '../utils/textLinks'
 import { WebSocketManager, type WsMessage } from '../utils/websocket'
 import { createWebSocketTicket } from '../api/auth'
 import { getDeptTree, type DeptNode } from '../api/dept'
@@ -1511,6 +1533,7 @@ async function loadDeptTree() {
 
 // 初始化加载会话列表、通讯录和待处理消息
 async function loadInitialChatData() {
+  await messageLibrary.init(String(authStore.currentUser?.userId || '')).catch(() => showMenuFeedback('本机收藏与删除暂不可用，请重启客户端重试', true))
   const conversationTask = chatStore.fetchConversations().catch((err) => {
     console.warn('会话列表加载失败', err)
   })
@@ -1564,6 +1587,89 @@ function onContactSearch() {
 // 消息区和输入框引用
 const messageAreaRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const menuFeedback = ref('')
+const menuFeedbackError = ref(false)
+let menuFeedbackTimer: ReturnType<typeof setTimeout> | undefined
+let menuPreviewUrl = ''
+const {
+  library: messageLibrary, policy: messagePolicy, selecting, selected, selectedMessages,
+  forwardMessages, forwarding, showFavorites, targetConversations,
+  openMessageMenu, openConversationMenu, openMemberMenu, openUserMenu, openInputMenu,
+  toggleSelected, cancelSelection, requestForward, confirmForward, deleteMessages, favoriteMessages, canShare,
+} = useChatContextMenus({
+  input: messageInputRef, reply: startReply, recall: recallCurrentMessage, retry: retryMessage,
+  viewImage: viewMenuImage, download: handleP2pPrimary, profile: openUserProfile, chat: startSingleChat,
+  mention: mentionFromMenu, role: toggleMemberRole, remove: removeGroupMember, transfer: transferGroupOwner,
+  forward: forwardFromMenu, feedback: showMenuFeedback,
+})
+function showMenuFeedback(text: string, error = false) {
+  menuFeedback.value = text
+  menuFeedbackError.value = error
+  clearTimeout(menuFeedbackTimer)
+  menuFeedbackTimer = setTimeout(() => { menuFeedback.value = '' }, error ? 7000 : 4000)
+}
+function conversationPreview(conversation: Conversation) {
+  const last = conversation.lastMessage
+  if (last && messageLibrary.isDeleted({ conversationId: conversation.conversationId, messageId: last.messageId })) {
+    const previous = (chatStore.messages.get(conversation.conversationId) || []).filter(message => !messageLibrary.isDeleted(message)).at(-1)
+    return getMessagePreviewContent(previous) || '暂无消息'
+  }
+  return getMessagePreviewContent(last) || '暂无消息'
+}
+async function runMenuAction(action: () => unknown | Promise<unknown>) {
+  try { await action() } catch (error) { showMenuFeedback(error instanceof Error ? error.message : '操作失败，请重试', true) }
+}
+async function viewMenuImage(message: Message) {
+  const accountId = authStore.currentUser?.userId
+  const blob = await messageImageBlob(message)
+  if (chatDisposed || accountId !== authStore.currentUser?.userId) return
+  if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl)
+  menuPreviewUrl = URL.createObjectURL(blob)
+  previewImage.value = menuPreviewUrl
+}
+function mentionFromMenu(member: ConversationMember) {
+  const input = messageInputRef.value
+  if (!input || member.userId === authStore.currentUser?.userId) return
+  const cursor = input.selectionStart
+  messageText.value = messageText.value.slice(0, cursor) + '@' + messageText.value.slice(input.selectionEnd)
+  // Reuse the @ picker so the outgoing message includes structured mentions.
+  input.value = messageText.value
+  input.setSelectionRange(cursor + 1, cursor + 1)
+  selectMention(member)
+}
+async function forwardFromMenu(message: Message, target: Conversation) {
+  const user = authStore.currentUser
+  const accountId = user?.userId
+  if (!user || !wsManager?.isConnected()) throw new Error('连接已断开，请连接后重试')
+  const stillCurrent = () => !chatDisposed && authStore.currentUser?.userId === accountId
+  if (message.messageType === 'TEXT') {
+    const forwarded = normalizeMessage({ ...message, conversationId: target.conversationId,
+      senderId: user.userId, senderName: user.nickname, senderAvatar: user.avatar, senderSignature: user.signature,
+      messageId: '', clientMsgId: generateId(), status: 'SENDING', createdAt: new Date().toISOString(), readTime: undefined,
+      content: buildTextMessageContent(message.displayContent), ...getInitialReadReceipt(target) })
+    chatStore.addMessage(forwarded)
+    sendOutgoingMessage(forwarded)
+    return
+  }
+  let result: ReturnType<typeof attachmentDraftStore.addFiles>
+  if (message.messageType === 'IMAGE') {
+    const blob = await messageImageBlob(message)
+    if (!stillCurrent()) throw new Error('账号已切换')
+    const extension = blob.type.split('/')[1] || 'png'
+    result = attachmentDraftStore.addFiles(target.conversationId, [new File([blob], `转发图片-${message.messageId}.${extension}`, { type: blob.type })], 'image')
+  } else {
+    if (target.type !== 'SINGLE' || !window.imDesktop?.sourceFromP2pTask) throw new Error('文件转发仅支持桌面端单聊')
+    const info = getP2pInfo(message.content)
+    if (!info) throw new Error('文件消息不可用')
+    const state = getP2pState(message)
+    const sources = await window.imDesktop.sourceFromP2pTask(state?.taskId || info.transferId)
+    if (!stillCurrent()) throw new Error('账号已切换')
+    result = attachmentDraftStore.addNativeSources(target.conversationId, sources)
+  }
+  if (!result.added.length) throw new Error(result.errors.join('；') || '目标会话已有此附件，请从草稿发送')
+  // Existing queue owns upload/P2P preparation, persistence, retries and transfer progress.
+  for (const draft of result.added) enqueueAttachmentDraft(draft)
+}
 const attachmentDraftTrayRef = ref<{ focusLast: () => void } | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
@@ -2294,10 +2400,11 @@ async function clearCurrentConversationRecords() {
   const conv = chatStore.currentConversation
   if (!conv) return
   if (!window.confirm('确定清除当前设备上的该会话聊天记录吗？服务器保留的历史消息不会被删除。')) return
+  if (!await clearLocalConversationMessages(conv.conversationId)) {
+    showMenuFeedback('清理本机缓存失败，记录未清除', true)
+    return
+  }
   chatStore.clearConversationMessages(conv.conversationId)
-  p2pTransferStore.discardPreparedConversation(conv.conversationId)
-  attachmentDraftStore.clearConversation(conv.conversationId)
-  await clearLocalConversationMessages(conv.conversationId)
   showMoreDrawer.value = false
 }
 
@@ -2329,10 +2436,10 @@ async function runChatSearch() {
   if (!conv || !keyword) return
   try {
     if (canUseLocalMessageStore()) {
-      chatSearchResults.value = await searchLocalMessages(conv.conversationId, keyword, 20)
+      chatSearchResults.value = (await searchLocalMessages(conv.conversationId, keyword, 20)).filter(message => !messageLibrary.isDeleted(message))
     } else {
       const res = await searchServerMessages(conv.conversationId, keyword, 20)
-      chatSearchResults.value = res.data.records
+      chatSearchResults.value = res.data.records.filter(message => !messageLibrary.isDeleted(message))
     }
     hasSearched.value = true
     showSearchDrawer.value = true
@@ -2394,10 +2501,6 @@ function setMemberDrawerMode(mode: 'list' | 'invite' | 'settings' | 'announcemen
 
 function hasMemberManagementActions(member: ConversationMember) {
   return canUpdateMemberRole(member) || canTransferGroupOwner(member) || canRemoveGroupMember(member)
-}
-
-function toggleMemberActions(userId: string) {
-  activeMemberActionsId.value = activeMemberActionsId.value === userId ? '' : userId
 }
 
 function messageElementId(messageId: string): string {
@@ -2891,6 +2994,9 @@ function pruneDraftMentions(draft: ConversationDraft): MessageMention[] {
 }
 
 // 将消息文本拆分为普通文本和 @ 提及片段，用于高亮显示
+function renderMessageSegments(msg: Message) {
+  return renderTextSegments(msg).flatMap(segment => segment.mention ? [segment] : splitTextLinks(segment.text).map(text => ({ ...segment, text })))
+}
 function renderTextSegments(msg: Message) {
   const text = msg.displayContent || msg.content
   const mentions = msg.mentions || []
@@ -3368,7 +3474,7 @@ async function onMessageScroll() {
   if (el && el.scrollTop === 0 && !loadingOlderMessages) {
     const conv = chatStore.currentConversation
     if (!conv) return
-    const msgs = chatStore.currentMessages
+    const msgs = chatStore.messages.get(conv.conversationId) || []
     if (msgs.length > 0) {
       loadingOlderMessages = true
       try {
@@ -3411,10 +3517,10 @@ function messageReplyText(msg: Message): string {
 
 // 开始回复某条消息
 function startReply(msg: Message) {
-  if (!msg.messageId || msg.status === 'RECALLED') return
+  if (!msg.messageId || ['RECALLED', 'SENDING', 'FAILED'].includes(msg.status || '')) return
   replyTarget.value = {
     messageId: msg.messageId,
-    senderName: msg.senderName,
+    senderName: getMessageSenderName(msg),
     text: messageReplyText(msg).slice(0, 80),
   }
   messageInputRef.value?.focus()
@@ -3422,10 +3528,7 @@ function startReply(msg: Message) {
 
 // 判断当前用户是否可以在 2 分钟内撤回该消息
 function canRecallMessage(msg: Message): boolean {
-  if (!msg.messageId || msg.status === 'RECALLED' || msg.status === 'FAILED') return false
-  if (msg.senderId !== authStore.currentUser?.userId) return false
-  const createdAt = new Date(msg.createdAt).getTime()
-  return Number.isFinite(createdAt) && Date.now() - createdAt <= 2 * 60 * 1000
+  return messagePolicy.canRecall(msg, authStore.currentUser?.userId || '')
 }
 
 // 获取消息已读回执文本（群聊显示已读人数，单聊显示已读/未读）
@@ -3444,7 +3547,7 @@ function getReadReceiptText(msg: Message): string {
 
 // 撤回消息
 async function recallCurrentMessage(msg: Message) {
-  if (!msg.messageId) return
+  if (!canRecallMessage(msg)) { showMenuFeedback('该消息已超过撤回期限或状态已改变', true); return }
   try {
     const res = await recallMessage(msg.messageId)
     chatStore.addMessage(res.data)
@@ -4009,6 +4112,7 @@ function initWebSocket() {
     clearTimeout(pendingSyncTimer)
     const epoch = ++syncGeneration
     if (connected) {
+      void messagePolicy.refresh()
       const currentConvId = chatStore.currentConversation?.conversationId
       applySelfPresence(manualPresence.value)
       wsManager?.send('ONLINE_STATUS', { status: manualPresence.value })
@@ -4209,6 +4313,8 @@ onMounted(async () => {
 
 // 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
 onUnmounted(() => {
+  clearTimeout(menuFeedbackTimer)
+  if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl)
   chatDisposed = true
   attachmentAccountGeneration++
   attachmentQueue.clear()
@@ -4295,6 +4401,7 @@ function handleChatVisibility() {
 }
 
 watch([showSettingsDialog, showProfileDialog, previewImage], handleChatVisibility)
+watch([activeTab, showSettingsDialog, showProfileDialog, previewImage, showFavorites, showMoreDrawer, showMembersDrawer, showCreateGroupDialog], () => closeContextMenu())
 
 // 监听未读消息总数变化，更新系统托盘角标
 watch(totalUnreadCount, () => {
@@ -4957,6 +5064,15 @@ watch(
   border-radius: var(--radius-lg);
   transition: background-color 0.2s, box-shadow 0.2s;
 }
+.message-checkbox { width: 17px; height: 17px; margin-top: 9px; flex: 0 0 17px; accent-color: var(--accent); cursor: pointer; }
+.message-selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; padding: 10px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 13px; }
+.message-selection-toolbar button { padding: 7px 12px; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); cursor: pointer; }
+.message-selection-toolbar button:hover { background: var(--bg-hover-light); }
+.message-selection-toolbar button.danger:hover { background: var(--danger-bg); color: var(--danger); }
+.message-selection-toolbar button:disabled { color: var(--text-disabled); cursor: default; }
+.menu-feedback { position: fixed; z-index: 12000; top: 46px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 48px); padding: 10px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-md); font-size: 13px; pointer-events: none; }
+.menu-feedback.error { color: var(--danger); }
+.text-bubble a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
 
 .message-item.message-highlighted {
   background: color-mix(in srgb, var(--accent) 14%, transparent);

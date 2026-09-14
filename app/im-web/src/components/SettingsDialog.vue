@@ -258,7 +258,7 @@
 
           <section v-else class="settings-page">
             <div class="about-hero">
-              <div class="about-logo">A</div>
+              <img class="about-logo" :src="appLogo" alt="ArtTalk" />
               <div>
                 <h3>ArtTalk</h3>
                 <p>简洁、安全的团队即时通讯工具</p>
@@ -342,6 +342,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import appLogo from '../assets/linghui-im logo.png'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import { useUpdateStore } from '../stores/update'
@@ -1214,13 +1215,10 @@ kbd {
 .about-logo {
   width: 58px;
   height: 58px;
-  display: grid;
-  place-items: center;
+  display: block;
   border-radius: 15px;
-  background: var(--accent);
-  color: var(--accent-text-on);
-  font-size: 28px;
-  font-weight: 700;
+  object-fit: cover;
+  background: var(--bg-surface);
 }
 
 .about-hero h3 {

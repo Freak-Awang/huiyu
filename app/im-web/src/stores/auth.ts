@@ -62,14 +62,16 @@ export const useAuthStore = defineStore('auth', () => {
    * 用户登录：调用登录接口，保存 Token 并初始化用户信息。
    * @param username 用户名
    * @param password 密码
+   * @param autoLogin 是否在下次启动时自动登录，默认关闭
    */
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string, autoLogin = false) {
     const loginGeneration = ++generation
     const res = await loginApi(username, password)
     if (loginGeneration !== generation) return
     const data = res.data
     token.value = data.token
     localStorage.setItem('token', data.token)
+    localStorage.setItem('autoLogin', String(autoLogin))
     const u = data.user || data
     if (u.userId || u.id) {
       user.value = {
@@ -116,10 +118,17 @@ export const useAuthStore = defineStore('auth', () => {
     restoreError.value = ''
   }
 
-  /** 从 localStorage 恢复登录状态，并拉取最新用户资料 */
+  /** 按自动登录偏好恢复启动会话；当前已登录会话仍可续期。 */
   function restoreSession(force = false): Promise<void> {
     if (restorePromise) return restorePromise
     if (!force && authState.value !== 'initializing') return Promise.resolve()
+    // force 只允许重新验证，不能绕过启动时的自动登录选择。
+    // 内存 token 表示本次运行已经登录或开始恢复，网络重试不受此偏好影响。
+    if (!token.value && localStorage.getItem('autoLogin') !== 'true') {
+      authState.value = 'unauthenticated'
+      restoreError.value = ''
+      return Promise.resolve()
+    }
     restorePromise = restore().finally(() => { restorePromise = null; restoring.value = false })
     return restorePromise
   }

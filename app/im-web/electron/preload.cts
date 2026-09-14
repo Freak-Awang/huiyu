@@ -100,6 +100,15 @@ contextBridge.exposeInMainWorld('imDesktop', {
 
   /** 通过系统默认浏览器打开外链 */
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url) as Promise<boolean>,
+  clipboardState: () => ipcRenderer.invoke('clipboard:state'),
+  copyText: (text: string) => ipcRenderer.invoke('clipboard:write-text', text),
+  messageLibrary: (userId: string) => ipcRenderer.invoke('messages:library', userId),
+  updateMessageLibrary: (userId: string, action: string, messages: unknown[]) => ipcRenderer.invoke('messages:library-update', userId, action, messages),
+  copyImage: (bytes: ArrayBuffer) => ipcRenderer.invoke('clipboard:write-image', bytes),
+  saveImageAs: (bytes: ArrayBuffer, name: string) => ipcRenderer.invoke('image:save-as', bytes, name),
+  editCommand: (command: string) => ipcRenderer.invoke('editor:command', command),
+  saveP2pAs: (taskId: string) => ipcRenderer.invoke('p2p:save-as', taskId),
+  sourceFromP2pTask: (taskId: string) => ipcRenderer.invoke('p2p:task-source', taskId),
 
   /** 设置关闭按钮行为：tray（最小化到托盘）或 exit（直接退出） */
   setCloseBehavior: (behavior: 'tray' | 'exit') =>

@@ -1,3 +1,15 @@
+**【2026-09-11 自动登录策略修正】**
+
+按最新需求，自动登录改为默认关闭：登录页提供未默认勾选的“自动登录”，只在登录成功后保存选择；已有明确开启的偏好继续生效。“记住账号”仅恢复用户名。
+
+普通启动和更新重启统一检查 `localStorage.autoLogin === 'true'`。未开启时直接进入登录页，保留原有凭据，不请求会话校验或刷新；强制恢复入口也不能绕过这个选择。用户手动登录后，本次运行中的会话续期和网络重试仍正常工作。
+
+修改位置：`src/stores/auth.ts`、`src/views/Login.vue`、`src/stores/auth.test.ts`。回归测试通过：32 个文件、236 项，覆盖缺失/关闭偏好、强制恢复、选择持久化和下次启动、手动登录后续期、登录失败不保存选择。
+
+已完成 renderer 的 TypeScript 检查和生产构建、Electron TypeScript 构建、Windows NSIS 打包及 `git diff --check`。沿用工作区版本 0.0.17 和下文记录的临时 npm 构建命令，生成 [ArtTalk-Setup-0.0.17-x64.exe](E:/CodeX/linghui-im/app/im-web/release/ArtTalk-Setup-0.0.17-x64.exe)，大小 97,683,800 字节。包内代码与本次构建一致，latest.yml 的版本、大小和 SHA512 校验通过；未执行安装或发布。
+
+以下为此前 0.0.15 更新改造的历史记录；其中无条件自动恢复的策略由上述修正取代。
+
 **【当前更新机制】**
 
 审查范围为 `E:\CodeX\linghui-im\app\im-web`，并只读检查了后端 AuthController、AuthServiceImpl、TokenAuthenticationService 和 UpdateCheckResponse。
@@ -207,4 +219,3 @@ wGwyc7312O4dg0lVcfTWh0DJvmj5d8FxmeIbl2CAIK1bgCwK/GPYgbe4R2eoz5bo5JBh2DWdQyJxF7LL
 | CASE 10 开发模式 | updater 检查/安装跳过测试通过 | 未启动长期 dev server。 |
 
 版本仍为用户工作区已有的 0.0.15；已经安装 0.0.15 的客户端不会把相同版本视为可用更新。验证本包请从更低版本升级；验证本次新增更新器的完整安装链路，需要先安装本包，再发布一个实际更高版本。没有擅自修改版本或部署服务器。
-

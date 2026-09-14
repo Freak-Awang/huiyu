@@ -120,6 +120,15 @@ declare global {
       getVersion: () => Promise<string>
       getPlatform: () => Promise<string>
       openExternal: (url: string) => Promise<boolean>
+      clipboardState?: () => Promise<{ text: boolean; image: boolean }>
+      copyText?: (text: string) => Promise<boolean>
+      messageLibrary?: (userId: string) => Promise<{ deleted: Record<string, string[]>; favorites: import('../api/message').RawMessage[] }>
+      updateMessageLibrary?: (userId: string, action: 'delete' | 'favorite' | 'unfavorite', messages: import('../api/message').Message[]) => Promise<{ deleted: Record<string, string[]>; favorites: import('../api/message').RawMessage[] }>
+      copyImage?: (bytes: ArrayBuffer) => Promise<boolean>
+      saveImageAs?: (bytes: ArrayBuffer, name: string) => Promise<{ canceled: boolean }>
+      editCommand?: (command: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll') => Promise<boolean>
+      saveP2pAs?: (taskId: string) => Promise<{ canceled: boolean }>
+      sourceFromP2pTask?: (taskId: string) => Promise<NativeP2pSourceDescriptor[]>
       setCloseBehavior?: (behavior: 'tray' | 'exit') => Promise<boolean>
       getStorageLocation?: () => Promise<string>
       chooseStorageLocation?: () => Promise<{ canceled: boolean; path?: string }>

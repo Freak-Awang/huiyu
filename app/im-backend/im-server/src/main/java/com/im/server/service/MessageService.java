@@ -11,6 +11,8 @@ import java.util.List;
  */
 public interface MessageService {
 
+    long getRecallWindowMs();
+
     /**
      * 分页查询会话历史消息。
      *

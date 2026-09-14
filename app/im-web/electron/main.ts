@@ -18,12 +18,15 @@ import {
   searchLocalMessages,
   upsertLocalMessage,
   type LocalMessageRecord,
+  getLocalMessageLibrary,
+  updateLocalMessageLibrary,
 } from './localMessages.js'
 import { installPendingUpdateOnQuit, isInstallingUpdate, isUpdateInstallRequested, registerUpdateHandlers, shouldInstallOnQuit } from './updater.js'
 import { registerP2pHandlers } from './p2pNative.js'
 import { configureInternalCertificateTrust } from './internalCertificateTrust.js'
 import { createWindowModeController, LOGIN_WINDOW_SIZE } from './windowMode.js'
 import { listLocalDrafts, saveLocalDraft } from './localDrafts.js'
+import { registerContextMenuHandlers, safeExternalUrl } from './contextMenu.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -116,7 +119,8 @@ function isTrustedRendererUrl(value: string) {
  */
 function hardenRendererWindow(window: BrowserWindow) {
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) void shell.openExternal(url)
+    const safeUrl = safeExternalUrl(url)
+    if (safeUrl) void shell.openExternal(safeUrl).catch(() => undefined)
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event, url) => {
@@ -129,6 +133,9 @@ function hardenRendererWindow(window: BrowserWindow) {
 function assertMainWindowSender(event: IpcMainInvokeEvent) {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
     throw new Error('IPC 请求并非来自主应用窗口')
+  }
+  if (event.senderFrame !== event.sender.mainFrame || !isTrustedRendererUrl(event.senderFrame?.url || '')) {
+    throw new Error('IPC 请求必须来自可信的主页面')
   }
 }
 
@@ -362,8 +369,9 @@ ipcMain.handle('window:shake', (event) => {
 /** 通过系统默认浏览器打开外链，仅允许 https/http 协议 */
 ipcMain.handle('app:openExternal', async (event, url: string) => {
   assertMainWindowSender(event)
-  if (/^https?:\/\//i.test(url)) {
-    await shell.openExternal(url)
+  const safeUrl = safeExternalUrl(url)
+  if (safeUrl) {
+    await shell.openExternal(safeUrl)
     return true
   }
   return false
@@ -464,6 +472,15 @@ ipcMain.handle('messages:stats', (event, userId: string) => {
   return getLocalMessageStats(userId)
 })
 
+ipcMain.handle('messages:library', (event, userId: string) => {
+  assertMainWindowSender(event)
+  return getLocalMessageLibrary(userId)
+})
+ipcMain.handle('messages:library-update', (event, userId: string, action: 'delete' | 'favorite' | 'unfavorite', messages: LocalMessageRecord[]) => {
+  assertMainWindowSender(event)
+  return updateLocalMessageLibrary(userId, action, messages)
+})
+
 /** 清空本地消息缓存 */
 ipcMain.handle('messages:clear', (event, userId: string) => {
   assertMainWindowSender(event)
@@ -488,6 +505,7 @@ ipcMain.handle('drafts:save', (event, userId: string, conversationId: string, dr
 
 const p2pNative = registerP2pHandlers({ assertTrusted: assertMainWindowSender,
   getWindow: () => mainWindow || undefined, getStorageDirectory: getStorageLocation })
+registerContextMenuHandlers(assertMainWindowSender, () => mainWindow)
 
 // ==================== 应用生命周期 ====================
 

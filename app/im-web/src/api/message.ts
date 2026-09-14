@@ -6,6 +6,10 @@ import http from './index'
 import type { P2pAttachmentContent } from '../utils/p2pProtocol'
 import { toServerUrl } from '../config/runtime'
 
+export function getMessagePolicy() {
+  return http.get<{ recallWindowMs: number; serverTime: number }>('/api/messages/policy')
+}
+
 /**
  * 聊天消息实体。
  */

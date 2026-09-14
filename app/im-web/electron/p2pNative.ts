@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, shell } from 'electron'
 import type { IpcMainInvokeEvent, MessagePortMain } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { join, dirname, basename } from 'node:path'
+import { copyFile, lstat, realpath } from 'node:fs/promises'
+import { join, dirname, basename, resolve } from 'node:path'
 import { P2pTaskStorage, mergeRendererTaskPatch, type NativeTask, type NativeTaskPatch } from './p2pTaskStorage.js'
 import { P2pSourceStore } from './p2pSources.js'
 import { P2pReceiver, checkDestination, pathExists, uniqueResultPath, verifyResult, type ReceiveManifest } from './p2pReceive.js'
@@ -229,14 +230,53 @@ class NativeClient {
     return { canceled: false, ...await this.sources.locate(id, selected.filePaths[0]) }
   }
   async openResult(id: string, reveal = false) {
+    const user = this.account()
     const task = this.find(id)
-    if (task.direction !== 'receive' || task.status !== 'completed' || !task.localPath || !await pathExists(task.localPath)) return { success: false, error: '本地文件已移动或删除，可定位文件或重新接收' }
-    if (reveal) shell.showItemInFolder(task.localPath)
+    const path = await this.taskPath(task)
+    if (user !== this.userId) throw new Error('账号已切换')
+    if (reveal) shell.showItemInFolder(path)
     else {
-      const error = await shell.openPath(task.localPath)
+      const error = await shell.openPath(path)
       if (error) return { success: false, error }
     }
-    return { success: true, path: task.localPath }
+    return { success: true, path }
+  }
+  private async taskPath(task: NativeTask) {
+    if (task.direction === 'send' && task.sourceId) {
+      await this.sources.validate(task.sourceId)
+      return this.sources.get(task.sourceId).rootPath
+    }
+    if (task.direction !== 'receive' || task.status !== 'completed' || !task.localPath || !await pathExists(task.localPath)) {
+      throw new Error('本地文件已移动或删除，请定位文件或重新接收')
+    }
+    const info = await lstat(task.localPath)
+    if (info.isSymbolicLink()) throw new Error('文件路径已变为链接，请重新定位原文件')
+    if (resolve(await realpath(task.localPath)).toLowerCase() !== resolve(task.localPath).toLowerCase()) throw new Error('文件路径包含链接，请重新定位原文件')
+    return task.localPath
+  }
+  async sourceFromTask(id: string) {
+    const user = this.account(); const task = this.find(id)
+    const path = await this.taskPath(task)
+    if (task.direction === 'receive' && !await verifyResult(task, path)) throw new Error('本地文件已改变，不能转发原消息')
+    if (user !== this.userId) throw new Error('账号已切换')
+    // A fresh source goes through the existing P2P offer flow; never reuse a conversation-bound transfer token.
+    return this.sources.importPaths([path])
+  }
+  async saveAs(id: string) {
+    const user = this.account(); const task = this.find(id)
+    if (task.kind !== 'file') throw new Error('文件夹请使用打开文件所在位置')
+    const source = await this.taskPath(task)
+    const parent = this.options.getWindow(this.event)
+    const options = { title: '文件另存为', defaultPath: basename(task.name) }
+    const selected = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options)
+    if (selected.canceled || !selected.filePath) return { canceled: true }
+    if (user !== this.userId) throw new Error('账号已切换')
+    if (resolve(source).toLowerCase() === resolve(selected.filePath).toLowerCase()) throw new Error('请选择不同的保存位置')
+    if (await pathExists(selected.filePath) && (await lstat(selected.filePath)).isSymbolicLink()) throw new Error('不能覆盖符号链接')
+    await checkDestination(dirname(selected.filePath), task.totalBytes)
+    if (user !== this.userId) throw new Error('账号已切换')
+    await copyFile(source, selected.filePath)
+    return { canceled: false }
   }
   async locateResult(id: string) {
     const user = this.account(); const task = this.find(id)
@@ -306,6 +346,8 @@ export function registerP2pHandlers(options: NativeOptions) {
   handle('p2p:receive-cleanup', (native, id: string) => native.receiver(id).retryCleanup())
   handle('p2p:open-result', (native, id: string) => native.openResult(id))
   handle('p2p:reveal-result', (native, id: string) => native.openResult(id, true))
+  handle('p2p:save-as', (native, id: string) => native.saveAs(id))
+  handle('p2p:task-source', (native, id: string) => native.sourceFromTask(id))
   handle('p2p:locate-result', (native, id: string) => native.locateResult(id))
   handle('p2p:receive-destination', (native, id: string) => native.changeDestination(id))
   return { suspendAll: async () => { for (const native of clients.values()) await native.suspendAll() } }
