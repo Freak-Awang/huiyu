@@ -371,15 +371,15 @@ function revokeAvatarObjectUrl() {
   height: 28px;
   border: none;
   border-radius: 6px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.18);
   cursor: pointer;
   color: #fff;
   font-size: 19px;
-  transition: color 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .profile-close:hover {
-  color: var(--accent);
+  background: rgba(0, 0, 0, 0.36);
 }
 
 .profile-avatar {

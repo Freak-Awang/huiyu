@@ -427,6 +427,7 @@
               :class="{
                 'message-self': msg.senderId === authStore.currentUser?.userId,
                 'message-highlighted': highlightedMessageId === msg.messageId,
+                'message-shake': msg.messageType === 'SHAKE',
               }"
             >
               <input v-if="selecting" class="message-checkbox" type="checkbox" :aria-label="`选择${getMessageSenderName(msg)}的消息`"
@@ -525,9 +526,9 @@
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'SHAKE'">
-                    <div class="text-bubble shake-bubble">
-                      <AppIcon :svg="shakeIcon" class="shake-bubble-icon" />
-                      <span>{{ msg.senderId === String(authStore.currentUser?.userId ?? '') ? '你' : getMessageSenderName(msg) }}发送了一个窗口抖动</span>
+                    <div class="shake-notice">
+                      <svg class="shake-notice-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.24 5.35-3.57 3.87a.75.75 0 0 1-1.09 0L4.8 8.44a.75.75 0 1 1 1.06-1.06l1.22 1.22 3.04-3.3a.75.75 0 0 1 1.12 1.05Z" /></svg>
+                      <span>{{ msg.senderId === String(authStore.currentUser?.userId ?? '') ? '你向对方发送了一个振屏。' : '对方向您发送了一个振屏。' }}</span>
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
@@ -5543,16 +5544,45 @@ watch(
   animation: windowShake 0.6s ease-in-out;
 }
 
-.shake-bubble {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
+/* 窗口抖动：居中系统通知样式（无头像/发送者/时间行） */
+.message-item.message-shake {
+  max-width: 100%;
+  align-self: center;
 }
 
-.shake-bubble-icon {
-  width: 16px;
-  height: 16px;
+.message-item.message-shake .message-avatar,
+.message-item.message-shake .message-sender,
+.message-item.message-shake .message-time {
+  display: none;
+}
+
+.message-item.message-shake .message-body {
+  align-items: center;
+}
+
+.message-item.message-shake .message-content {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.shake-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 7%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.shake-notice-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--success);
+  flex-shrink: 0;
 }
 
 .input-box {

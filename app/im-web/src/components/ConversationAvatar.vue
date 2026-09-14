@@ -67,7 +67,7 @@ function handleError() {
 .conversation-avatar {
   position: relative;
   border-radius: 50%;
-  background: var(--accent-avatar, #F87B08);
+  background: var(--accent-avatar, #8B9199);
   color: #fff;
   display: inline-flex;
   align-items: center;
