@@ -35,9 +35,12 @@ export class WebSocketManager {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pongTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private stableTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectCount = 0
   private readonly reconnectBaseDelay = 1000    // 重连基础延迟 1 秒
   private readonly reconnectMaxDelay = 30000    // 重连最大延迟 30 秒
+  /** 连接保持多久后才视为“稳定”，此时才清零退避计数 */
+  private readonly stableConnectionDelay = 10000
   private intentionalClose = false              // 是否主动断开（主动断开不重连）
   private generation = 0                        // 连接代际，防止过期连接回调
   private readonly subscribers = new Map<string, Set<MessageHandler>>()
@@ -83,10 +86,17 @@ export class WebSocketManager {
 
       socket.onopen = () => {
         if (socket !== this.ws) return // 代际检查：忽略过期 socket
-        this.reconnectCount = 0
         this.connectionHandler?.(true)
         this.connectionSubscribers.forEach((handler) => handler(true))
         this.startHeartbeat()
+        // 仅在连接稳定保持一段时间后才清零退避计数。
+        // 若在 onopen 立即清零，遇到“握手成功后被服务端立刻关闭”的场景时，
+        // 退避永远停在 1 秒，会形成约每秒一次的重连风暴，导致界面被反复整屏刷新而闪烁。
+        this.clearStableTimer()
+        this.stableTimer = setTimeout(() => {
+          this.stableTimer = null
+          if (socket === this.ws) this.reconnectCount = 0
+        }, this.stableConnectionDelay)
       }
 
       socket.onmessage = (event) => {
@@ -117,6 +127,7 @@ export class WebSocketManager {
       socket.onclose = () => {
         if (socket !== this.ws) return
         this.ws = null
+        this.clearStableTimer()
         this.stopHeartbeat()
         this.connectionHandler?.(false)
         this.connectionSubscribers.forEach((handler) => handler(false))
@@ -143,6 +154,7 @@ export class WebSocketManager {
     window.removeEventListener('online', this.handleNetworkOnline)
     this.stopHeartbeat()
     this.clearReconnectTimer()
+    this.clearStableTimer()
     this.disposeSocket()
     this.connectionHandler?.(false)
     this.connectionSubscribers.forEach((handler) => handler(false))
@@ -262,6 +274,13 @@ export class WebSocketManager {
     }
   }
 
+  private clearStableTimer() {
+    if (this.stableTimer) {
+      clearTimeout(this.stableTimer)
+      this.stableTimer = null
+    }
+  }
+
   private rejectPendingRequests(error: Error) {
     for (const pending of this.pendingRequests.values()) {
       globalThis.clearTimeout(pending.timer)
@@ -272,6 +291,7 @@ export class WebSocketManager {
 
   /** 释放当前 socket 连接，清理所有事件监听 */
   private disposeSocket() {
+    this.clearStableTimer()
     if (!this.ws) return
     const socket = this.ws
     this.ws = null

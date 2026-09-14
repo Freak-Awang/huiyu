@@ -421,7 +421,7 @@
           <div class="message-list">
             <div
               v-for="msg in chatStore.currentMessages"
-              :key="msg.messageId || msg.clientMsgId"
+              :key="msg.clientMsgId || msg.messageId"
               :id="messageElementId(msg.messageId || msg.clientMsgId || '')"
               class="message-item"
               :class="{
@@ -4061,7 +4061,6 @@ let pendingSyncTimer: ReturnType<typeof setTimeout> | undefined
 
 async function syncConnectedMessages(manager: WebSocketManager, epoch: number) {
   const current = () => !chatDisposed && wsManager === manager && manager.isConnected() && epoch === syncGeneration
-  let retryDelay = 30000
   try {
     await chatStore.fetchPendingMessages()
     if (!current()) return
@@ -4076,10 +4075,10 @@ async function syncConnectedMessages(manager: WebSocketManager, epoch: number) {
     }
     updateUnreadBadge()
   } catch (error) {
-    retryDelay = 5000
+    // 只在同步失败时重试。成功后再无条件重拉会话与消息会让列表每 30 秒整屏刷新一次（界面一闪一闪）；
+    // 实时增量由 WebSocket 推送，连接存活性由心跳与重连机制保障，重连成功后也会重新触发本函数。
     console.warn('消息同步未完成，将自动重试', error)
-  } finally {
-    if (current()) pendingSyncTimer = setTimeout(() => void syncConnectedMessages(manager, epoch), retryDelay)
+    if (current()) pendingSyncTimer = setTimeout(() => void syncConnectedMessages(manager, epoch), 5000)
   }
 }
 
@@ -4201,10 +4200,17 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)}GB`
 }
 
+let lastSentUnreadBadge = -1
 function updateUnreadBadge() {
   if (!window.imDesktop?.setUnreadBadge) return
-  window.imDesktop.setUnreadBadge(totalUnreadCount.value).catch(() => {
+  const count = totalUnreadCount.value
+  // 未读数未变化时跳过重复下发：每条新消息会同时经由收消息分支与 totalUnreadCount 监听触发，
+  // 重复调用会让主进程反复重设标题与任务栏覆盖图标，造成任务栏图标闪烁。
+  if (count === lastSentUnreadBadge) return
+  lastSentUnreadBadge = count
+  window.imDesktop.setUnreadBadge(count).catch(() => {
     // Badge support varies by platform; unread state remains in the renderer.
+    lastSentUnreadBadge = -1
   })
 }
 
