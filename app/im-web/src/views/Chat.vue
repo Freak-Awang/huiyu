@@ -550,22 +550,6 @@
                   </span>
                   <span v-if="msg.status === 'SENDING'"> · 发送中</span>
                   <button
-                    v-if="msg.status !== 'RECALLED'"
-                    type="button"
-                    class="message-action-link"
-                    @click="startReply(msg)"
-                  >
-                    回复
-                  </button>
-                  <button
-                    v-if="canRecallMessage(msg)"
-                    type="button"
-                    class="message-action-link"
-                    @click="recallCurrentMessage(msg)"
-                  >
-                    撤回
-                  </button>
-                  <button
                     v-if="msg.status === 'FAILED'"
                     type="button"
                     class="message-retry"

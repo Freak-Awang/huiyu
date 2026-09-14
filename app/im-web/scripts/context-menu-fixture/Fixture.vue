@@ -21,9 +21,11 @@ import { useAuthStore } from '../../src/stores/auth'
 import { useChatStore } from '../../src/stores/chat'
 import http from '../../src/api'
 const requests: string[] = []
+let policyUnavailable = false
 http.defaults.adapter = async config => {
   requests.push(config.url || '')
   if (config.url !== '/api/messages/policy') throw new Error('Fixture blocked a network request')
+  if (policyUnavailable) throw new Error('404: old server has no policy endpoint')
   return { data: { recallWindowMs: 120000, serverTime: Date.now() }, status: 200, statusText: 'OK', headers: {}, config }
 }
 const copies: string[] = [], errors: string[] = [], commands: string[] = []
@@ -128,6 +130,21 @@ onMounted(async () => {
       key('ArrowLeft'); await pause(); check(document.querySelectorAll('[role=menu]').length === 1, 'left arrow returns to parent')
       key('ArrowRight'); await pause(); key('Enter'); await pause(); check(commands.includes('submenu'), 'submenu enter executes command')
       check(requests.length === 1, 'opening menus makes no server requests')
+      // Reproduce deployment with the pre-existing recall endpoint but no new policy endpoint.
+      policyUnavailable = true
+      menu.policy.reset(); await menu.policy.refresh()
+      rightClick('message-100'); await pause()
+      check(labels().includes('撤回'), 'legacy server still shows recall for a recent own message')
+      choose('撤回'); await pause()
+      check(commands.includes('recall'), 'legacy recall dispatches the existing action')
+      rightClick('message-101'); await pause()
+      check(!labels().includes('撤回'), 'legacy server still hides recall for other senders')
+      const original = chat.messages.get('10')![0]!
+      chat.messages.get('10')![0] = { ...original, createdAt: new Date(Date.now() - 121000).toISOString() }
+      rightClick('message-100'); await pause()
+      check(!labels().includes('撤回'), 'legacy server hides recall after two minutes')
+      chat.messages.get('10')![0] = original
+      check(requests.length === 2, 'legacy menu opens do not retry the optional API')
       check(!errors.length, 'no menu execution errors')
       return results
     },
