@@ -3097,6 +3097,18 @@ function getP2pInfo(content: string): P2pAttachmentContent | null {
   return parseP2pAttachmentContent(content)
 }
 
+// 消息加载/更新后同步服务端持久化的分享状态，让接收方重启后也能看到“已取消/已撤回”
+watch(
+  () => chatStore.currentMessages.map((msg) => getP2pInfo(msg.content)?.transferId || '').join(','),
+  () => {
+    const transferIds = chatStore.currentMessages
+      .map((msg) => getP2pInfo(msg.content)?.transferId)
+      .filter((id): id is string => !!id)
+    if (transferIds.length) void p2pTransferStore.syncShareStates(transferIds)
+  },
+  { immediate: true },
+)
+
 function getP2pState(msg: Message) {
   const info = getP2pInfo(msg.content)
   return info ? p2pTransferStore.stateFor(info.transferId) : undefined

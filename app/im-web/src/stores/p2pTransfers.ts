@@ -1452,11 +1452,61 @@ export const useP2pTransferStore = defineStore('p2pTransfers', () => {
       ...(record.cleanupPending ? { error: record.cleanupError } : {}) })
   }
 
+  /** 为没有本地传输记录的接收方补建终止态，让气泡显示“已取消/已撤回” */
+  function applyTerminalShareState(transferId: string, shareState: 'RECALLED' | 'STOPPED',
+    messageId?: number | string, conversationId?: number | string) {
+    setState(transferId, {
+      direction: 'receive',
+      shareState,
+      status: shareState === 'RECALLED' ? 'recalled' : 'stopped',
+      desiredState: 'paused',
+      messageId: messageId != null ? String(messageId) : undefined,
+      conversationId: conversationId != null ? String(conversationId) : undefined,
+      error: shareState === 'RECALLED' ? '文件消息已撤回' : '发送方已取消发送',
+    })
+  }
+
+  /** 已查询过服务端分享状态的 transferId（账号生命周期内去重） */
+  const queriedShareStates = new Set<string>()
+
+  /** 同步服务端持久化的分享状态：接收方重启或拉取历史消息后恢复“已取消/已撤回”展示 */
+  async function syncShareStates(transferIds: string[]) {
+    if (!socket?.isConnected()) return
+    const epoch = accountEpoch
+    for (const transferId of [...new Set(transferIds)]) {
+      if (epoch !== accountEpoch || !socket?.isConnected()) return
+      if (queriedShareStates.has(transferId)) continue
+      const existing = states.value[transferId]
+      if (existing && (TERMINAL.has(existing.status) || ['STOPPED', 'RECALLED'].includes(existing.shareState || ''))) continue
+      queriedShareStates.add(transferId)
+      try {
+        const result = await socket.request<{ shareState?: string; messageId?: number | string }>(
+          'P2P_SHARE_STATUS', { transferId }, 10000)
+        if (epoch !== accountEpoch) return
+        if (result.shareState === 'STOPPED' || result.shareState === 'RECALLED') {
+          if (states.value[transferId]) await invalidateShare(transferId, result.shareState)
+          else applyTerminalShareState(transferId, result.shareState, result.messageId)
+        }
+      } catch {
+        queriedShareStates.delete(transferId) // 查询失败允许后续重试
+      }
+    }
+  }
+
   function handleShareState(message: WsMessage) {
     const data = message.data
     if (!data?.transferId || data.ok != null) return
     const id = String(data.transferId)
-    if (data.shareState === 'RECALLED' || data.shareState === 'STOPPED') void invalidateShare(id, data.shareState)
+    if (data.shareState === 'RECALLED' || data.shareState === 'STOPPED') {
+      // 接收方尚未开始接收时本地没有传输记录，invalidateShare 会直接跳过；
+      // 这里补一条终止态，让消息气泡同步显示“已取消/已撤回”
+      if (!states.value[id]) {
+        applyTerminalShareState(id, data.shareState, data.messageId as number | string | undefined,
+          data.conversationId as number | string | undefined)
+        return
+      }
+      void invalidateShare(id, data.shareState)
+    }
     else if (data.state === 'available') {
       const state = states.value[id]
       if (state?.direction === 'receive' && state.desiredState === 'running' && ['network', 'peer'].includes(state.pauseReason || '')) {
@@ -1593,6 +1643,7 @@ export const useP2pTransferStore = defineStore('p2pTransfers', () => {
     connectionDeadlines.clear()
     requestEpochs.clear()
     retryCounts.clear()
+    queriedShareStates.clear()
     speedSamples.clear()
     retiredRoutes.clear()
     peerAvailability.value = {}
@@ -1626,6 +1677,7 @@ export const useP2pTransferStore = defineStore('p2pTransfers', () => {
     discardPreparedDraft,
     discardPreparedConversation,
     stateFor,
+    syncShareStates,
     dispose,
   }
 })
