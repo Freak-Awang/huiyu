@@ -332,13 +332,15 @@ ipcMain.handle('window:isMaximized', (event) => {
   return !!mainWindow?.isMaximized()
 })
 
-/** 窗口抖动（振屏）：在原位置附近快速小幅移动窗口，模拟 QQ 抖一抖效果 */
+/** 窗口抖动（振屏）：先把主窗口唤出到前台，再在原位置附近快速小幅移动窗口，模拟 QQ 抖一抖效果 */
 let windowShakeTimer: NodeJS.Timeout | null = null
 ipcMain.handle('window:shake', (event) => {
   assertMainWindowSender(event)
   if (!mainWindow || mainWindow.isDestroyed()) return false
-  // 最大化或最小化状态下无法移动窗口，退化为仅页面内容抖动
-  if (mainWindow.isMaximized() || mainWindow.isMinimized()) return false
+  // 收到振屏时唤出主窗口：从托盘隐藏/最小化中恢复并置于前台
+  focusMainWindow()
+  // 最大化状态下无法移动窗口，退化为仅页面内容抖动
+  if (mainWindow.isMaximized()) return false
   // 抖动进行中则忽略叠加请求，避免窗口位置漂移
   if (windowShakeTimer) return false
 
