@@ -476,7 +476,7 @@
                     >
                       <span class="file-bubble-main">
                         <span class="file-bubble-name">{{ getP2pInfo(msg.content)?.name }}</span>
-                        <span class="file-bubble-meta">{{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }} · 局域网直传</span>
+                        <span class="file-bubble-meta">{{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }}</span>
                         <span class="file-bubble-meta">{{ transferStatusLabel(getP2pBubbleItem(msg)) }} · {{ transferProgressText(getP2pBubbleItem(msg)) }}</span>
                         <span v-if="getP2pState(msg)?.error" class="file-bubble-meta p2p-error">{{ getP2pState(msg)?.error }}</span>
                       </span>
@@ -484,7 +484,7 @@
                         <button type="button" class="p2p-action" :disabled="isP2pPrimaryDisabled(msg)" @click="handleP2pPrimary(msg)">{{ getP2pActionLabel(msg) }}</button>
                         <button v-if="canRevealP2p(msg)" type="button" class="p2p-cancel" @click="revealP2pMessage(msg)">位置</button>
                         <button v-if="canCancelP2p(msg)" type="button" class="p2p-cancel" @click="cancelP2pMessage(msg)">取消</button>
-                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">停止分享</button>
+                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">取消发送</button>
                         <button type="button" class="p2p-cancel" @click="showTransferCenter = true">详情</button>
                       </span>
                     </div>
@@ -503,7 +503,7 @@
                       <div class="file-bubble folder-bubble-card p2p-file-bubble">
                         <span class="file-bubble-main">
                           <span class="file-bubble-name">{{ getP2pInfo(msg.content)?.name }}</span>
-                          <span class="file-bubble-meta">{{ getP2pInfo(msg.content)?.fileCount }} 个文件 · {{ getP2pInfo(msg.content)?.directoryCount || 0 }} 个目录 · {{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }} · 局域网直传</span>
+                          <span class="file-bubble-meta">{{ getP2pInfo(msg.content)?.fileCount }} 个文件 · {{ getP2pInfo(msg.content)?.directoryCount || 0 }} 个目录 · {{ formatFileSize(getP2pInfo(msg.content)?.totalSize || 0) }}</span>
                           <span class="file-bubble-meta">{{ transferStatusLabel(getP2pBubbleItem(msg)) }} · {{ transferProgressText(getP2pBubbleItem(msg)) }}</span>
                           <span v-if="getP2pState(msg)?.error" class="file-bubble-meta p2p-error">{{ getP2pState(msg)?.error }}</span>
                         </span>
@@ -511,7 +511,7 @@
                           <button type="button" class="p2p-action" :disabled="isP2pPrimaryDisabled(msg)" @click="handleP2pPrimary(msg)">{{ getP2pActionLabel(msg) }}</button>
                           <button v-if="canRevealP2p(msg)" type="button" class="p2p-cancel" @click="revealP2pMessage(msg)">位置</button>
                           <button v-if="canCancelP2p(msg)" type="button" class="p2p-cancel" @click="cancelP2pMessage(msg)">取消</button>
-                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">停止分享</button>
+                        <button v-if="canStopSharingP2p(msg)" type="button" class="p2p-cancel" @click="handleTransferAction('stopSharing', getP2pBubbleItem(msg))">取消发送</button>
                         <button type="button" class="p2p-cancel" @click="showTransferCenter = true">详情</button>
                         </span>
                       </div>
@@ -579,15 +579,6 @@
           @dragleave="handleAttachmentDragLeave"
           @drop="handleAttachmentDrop"
         >
-          <div
-            v-if="isAttachmentDragActive"
-            class="attachment-drop-overlay"
-            aria-hidden="true"
-          >
-            <AppIcon :svg="fileIcon" class="attachment-drop-icon" />
-            <strong>松开以添加到当前会话</strong>
-            <span>图片、视频和文件将在点击发送后上传</span>
-          </div>
           <div v-if="replyTarget" class="reply-target">
             <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
             <button type="button" aria-label="取消回复" @click="replyTarget = null">✕</button>
@@ -604,23 +595,6 @@
                   @retry="retryAttachmentDraft"
                   @focus-input="focusMessageInputAtStart"
                 />
-                <p
-                  v-if="attachmentFeedback"
-                  class="attachment-feedback"
-                  :class="{ error: attachmentFeedbackIsError }"
-                  role="alert"
-                >
-                  <span>{{ attachmentFeedback }}</span>
-                  <button
-                    type="button"
-                    class="attachment-feedback-close"
-                    aria-label="关闭附件提示"
-                    @click="setAttachmentFeedback('')"
-                  >
-                    ×
-                  </button>
-                </p>
-                <p v-if="draftSaveError" class="attachment-feedback error" role="alert">{{ draftSaveError }}</p>
                 <textarea
                   ref="messageInputRef"
                   v-model="messageText"
@@ -1673,7 +1647,7 @@ const conversationDrafts = useConversationDrafts(
   computed(() => authStore.currentUser?.userId || ''),
   computed(() => chatStore.currentConversation?.conversationId),
 )
-const { text: messageText, mentions: draftMentions, replyTo: replyTarget, error: draftSaveError } = conversationDrafts
+const { text: messageText, mentions: draftMentions, replyTo: replyTarget } = conversationDrafts
 const messageSender = createMessageSender(chatStore.updateMessageStatus, chatStore.setMessageStatus)
 const previewImage = ref('')
 const authenticatedImageUrls = ref<Record<string, string>>({})
@@ -1684,8 +1658,6 @@ const avatarLoadPromises = new Map<string, Promise<string>>()
 let avatarLoadGeneration = 0
 const isSendingMessage = ref(false)
 const isAttachmentDragActive = ref(false)
-const attachmentFeedback = ref('')
-const attachmentFeedbackIsError = ref(false)
 const attachmentDragDepth = new DragDepthTracker()
 const hasDesktopWindowControls = !!window.imDesktop?.window
 const showMentionPicker = ref(false)
@@ -1770,7 +1742,7 @@ async function handleTransferAction(action: TransferAction, item: TransferCenter
     else if (action === 'changeDestination') await p2pTransferStore.changeDestination(id)
     else if (action === 'retryCleanup') await p2pTransferStore.retryCleanup(id)
   } catch (error) {
-    setAttachmentFeedback(error instanceof Error ? error.message : '文件操作失败', true)
+    console.warn('文件传输操作失败', error)
   } finally { transferBusyIds.value = transferBusyIds.value.filter((value) => value !== id) }
 }
 
@@ -2114,26 +2086,6 @@ function getImageFilesFromClipboard(event: ClipboardEvent): File[] {
   return Array.from(clipboardData.files).filter((file) => file.type.startsWith('image/'))
 }
 
-const SUBMITTED_ATTACHMENT_FEEDBACK = '附件正在后台准备，可在文件传输中心查看'
-const ACTIVE_ATTACHMENT_DRAFT_STATUSES = new Set(['queued', 'hashing', 'uploading'])
-
-// 设置附件操作反馈信息
-function setAttachmentFeedback(message: string, isError = false) {
-  attachmentFeedback.value = message
-  attachmentFeedbackIsError.value = isError
-}
-
-function clearSubmittedAttachmentFeedback(conversationId: string) {
-  if (
-    chatStore.currentConversation?.conversationId !== conversationId
-    || attachmentFeedback.value !== SUBMITTED_ATTACHMENT_FEEDBACK
-  ) return
-  const hasActiveDrafts = attachmentDraftStore
-    .draftsFor(conversationId)
-    .some((draft) => draft.submitted && ACTIVE_ATTACHMENT_DRAFT_STATUSES.has(draft.status))
-  if (!hasActiveDrafts) setAttachmentFeedback('')
-}
-
 function p2pAttachmentBlockReason(conversationId = chatStore.currentConversation?.conversationId) {
   const conversation = chatStore.conversations.find((item) => item.conversationId === conversationId)
   if (!conversation) return '请先选择会话'
@@ -2142,43 +2094,24 @@ function p2pAttachmentBlockReason(conversationId = chatStore.currentConversation
   return ''
 }
 
-// 添加附件到当前会话的草稿列表，处理重复和错误；extraMessages 会合并进反馈提示
+// 添加附件到当前会话的草稿列表，处理重复和错误
 function addAttachmentFiles(
   files: File[],
   classification: AttachmentDraftClassification = 'auto',
-  extraMessages: string[] = [],
   targetConversationId = chatStore.currentConversation?.conversationId,
 ) {
   const conversationId = targetConversationId
-  if (!conversationId || !authStore.currentUser) {
-    setAttachmentFeedback('请先选择会话，再添加附件', true)
-    return false
-  }
-  if (!files.length) {
-    setAttachmentFeedback('没有检测到可添加的文件', true)
-    return false
-  }
+  if (!conversationId || !authStore.currentUser) return false
+  if (!files.length) return false
 
-  if (classification === 'file') {
-    const reason = p2pAttachmentBlockReason(conversationId)
-    if (reason) {
-      setAttachmentFeedback(reason, true)
-      return false
-    }
-  }
+  if (classification === 'file' && p2pAttachmentBlockReason(conversationId)) return false
 
   const result = attachmentDraftStore.addFiles(conversationId, files, classification)
-  const messages: string[] = [...extraMessages]
   const p2pDrafts = result.added.filter((draft) => draft.kind !== 'image')
-  const p2pReason = p2pDrafts.length ? p2pAttachmentBlockReason(conversationId) : ''
-  if (p2pReason) {
+  if (p2pDrafts.length && p2pAttachmentBlockReason(conversationId)) {
     p2pDrafts.forEach((draft) => attachmentDraftStore.removeDraft(conversationId, draft.id))
     result.added.splice(0, result.added.length, ...result.added.filter((draft) => draft.kind === 'image'))
-    messages.push(p2pReason)
   }
-  if (result.duplicateCount) messages.push(`已忽略 ${result.duplicateCount} 个重复项`)
-  if (result.errors.length) messages.push(...result.errors)
-  setAttachmentFeedback(messages.join('；'), result.errors.length > 0 || !result.added.length)
   return result.added.length > 0
 }
 
@@ -2186,7 +2119,6 @@ function removeAttachmentDraft(draft: AttachmentDraft) {
   p2pTransferStore.discardPreparedDraft(draft.id)
   attachmentDraftStore.removeDraft(draft.conversationId, draft.id)
   void deleteNativeDraftTask(draft)
-  setAttachmentFeedback('')
 }
 
 function pauseAttachmentDraft(draft: AttachmentDraft) {
@@ -2204,13 +2136,12 @@ async function retryAttachmentDraft(draft: AttachmentDraft) {
   enqueueAttachmentDraft(draft)
 }
 
-// 附件拖拽进入：检测文件拖拽，显示拖放提示
+// 附件拖拽进入：检测文件拖拽，高亮输入区边框
 function handleAttachmentDragEnter(event: DragEvent) {
   if (!hasFileDragPayload(event.dataTransfer)) return
   event.preventDefault()
-  const depth = attachmentDragDepth.enter()
+  attachmentDragDepth.enter()
   isAttachmentDragActive.value = true
-  if (depth === 1) setAttachmentFeedback('松开以添加到当前会话')
 }
 
 // 附件拖拽悬停：允许 drop 操作
@@ -2226,7 +2157,6 @@ function handleAttachmentDragLeave(event: DragEvent) {
   event.preventDefault()
   if (attachmentDragDepth.leave() === 0) {
     isAttachmentDragActive.value = false
-    if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
   }
 }
 
@@ -2240,60 +2170,40 @@ async function handleAttachmentDrop(event: DragEvent) {
   const conversationId = chatStore.currentConversation?.conversationId
   const accountId = String(authStore.currentUser?.userId || '')
   const generation = attachmentAccountGeneration
-  if (!conversationId || !accountId) { setAttachmentFeedback('请先选择会话', true); return }
+  if (!conversationId || !accountId) return
   const droppedNativeFiles = Array.from(event.dataTransfer?.files || [])
   const directories = droppedDirectoryNames(event.dataTransfer?.items)
   const imageFiles = droppedNativeFiles.filter((file) => !directories.has(file.name) && resolveDraftKind(file, 'auto') === 'image')
   const nativeFiles = droppedNativeFiles.filter((file) => directories.has(file.name) || resolveDraftKind(file, 'auto') !== 'image')
-  if (window.imDesktop?.importP2pSources && imageFiles.length) addAttachmentFiles(imageFiles, 'image', [], conversationId)
+  if (window.imDesktop?.importP2pSources && imageFiles.length) addAttachmentFiles(imageFiles, 'image', conversationId)
   if (window.imDesktop?.importP2pSources && imageFiles.length && !nativeFiles.length) return
   if (window.imDesktop?.importP2pSources && nativeFiles.length) {
-    const reason = p2pAttachmentBlockReason()
-    if (reason) { setAttachmentFeedback(reason, true); return }
-    setAttachmentFeedback('正在扫描附件；可继续聊天')
+    if (p2pAttachmentBlockReason()) return
     try {
       const result = await window.imDesktop.importP2pSources(nativeFiles)
       if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
       if (!result.canceled) attachmentDraftStore.addNativeSources(conversationId, result.sources)
-      if (chatStore.currentConversation?.conversationId === conversationId) setAttachmentFeedback('附件已添加；文件夹将完整发送，最多 2GB/文件、20GB/文件夹、10,000 个文件')
     } catch (error) {
-      if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '附件扫描失败，未添加任何文件', true)
+      if (generation === attachmentAccountGeneration) console.warn('附件扫描失败，未添加任何文件', error)
     }
     return
   }
   let dropped: Awaited<ReturnType<typeof collectDroppedItems>>
   try { dropped = await collectDroppedItems(event.dataTransfer) } catch (error) {
-    if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '文件夹读取失败', true)
+    if (generation === attachmentAccountGeneration) console.warn('文件夹读取失败', error)
     return
   }
   if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
   const { files, folders } = dropped
-  const notes: string[] = []
-  let folderHasError = false
-  for (const folder of folders) {
-    const result = addAttachmentFolder(folder, conversationId)
-    notes.push(...result.messages)
-    folderHasError = folderHasError || result.isError
-  }
-  if (files.length) {
-    addAttachmentFiles(files, 'auto', notes, conversationId)
-  } else if (notes.length) {
-    setAttachmentFeedback(notes.join('；'), folderHasError)
-  }
+  for (const folder of folders) addAttachmentFolder(folder, conversationId)
+  if (files.length) addAttachmentFiles(files, 'auto', conversationId)
 }
 
-// 添加文件夹附件草稿，返回反馈信息（不直接设置，由调用方合并展示）
+// 添加文件夹附件草稿
 function addAttachmentFolder(folder: DroppedFolder, conversationId = chatStore.currentConversation?.conversationId) {
-  if (!conversationId || !authStore.currentUser) {
-    return { messages: ['请先选择会话，再添加附件'], isError: true }
-  }
-  const reason = p2pAttachmentBlockReason(conversationId)
-  if (reason) return { messages: [reason], isError: true }
-  const result = attachmentDraftStore.addFolder(conversationId, folder)
-  const messages: string[] = []
-  if (result.duplicateCount) messages.push(`已忽略重复的文件夹「${folder.name}」`)
-  if (result.errors.length) messages.push(...result.errors)
-  return { messages, isError: result.errors.length > 0 }
+  if (!conversationId || !authStore.currentUser) return
+  if (p2pAttachmentBlockReason(conversationId)) return
+  attachmentDraftStore.addFolder(conversationId, folder)
 }
 
 function preventWindowFileDrop(event: DragEvent) {
@@ -2309,7 +2219,6 @@ function handleWindowDragLeave(event: DragEvent) {
   if (!isAttachmentDragActive.value || event.relatedTarget) return
   attachmentDragDepth.reset()
   isAttachmentDragActive.value = false
-  if (attachmentFeedback.value === '松开以添加到当前会话') attachmentFeedback.value = ''
 }
 
 function handleMessagePaste(event: ClipboardEvent) {
@@ -3238,7 +3147,7 @@ async function handleP2pPrimary(msg: Message) {
       return
     }
     await p2pTransferStore.receiveAttachment(info, { messageId: msg.messageId, conversationId: msg.conversationId })
-  } catch (error) { setAttachmentFeedback(error instanceof Error ? error.message : 'P2P 文件操作失败', true) }
+  } catch (error) { console.warn('P2P 文件操作失败', error) }
 }
 
 async function cancelP2pMessage(msg: Message) {
@@ -3619,7 +3528,6 @@ async function handleSendMessage() {
   try {
     if (textDraft.text.trim()) sendTextMessage(conversation, user, textDraft)
     for (const draft of attachments) enqueueAttachmentDraft(draft)
-    if (attachments.length) setAttachmentFeedback(SUBMITTED_ATTACHMENT_FEEDBACK)
   } finally { isSendingMessage.value = false }
 }
 
@@ -3664,7 +3572,7 @@ async function deleteNativeDraftTask(draft: AttachmentDraft) {
     try {
       await window.imDesktop?.deleteP2pTask?.(`draft_${draft.id}`)
     } catch (error) {
-      if (!chatDisposed && generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '无法更新本地发送任务', true)
+      if (!chatDisposed && generation === attachmentAccountGeneration) console.warn('无法更新本地发送任务', error)
     }
   })
 }
@@ -3748,7 +3656,6 @@ async function processAttachmentDraft(
     }
     attachmentDraftStore.removeDraft(conversation.conversationId, draft.id)
     await deleteNativeDraftTask(draft)
-    clearSubmittedAttachmentFeedback(conversation.conversationId)
     return true
   } catch (error: any) {
     if (!stillCurrentAccount()) return false
@@ -3758,10 +3665,7 @@ async function processAttachmentDraft(
       status: controller.signal.aborted ? 'paused' : 'failed',
       error: controller.signal.aborted ? undefined : errorMessage,
     })
-    if (chatStore.currentConversation?.conversationId === conversation.conversationId) setAttachmentFeedback(
-      controller.signal.aborted ? `${draft.name} 已暂停` : `${draft.name}：${errorMessage}`,
-      !controller.signal.aborted,
-    )
+    if (!controller.signal.aborted) console.warn(`附件发送失败：${draft.name}`, errorMessage)
     return false
   }
 }
@@ -3834,7 +3738,7 @@ function activateFileLabel(event: KeyboardEvent) {
 
 function guardP2pPicker(event: Event) {
   const reason = p2pAttachmentBlockReason()
-  if (reason) { event.preventDefault(); setAttachmentFeedback(reason, true); return }
+  if (reason) { event.preventDefault(); return }
   if (window.imDesktop?.pickP2pSources) {
     event.preventDefault()
     const label = event.currentTarget as HTMLElement
@@ -3847,14 +3751,12 @@ async function pickNativeAttachments(kind: 'file' | 'folder') {
   const accountId = String(authStore.currentUser?.userId || '')
   const generation = attachmentAccountGeneration
   if (!conversationId || !accountId || !window.imDesktop?.pickP2pSources) return
-  setAttachmentFeedback('正在选择和扫描附件；可继续聊天')
   try {
     const result = await window.imDesktop.pickP2pSources(kind)
     if (chatDisposed || generation !== attachmentAccountGeneration || String(authStore.currentUser?.userId || '') !== accountId) return
     if (!result.canceled) attachmentDraftStore.addNativeSources(conversationId, result.sources)
-    if (chatStore.currentConversation?.conversationId === conversationId) setAttachmentFeedback(result.canceled ? '' : '附件已添加；单文件上限 2GB，文件夹上限 20GB / 10,000 个文件，超过限制将整项停止')
   } catch (error) {
-    if (generation === attachmentAccountGeneration) setAttachmentFeedback(error instanceof Error ? error.message : '附件读取失败，未添加任何文件', true)
+    if (generation === attachmentAccountGeneration) console.warn('附件读取失败，未添加任何文件', error)
   }
 }
 
@@ -3878,7 +3780,7 @@ function onSendFolder(e: Event) {
   if (files.length) {
     const firstPath = files[0].webkitRelativePath || files[0].name
     const folderName = firstPath.replace(/\\/g, '/').split('/')[0] || 'folder'
-    const result = addAttachmentFolder({
+    addAttachmentFolder({
       name: folderName,
       directories: [],
       files: files.map((file) => ({
@@ -3886,7 +3788,6 @@ function onSendFolder(e: Event) {
         file,
       })),
     })
-    setAttachmentFeedback(result.messages.join('；'), result.isError)
   }
   input.value = ''
 }
@@ -4319,7 +4220,7 @@ onMounted(async () => {
       await p2pTransferStore.restoreAccount(String(authStore.currentUser?.userId || ''))
       if (!chatDisposed) restoreAttachmentDraftTasks()
     } catch (error) {
-      if (!chatDisposed) setAttachmentFeedback(error instanceof Error ? `本地传输任务恢复失败：${error.message}` : '本地传输任务恢复失败', true)
+      if (!chatDisposed) console.warn('本地传输任务恢复失败', error)
     }
     if (chatDisposed) return
     initWebSocket()
@@ -4382,7 +4283,6 @@ watch(
     clearGroupAvatarSelection()
     attachmentDragDepth.reset()
     isAttachmentDragActive.value = false
-    attachmentFeedback.value = ''
     clearAuthenticatedImages()
     closeMentionPicker()
     closeEmojiPanel()
@@ -5377,86 +5277,6 @@ watch(
   border-color: var(--accent);
 }
 
-.attachment-drop-overlay {
-  align-items: center;
-  background: color-mix(in srgb, var(--accent-bg-light) 96%, transparent);
-  border: 2px dashed var(--accent);
-  border-radius: 10px;
-  color: var(--accent-hover);
-  display: flex;
-  flex-direction: column;
-  inset: 6px;
-  justify-content: center;
-  pointer-events: none;
-  position: absolute;
-  text-align: center;
-  z-index: 30;
-}
-
-.attachment-drop-icon {
-  height: 28px;
-  margin-bottom: 6px;
-  width: 28px;
-  color: var(--accent);
-}
-
-.attachment-drop-overlay strong {
-  font-size: 14px;
-}
-
-.attachment-drop-overlay span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  margin-top: 3px;
-}
-
-.attachment-feedback {
-  align-items: center;
-  color: var(--accent);
-  display: flex;
-  font-size: 12px;
-  gap: 6px;
-  line-height: 1.4;
-  margin: 0 12px 4px;
-}
-
-.attachment-feedback > span {
-  flex: 1;
-  min-width: 0;
-}
-
-.attachment-feedback-close {
-  align-items: center;
-  background: none;
-  border: none;
-  border-radius: 50%;
-  color: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  flex: none;
-  font-size: 14px;
-  height: 18px;
-  justify-content: center;
-  line-height: 1;
-  padding: 0;
-  width: 18px;
-}
-
-.attachment-feedback-close:hover,
-.attachment-feedback-close:focus-visible {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  outline: none;
-}
-
-.attachment-feedback.error {
-  color: var(--danger-strong);
-}
-
-.attachment-feedback.error .attachment-feedback-close:hover,
-.attachment-feedback.error .attachment-feedback-close:focus-visible {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-
 .reply-target {
   align-items: center;
   background: var(--bg-surface);
@@ -5638,13 +5458,6 @@ watch(
   height: calc(100% - 40px);
   overflow: auto;
   overscroll-behavior: contain;
-}
-
-.message-content-scroll > .attachment-feedback {
-  align-self: center;
-  flex: none;
-  margin: 0 8px;
-  max-width: 240px;
 }
 
 .message-input {

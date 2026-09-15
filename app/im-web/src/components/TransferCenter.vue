@@ -62,7 +62,7 @@ export function transferStatusLabel(item: TransferCenterItem): string {
   return item.cleanupPending ? `${label} · 临时文件待清理` : label
 }
 function transferBaseStatusLabel(item: TransferCenterItem): string {
-  if (item.status === 'completed' && item.direction === 'send' && ['STOPPED', 'RECALLED'].includes(item.shareState || '')) return '发送完成 · 已停止分享'
+  if (item.status === 'completed' && item.direction === 'send' && ['STOPPED', 'RECALLED'].includes(item.shareState || '')) return '发送完成 · 已取消'
   if (item.status === 'paused' && item.pauseReason === 'network') return item.desiredState === 'running' ? '连接中断，等待重连' : '连接中断，等待手动继续'
   if (item.status === 'paused' && item.pauseReason === 'peer') return '对方已暂停'
   const labels: Record<string, string> = {
@@ -72,7 +72,7 @@ function transferBaseStatusLabel(item: TransferCenterItem): string {
     verifying: '正在校验接收文件', committing: '正在保存',
     completed: item.direction === 'send' ? '发送完成 · 仍在分享' : '接收完成',
     failed: '传输失败', cancelled: '已取消', claimed: '正在其他设备接收',
-    unavailable: '文件暂不可用', stopped: '已停止分享', recalled: '消息已撤回',
+    unavailable: '文件暂不可用', stopped: '已取消', recalled: '消息已撤回',
     paused: item.pauseReason === 'restart' || item.pauseReason === 'restored' ? '已恢复任务，等待手动继续' : '已暂停',
   }
   if (['sending', 'receiving'].includes(item.status) && item.phase && labels[item.phase]) return labels[item.phase]
@@ -126,13 +126,13 @@ export function transferActions(item: TransferCenterItem): Array<{ value: Transf
   if (shareEnded && item.status !== 'completed') return actions
   const source = !item.draft && item.direction === 'send'
   const idleSource = source && ['waiting', 'completed'].includes(item.status)
-  if (!shareEnded && (idleSource || ['queued', 'preparing', 'hashing', 'connecting', 'sending', 'receiving', 'verifying', 'committing'].includes(item.status))) actions.push({ value: 'pause', label: idleSource ? '暂停分享' : '暂停' })
+  if (!shareEnded && (idleSource || ['queued', 'preparing', 'hashing', 'connecting', 'sending', 'receiving', 'verifying', 'committing'].includes(item.status))) actions.push({ value: 'pause', label: idleSource ? '暂停发送' : '暂停' })
   if (['paused', 'failed', 'unavailable'].includes(item.status)) actions.push({ value: 'resume', label: item.status === 'paused' ? '继续' : '重试' })
   if (item.status === 'waiting' && item.direction === 'receive') actions.push({ value: 'resume', label: '接收' })
   const canCancelSource = !source || ['queued', 'connecting', 'sending', 'verifying', 'committing'].includes(item.status)
   if (canCancelSource && !['completed', 'cancelled', 'stopped', 'recalled', 'claimed'].includes(item.status)) actions.push({ value: 'cancel', label: '取消' })
   if (!item.draft && item.direction === 'send' && !shareEnded && !['stopped', 'recalled', 'cancelled'].includes(item.status)) {
-    actions.push({ value: 'stopSharing', label: '停止分享' })
+    actions.push({ value: 'stopSharing', label: '取消发送' })
     if (['failed', 'unavailable', 'paused'].includes(item.status)) actions.push({ value: 'locateSource', label: '重新定位源文件' })
   }
   if (!item.draft && item.direction === 'receive') {

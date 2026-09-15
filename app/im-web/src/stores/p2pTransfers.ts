@@ -1337,7 +1337,7 @@ export const useP2pTransferStore = defineStore('p2pTransfers', () => {
 
   function shareError(state: string) {
     return ({ source_offline: '发送方未在线，请等待原发送设备上线', source_busy: '其他设备正在接收，请稍后重试',
-      source_paused: '发送方已暂停，请等待对方继续', stopped: '发送方已停止分享', recalled: '文件消息已撤回',
+      source_paused: '发送方已暂停，请等待对方继续', stopped: '发送方已取消发送', recalled: '文件消息已撤回',
       incompatible: '对方客户端版本不兼容，请升级桌面端' } as Record<string, string>)[state] || '分享暂不可用，请稍后重试'
   }
 
@@ -1431,7 +1431,7 @@ export const useP2pTransferStore = defineStore('p2pTransfers', () => {
     sources.delete(transferId)
     setState(transferId, { shareState, routeId: undefined, desiredState: 'paused',
       status: state.status === 'completed' && state.direction === 'receive' ? 'completed' : shareState === 'RECALLED' ? 'recalled' : 'stopped',
-      error: shareState === 'RECALLED' ? '文件消息已撤回' : '发送方已停止分享' })
+      error: shareState === 'RECALLED' ? '文件消息已撤回' : '发送方已取消发送' })
     finishOutbound(transferId)
     if (received) {
       await receiveSuspensions.get(received.receiveId)?.catch(() => undefined)

@@ -91,7 +91,7 @@ describe('transfer center presentation', () => {
   })
 
   it('shares primary actions between message bubbles and the center', () => {
-    expect(primaryTransferAction(task({ status: 'completed' }))).toEqual({ value: 'pause', label: '暂停分享' })
+    expect(primaryTransferAction(task({ status: 'completed' }))).toEqual({ value: 'pause', label: '暂停发送' })
     expect(primaryTransferAction(task({ status: 'completed', direction: 'receive' }))?.value).toBe('open')
     expect(primaryTransferAction(task({ status: 'cancelled', direction: 'receive' }))?.value).toBe('receiveAgain')
     expect(primaryTransferAction(task({ status: 'completed', shareState: 'STOPPED' }))).toBeUndefined()
