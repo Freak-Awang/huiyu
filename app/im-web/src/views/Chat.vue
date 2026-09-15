@@ -627,7 +627,6 @@
                   class="message-input"
                   rows="3"
                   aria-label="输入消息"
-                  placeholder="输入消息，按 Enter 发送"
                   :disabled="isSendingMessage"
                   @input="onMessageInput"
                   @keydown="handleMessageKeydown"
@@ -4756,12 +4755,22 @@ watch(
   color: var(--accent);
 }
 
+/* 已上传自定义头像：不再显示橙色默认底，透明背景图片以白色托底 */
+.user-avatar-sidebar:has(img),
+.conv-avatar:has(img),
+.contact-avatar:has(img),
+.message-avatar:has(img),
+.mention-avatar:has(img),
+.member-avatar:has(img) {
+  background: var(--bg-surface);
+}
+
 .conv-avatar {
   width: 40px;
   height: 40px;
   min-width: 40px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-avatar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4910,7 +4919,7 @@ watch(
   height: 34px;
   min-width: 34px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-avatar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5112,7 +5121,7 @@ watch(
   height: 34px;
   min-width: 34px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-avatar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5878,7 +5887,7 @@ watch(
   height: 28px;
   min-width: 28px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-avatar);
   color: #fff;
   display: flex;
   align-items: center;

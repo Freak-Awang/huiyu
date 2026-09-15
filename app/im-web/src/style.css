@@ -83,7 +83,7 @@ body {
   --accent:              #F87B08;
   --accent-hover:        #F6861B;
   --accent-active:       #E76F00;
-  --accent-avatar:       #8B9199;
+  --accent-avatar:       #F87B08;
   --accent-bg-active:    #F8E9E1;
   --accent-bg-active-hover: #F5E3D8;
   --accent-bg-light:     #FEF1E6;
@@ -197,7 +197,7 @@ body {
   --accent:              #F87B08;
   --accent-hover:        #F6861B;
   --accent-active:       #E76F00;
-  --accent-avatar:       #6b7280;
+  --accent-avatar:       #F87B08;
   --accent-bg-active:    rgba(248, 123, 8, 0.24);
   --accent-bg-active-hover: rgba(248, 123, 8, 0.30);
   --accent-bg-light:     rgba(248, 123, 8, 0.14);

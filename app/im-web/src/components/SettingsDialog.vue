@@ -700,6 +700,10 @@ function flashStatus(text: string) {
   place-items: center;
 }
 
+.account-avatar:has(img) {
+  background: var(--bg-surface);
+}
+
 .sidebar-avatar {
   width: 32px;
   height: 32px;

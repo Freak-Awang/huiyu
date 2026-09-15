@@ -441,6 +441,11 @@ function revokeAvatarObjectUrl() {
   border-radius: 50%;
 }
 
+/* 已上传自定义头像：不再显示橙色默认底，透明背景图片以白色托底 */
+.profile-avatar:has(img) {
+  background: var(--bg-surface);
+}
+
 .presence-dot {
   position: absolute;
   right: 2px;

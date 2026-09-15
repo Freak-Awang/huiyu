@@ -67,7 +67,7 @@ function handleError() {
 .conversation-avatar {
   position: relative;
   border-radius: 50%;
-  background: var(--accent-avatar, #8B9199);
+  background: var(--accent-avatar, #F87B08);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -84,5 +84,10 @@ function handleError() {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+}
+
+/* 已上传自定义头像：不再显示橙色默认底，透明背景图片以白色托底 */
+.conversation-avatar:has(img) {
+  background: var(--bg-surface);
 }
 </style>

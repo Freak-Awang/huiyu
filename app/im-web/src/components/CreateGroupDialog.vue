@@ -900,6 +900,12 @@ function isActiveContact(user: Partial<Contact>) {
   object-fit: cover;
 }
 
+/* 已上传自定义头像：不再显示橙色默认底，透明背景图片以白色托底 */
+.member-avatar:has(img),
+:deep(.member-avatar:has(img)) {
+  background: var(--bg-surface);
+}
+
 .member-copy,
 :deep(.member-copy) {
   min-width: 0;
