@@ -64,7 +64,6 @@
           title="消息"
         >
           <AppIcon :svg="messageIcon" class="nav-icon" label="消息" />
-          <span class="nav-label">消息</span>
         </button>
         <button
           class="nav-item"
@@ -75,7 +74,6 @@
           title="群聊"
         >
           <AppIcon :svg="groupIcon" class="nav-icon" label="群聊" />
-          <span class="nav-label">群聊</span>
         </button>
         <button
           class="nav-item"
@@ -86,7 +84,6 @@
           title="通讯录"
         >
           <AppIcon :svg="contactsIcon" class="nav-icon" label="通讯录" />
-          <span class="nav-label">通讯录</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -4383,16 +4380,17 @@ watch(
 
 .nav-item {
   width: 100%;
+  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 9px 4px 8px;
+  justify-content: center;
+  padding: 0;
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
   color: var(--sidebar-text);
   transition: background-color var(--transition-normal), color var(--transition-normal);
-  gap: 5px;
 }
 
 .nav-item:hover {
@@ -4419,11 +4417,6 @@ watch(
 
 .nav-item.active .nav-icon {
   color: var(--accent);
-}
-
-.nav-label {
-  font-size: 11px;
-  line-height: 1;
 }
 
 .sidebar-footer {
@@ -6868,17 +6861,9 @@ button.more-field-row:hover {
     margin-bottom: 8px;
   }
 
-  .nav-item {
-    padding: 8px 2px;
-  }
-
   .nav-icon {
     width: 19px;
     height: 19px;
-  }
-
-  .nav-label {
-    font-size: 10px;
   }
 
   .settings-btn {
