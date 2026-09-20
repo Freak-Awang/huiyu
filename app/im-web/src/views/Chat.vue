@@ -158,7 +158,7 @@
                   <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
                 </div>
                 <div class="conv-bottom">
-                  <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : conversationPreview(conv) }}</span>
+                  <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + emojiToPlainText(conversationDrafts.preview(conv.conversationId)) : conversationPreview(conv) }}</span>
                   <span
                     v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                     class="mention-badge"
@@ -201,7 +201,7 @@
                 <span class="conv-time">{{ formatTime(conv.lastMessage?.createdAt) }}</span>
               </div>
               <div class="conv-bottom">
-                <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + conversationDrafts.preview(conv.conversationId) : conversationPreview(conv) }}</span>
+                <span class="conv-preview">{{ conversationDrafts.preview(conv.conversationId) ? '[草稿] ' + emojiToPlainText(conversationDrafts.preview(conv.conversationId)) : conversationPreview(conv) }}</span>
                 <span
                   v-if="chatStore.getMentionUnreadCount(conv.conversationId)"
                   class="mention-badge"
@@ -442,20 +442,24 @@
                 <div class="message-sender" :title="getUserSignatureTitle(getMessageSenderName(msg), getMessageSenderSignature(msg))">
                   {{ getMessageSenderName(msg) }}
                 </div>
-                <div class="message-content" @contextmenu="openMessageMenu($event, msg)">
+                <div class="message-content" @contextmenu="openMessageMenu($event, msg)" @copy="copyRenderedMessage">
                   <template v-if="msg.status === 'RECALLED'">
                     <div class="text-bubble recalled-bubble">{{ msg.senderId === authStore.currentUser?.userId ? '你' : getMessageSenderName(msg) }}撤回了一条消息</div>
                   </template>
                   <template v-else-if="msg.messageType === 'TEXT'">
                     <div class="text-bubble">
                       <div v-if="msg.replyTo" class="reply-preview">
-                        {{ msg.replyTo.senderName }}：{{ msg.replyTo.text }}
+                        {{ msg.replyTo.senderName }}：{{ emojiToPlainText(msg.replyTo.text) }}
                       </div>
-                      <template
-                        v-for="(segment, index) in renderMessageSegments(msg)"
-                        :key="index"
-                      ><a v-if="!segment.mention && safeHttpUrl(segment.text)" :href="safeHttpUrl(segment.text)!" @click.prevent="runMenuAction(() => openMessageLink(segment.text))">{{ segment.text }}</a>
-                        <span v-else :class="{ mention: segment.mention, 'mention-self': segment.self }">{{ segment.text }}</span></template>
+                      <EmojiRenderer :text="msg.displayContent || msg.content">
+                        <template #text="{ text }">
+                          <template
+                            v-for="(segment, index) in renderMessageSegments(msg, text)"
+                            :key="index"
+                          ><a v-if="!segment.mention && safeHttpUrl(segment.text)" :href="safeHttpUrl(segment.text)!" @click.prevent="runMenuAction(() => openMessageLink(segment.text))">{{ segment.text }}</a>
+                            <span v-else :class="{ mention: segment.mention, 'mention-self': segment.self }">{{ segment.text }}</span></template>
+                        </template>
+                      </EmojiRenderer>
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'IMAGE'">
@@ -529,16 +533,7 @@
                     </div>
                   </template>
                   <template v-else-if="msg.messageType === 'STICKER'">
-                    <div class="sticker-bubble">
-                      <template v-if="getStickerInfo(msg.content)">
-                        <img
-                          :src="getStickerInfo(msg.content)?.url"
-                          class="sticker-img"
-                          :alt="getStickerInfo(msg.content)?.name"
-                        />
-                      </template>
-                      <span v-else class="sticker-error">本地表情不可用</span>
-                    </div>
+                    <div class="text-bubble">[表情已停用]</div>
                   </template>
                 </div>
                 <div class="message-time">
@@ -548,7 +543,7 @@
                   </span>
                   <span v-if="msg.status === 'SENDING'"> · 发送中</span>
                   <button
-                    v-if="msg.status === 'FAILED'"
+                    v-if="msg.status === 'FAILED' && msg.messageType !== 'STICKER'"
                     type="button"
                     class="message-retry"
                     @click="retryMessage(msg)"
@@ -577,7 +572,7 @@
           @drop="handleAttachmentDrop"
         >
           <div v-if="replyTarget" class="reply-target">
-            <span>回复 {{ replyTarget.senderName }}：{{ replyTarget.text }}</span>
+            <span>回复 {{ replyTarget.senderName }}：{{ emojiToPlainText(replyTarget.text) }}</span>
             <button type="button" aria-label="取消回复" @click="replyTarget = null">✕</button>
           </div>
           <div class="input-box">
@@ -592,18 +587,18 @@
                   @retry="retryAttachmentDraft"
                   @focus-input="focusMessageInputAtStart"
                 />
-                <textarea
+                <EmojiComposer
+                  :key="`${authStore.currentUser?.userId}:${chatStore.currentConversation.conversationId}`"
                   ref="messageInputRef"
                   v-model="messageText"
                   class="message-input"
-                  rows="3"
                   aria-label="输入消息"
                   :disabled="isSendingMessage"
                   @input="onMessageInput"
                   @keydown="handleMessageKeydown"
                   @paste="handleMessagePaste"
                   @contextmenu="openInputMenu"
-                ></textarea>
+                />
               </div>
               <div class="input-toolbar">
                 <button
@@ -611,6 +606,8 @@
                   class="tool-btn"
                   title="表情"
                   type="button"
+                  :aria-expanded="showEmojiPanel"
+                  @mousedown.prevent="messageInputRef?.saveRange()"
                   @click="toggleEmojiPanel"
                 >
                   <AppIcon :svg="emojiIcon" label="表情" />
@@ -698,119 +695,7 @@
               </div>
             </div>
             <div v-if="showEmojiPanel" ref="emojiPanelRef" class="emoji-panel">
-              <div class="emoji-tabs">
-                <button
-                  type="button"
-                  :class="{ active: emojiActiveTab === 'emoji' }"
-                  @click="emojiActiveTab = 'emoji'"
-                >Emoji</button>
-                <button
-                  type="button"
-                  :class="{ active: emojiActiveTab === 'sticker' }"
-                  @click="emojiActiveTab = 'sticker'"
-                >大表情</button>
-              </div>
-
-              <div v-if="emojiActiveTab === 'emoji'" class="emoji-content">
-                <div v-if="recentEmojis.length" class="emoji-section">
-                  <div class="emoji-section-title">最近使用</div>
-                  <div class="emoji-grid">
-                    <button
-                      v-for="emoji in recentEmojis"
-                      :key="`recent-${emoji}`"
-                      type="button"
-                      class="emoji-item"
-                      @click="insertEmoji(emoji)"
-                    >{{ emoji }}</button>
-                  </div>
-                </div>
-                <div class="emoji-group-tabs">
-                  <button
-                    v-for="(group, index) in EMOJI_GROUPS"
-                    :key="group.name"
-                    type="button"
-                    :class="{ active: emojiActiveGroup === index }"
-                    @click="emojiActiveGroup = index"
-                  >{{ group.name }}</button>
-                </div>
-                <div class="emoji-grid">
-                  <button
-                    v-for="emoji in EMOJI_GROUPS[emojiActiveGroup].emojis"
-                    :key="emoji"
-                    type="button"
-                    class="emoji-item"
-                    @click="insertEmoji(emoji)"
-                  >{{ emoji }}</button>
-                </div>
-              </div>
-
-              <div v-else class="emoji-content">
-                <div v-if="recentStickers.length" class="emoji-section">
-                  <div class="emoji-section-title">最近使用</div>
-                  <div class="sticker-grid">
-                    <button
-                      v-for="sticker in recentStickers"
-                      :key="`recent-${sticker.id}`"
-                      type="button"
-                      class="sticker-option"
-                      :title="sticker.name"
-                      @click="sendSticker(sticker)"
-                    >
-                      <img :src="sticker.url" :alt="sticker.name" />
-                    </button>
-                  </div>
-                </div>
-                <div class="emoji-section">
-                  <div class="emoji-section-title sticker-section-header">
-                    <span>我的表情</span>
-                    <button type="button" class="sticker-manage-btn" @click="pickCustomSticker">添加</button>
-                  </div>
-                  <input
-                    ref="customStickerInputRef"
-                    type="file"
-                    :accept="CUSTOM_STICKER_LIMITS.accept"
-                    hidden
-                    @change="onCustomStickerSelected"
-                  />
-                  <div v-if="customStickers.length" class="sticker-grid">
-                    <div
-                      v-for="sticker in customStickers"
-                      :key="sticker.id"
-                      class="custom-sticker-option"
-                    >
-                      <button
-                        type="button"
-                        class="sticker-option"
-                        :title="sticker.name"
-                        @click="sendSticker(sticker)"
-                      >
-                        <img :src="sticker.url" :alt="sticker.name" />
-                      </button>
-                      <div class="custom-sticker-actions">
-                        <button type="button" @click="renameCustomSticker(sticker)">重命名</button>
-                        <button type="button" @click="removeCustomSticker(sticker)">删除</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else class="sticker-empty">还没有自定义表情</div>
-                  <div v-if="customStickerError" class="sticker-error-text">{{ customStickerError }}</div>
-                </div>
-                <div class="emoji-section">
-                  <div class="emoji-section-title">内置表情</div>
-                  <div class="sticker-grid">
-                  <button
-                    v-for="sticker in STICKERS"
-                    :key="sticker.id"
-                    type="button"
-                    class="sticker-option"
-                    :title="sticker.name"
-                    @click="sendSticker(sticker)"
-                  >
-                    <img :src="sticker.url" :alt="sticker.name" />
-                  </button>
-                  </div>
-                </div>
-              </div>
+              <EmojiPicker @select="insertEmoji" />
             </div>
           </div>
         </div>
@@ -1069,7 +954,7 @@
               @click="jumpToSearchResult(result)"
             >
               <span>{{ getMessageSenderName(result) }}</span>
-              <span>{{ result.displayContent || result.content }}</span>
+              <span>{{ getMessagePreviewContent(result) }}</span>
               <span>{{ formatTime(result.createdAt) }}</span>
             </button>
           </template>
@@ -1279,7 +1164,7 @@
       @close="showSettingsDialog = false"
       @logout="handleLogout"
       @open-profile="openOwnProfileFromSettings"
-      @recent-cache-cleared="clearRecentEmojiState"
+      @recent-cache-cleared="clearRecentEmoji"
       @local-cache-cleared="handleLocalCacheCleared"
     />
     <ProfileDialog
@@ -1293,7 +1178,7 @@
 </template>
 
 <script setup lang="ts">
-// 聊天主界面：管理会话列表、通讯录、消息收发、附件上传、表情/贴纸、@提及、WebSocket 通信、在线状态等核心功能
+// 聊天主界面：管理会话列表、通讯录、消息收发、附件上传、内置 Emoji、@提及、WebSocket 通信、在线状态等核心功能
 
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
@@ -1377,23 +1262,9 @@ import {
   hasFileDragPayload,
   type DroppedFolder,
 } from '../utils/fileDrop'
-import { EMOJI_GROUPS } from '../constants/emoji'
-import {
-  STICKERS,
-  buildStickerContent,
-  parseStickerContent,
-  type Sticker,
-} from '../constants/stickers'
-import { RECENT_EMOJIS_KEY, RECENT_STICKERS_KEY } from '../utils/recentUsage'
+import { EmojiComposer, EmojiPicker, EmojiRenderer, emojiToPlainText, clearRecentEmoji, type BuiltinEmoji, type EmojiComposerHandle } from '../features/emoji'
+import { readableSelection } from '../features/emoji/utils/emojiSerializer'
 import { extractFileDownloadId } from '../utils/fileUrl'
-import {
-  CUSTOM_STICKER_LIMITS,
-  addCustomStickerRecord,
-  deleteCustomStickerRecord,
-  listCustomStickerRecords,
-  renameCustomStickerRecord,
-  type CustomStickerRecord,
-} from '../utils/customStickers'
 import {
   PRESENCE_OPTIONS,
   getPresenceLabel,
@@ -1552,7 +1423,7 @@ function onContactSearch() {
 
 // 消息区和输入框引用
 const messageAreaRef = ref<HTMLElement | null>(null)
-const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const messageInputRef = ref<EmojiComposerHandle | null>(null)
 const menuFeedback = ref('')
 const menuFeedbackError = ref(false)
 let menuFeedbackTimer: ReturnType<typeof setTimeout> | undefined
@@ -1596,11 +1467,8 @@ async function viewMenuImage(message: Message) {
 function mentionFromMenu(member: ConversationMember) {
   const input = messageInputRef.value
   if (!input || member.userId === authStore.currentUser?.userId) return
-  const cursor = input.selectionStart
-  messageText.value = messageText.value.slice(0, cursor) + '@' + messageText.value.slice(input.selectionEnd)
+  input.insertText('@')
   // Reuse the @ picker so the outgoing message includes structured mentions.
-  input.value = messageText.value
-  input.setSelectionRange(cursor + 1, cursor + 1)
   selectMention(member)
 }
 async function forwardFromMenu(message: Message, target: Conversation) {
@@ -1639,7 +1507,6 @@ async function forwardFromMenu(message: Message, target: Conversation) {
 const attachmentDraftTrayRef = ref<{ focusLast: () => void } | null>(null)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const emojiPanelRef = ref<HTMLElement | null>(null)
-const customStickerInputRef = ref<HTMLInputElement | null>(null)
 const conversationDrafts = useConversationDrafts(
   computed(() => authStore.currentUser?.userId || ''),
   computed(() => chatStore.currentConversation?.conversationId),
@@ -1661,12 +1528,6 @@ const showMentionPicker = ref(false)
 const mentionSearch = ref('')
 const mentionSelectedIndex = ref(0)
 const showEmojiPanel = ref(false)
-const emojiActiveTab = ref<'emoji' | 'sticker'>('emoji')
-const emojiActiveGroup = ref(0)
-const recentEmojis = ref<string[]>([])
-const recentStickers = ref<Sticker[]>([])
-const customStickers = ref<Sticker[]>([])
-const customStickerError = ref('')
 const showMoreDrawer = ref(false)
 const showMembersDrawer = ref(false)
 const memberDrawerMode = ref<'list' | 'invite' | 'settings' | 'announcement'>('list')
@@ -2775,15 +2636,14 @@ async function removeGroupMember(member: ConversationMember) {
 }
 
 // 消息输入事件：检测 @ 触发提及选择器
-function onMessageInput(event: Event) {
+function onMessageInput() {
   draftMentions.value = pruneDraftMentions(conversationDrafts.snapshot(chatStore.currentConversation?.conversationId || ''))
   const conv = chatStore.currentConversation
   if (!conv || conv.type !== 'GROUP') {
     closeMentionPicker()
     return
   }
-  const input = event.target as HTMLTextAreaElement
-  const cursor = input.selectionStart ?? messageText.value.length
+  const cursor = messageInputRef.value?.selectionStart ?? messageText.value.length
   const beforeCursor = messageText.value.slice(0, cursor)
   const match = beforeCursor.match(/(^|\s)@([^\s@]*)$/)
   if (!match) {
@@ -2805,8 +2665,9 @@ function focusMessageInputAtStart() {
 
 // 消息输入键盘事件：支持附件原子项导航、面板操作与发送快捷键
 function handleMessageKeydown(event: KeyboardEvent) {
-  const input = event.currentTarget as HTMLTextAreaElement
-  const caretAtStart = input.selectionStart === 0 && input.selectionEnd === 0
+  if (event.isComposing || event.keyCode === 229) return
+  const input = messageInputRef.value
+  const caretAtStart = input?.selectionStart === 0 && input.selectionEnd === 0
   const attachments = currentAttachmentDrafts.value
   if (!event.isComposing && caretAtStart && attachments.length && !isSendingMessage.value) {
     if (event.key === 'Backspace') {
@@ -2872,8 +2733,8 @@ function selectMention(member: ConversationMember) {
 
   const name = getMemberName(member)
   const mentionText = `@${name} `
-  messageText.value =
-    messageText.value.slice(0, atIndex) + mentionText + messageText.value.slice(cursor)
+  input?.setSelectionRange(atIndex, cursor)
+  input?.insertText(mentionText)
 
   if (!draftMentions.value.some((mention) => mention.userId === member.userId)) {
     draftMentions.value = [...draftMentions.value, {
@@ -2909,11 +2770,10 @@ function pruneDraftMentions(draft: ConversationDraft): MessageMention[] {
 }
 
 // 将消息文本拆分为普通文本和 @ 提及片段，用于高亮显示
-function renderMessageSegments(msg: Message) {
-  return renderTextSegments(msg).flatMap(segment => segment.mention ? [segment] : splitTextLinks(segment.text).map(text => ({ ...segment, text })))
+function renderMessageSegments(msg: Message, text: string) {
+  return renderTextSegments(msg, text).flatMap(segment => segment.mention ? [segment] : splitTextLinks(segment.text).map(text => ({ ...segment, text })))
 }
-function renderTextSegments(msg: Message) {
-  const text = msg.displayContent || msg.content
+function renderTextSegments(msg: Message, text: string) {
   const mentions = msg.mentions || []
   if (!mentions.length) return [{ text, mention: false, self: false }]
 
@@ -2951,11 +2811,19 @@ function renderTextSegments(msg: Message) {
   return segments.length ? segments : [{ text, mention: false, self: false }]
 }
 
+function copyRenderedMessage(event: ClipboardEvent) {
+  const text = readableSelection(event.currentTarget as HTMLElement)
+  if (text === null || !event.clipboardData) return
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', text)
+}
+
 function toggleEmojiPanel() {
   if (!chatStore.currentConversation) {
     alert('请先选择会话')
     return
   }
+  messageInputRef.value?.saveRange()
   showEmojiPanel.value = !showEmojiPanel.value
   if (showEmojiPanel.value) {
     closeMentionPicker()
@@ -2966,63 +2834,9 @@ function closeEmojiPanel() {
   showEmojiPanel.value = false
 }
 
-function insertEmoji(emoji: string) {
-  const input = messageInputRef.value
-  const start = input?.selectionStart ?? messageText.value.length
-  const end = input?.selectionEnd ?? start
-  messageText.value = messageText.value.slice(0, start) + emoji + messageText.value.slice(end)
-  rememberEmoji(emoji)
+function insertEmoji(emoji: BuiltinEmoji) {
+  messageInputRef.value?.insertEmoji(emoji)
   draftMentions.value = pruneDraftMentions(conversationDrafts.snapshot(chatStore.currentConversation?.conversationId || ''))
-  closeEmojiPanel()
-
-  nextTick(() => {
-    const nextCursor = start + emoji.length
-    messageInputRef.value?.focus()
-    messageInputRef.value?.setSelectionRange(nextCursor, nextCursor)
-  })
-}
-
-// 发送贴纸消息
-function sendSticker(sticker: Sticker) {
-  const conv = chatStore.currentConversation
-  if (!conv || !wsManager || !authStore.currentUser) {
-    alert('请先选择会话')
-    return
-  }
-
-  const clientMsgId = generateId()
-  const content = buildStickerContent(sticker)
-  const localMessage: Message = {
-    messageId: '',
-    conversationId: conv.conversationId,
-    senderId: authStore.currentUser.userId,
-    senderName: authStore.currentUser.nickname,
-    senderAvatar: authStore.currentUser.avatar || '',
-    senderSignature: authStore.currentUser.signature || '',
-    messageType: 'STICKER',
-    content,
-    displayContent: `[表情] ${sticker.name}`,
-    mentions: [],
-    clientMsgId,
-    createdAt: new Date().toISOString(),
-    status: 'SENDING',
-    ...getInitialReadReceipt(conv),
-  }
-  chatStore.addMessage(localMessage)
-  sendOutgoingMessage(localMessage)
-  rememberSticker(sticker)
-  closeEmojiPanel()
-  scrollToBottom(true)
-}
-
-// 从消息内容中解析贴纸信息（支持自定义和内置贴纸）
-function getStickerInfo(content: string): Sticker | null {
-  const parsed = parseStickerContent(content)
-  if (!parsed) return null
-  if (parsed.source === 'custom' || parsed.localOnly) {
-    return customStickers.value.find((sticker) => sticker.id === parsed.id) || null
-  }
-  return parsed
 }
 
 // 获取图片 URL：通过认证下载后返回 Blob URL，支持缓存和加载中状态
@@ -3190,137 +3004,6 @@ function clearAuthenticatedAvatars() {
   avatarLoadPromises.clear()
 }
 
-// 记录最近使用的 Emoji
-function rememberEmoji(emoji: string) {
-  recentEmojis.value = [emoji, ...recentEmojis.value.filter((item) => item !== emoji)].slice(0, 24)
-  localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(recentEmojis.value))
-}
-
-// 记录最近使用的贴纸
-function rememberSticker(sticker: Sticker) {
-  recentStickers.value = [sticker, ...recentStickers.value.filter((item) => item.id !== sticker.id)].slice(0, 12)
-  localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => stickerStorageKey(item))))
-}
-
-// 从 localStorage 加载最近使用的 Emoji 和贴纸
-function loadRecentEmojiState() {
-  try {
-    const storedEmojis = JSON.parse(localStorage.getItem(RECENT_EMOJIS_KEY) || '[]')
-    recentEmojis.value = Array.isArray(storedEmojis)
-      ? storedEmojis.filter((item) => typeof item === 'string').slice(0, 24)
-      : []
-  } catch {
-    recentEmojis.value = []
-  }
-
-  try {
-    const storedStickerKeys = JSON.parse(localStorage.getItem(RECENT_STICKERS_KEY) || '[]')
-    recentStickers.value = Array.isArray(storedStickerKeys)
-      ? storedStickerKeys
-          .map((key) => findStickerByStorageKey(String(key)))
-          .filter((sticker): sticker is Sticker => !!sticker)
-          .slice(0, 12)
-      : []
-  } catch {
-    recentStickers.value = []
-  }
-}
-
-function clearRecentEmojiState() {
-  recentEmojis.value = []
-  recentStickers.value = []
-}
-
-function stickerStorageKey(sticker: Sticker): string {
-  return `${sticker.source === 'custom' || sticker.localOnly ? 'custom' : 'builtin'}:${sticker.id}`
-}
-
-function findStickerByStorageKey(key: string): Sticker | undefined {
-  const [source, id] = key.includes(':') ? key.split(':', 2) : ['builtin', key]
-  return source === 'custom'
-    ? customStickers.value.find((sticker) => sticker.id === id)
-    : STICKERS.find((sticker) => sticker.id === id)
-}
-
-// 将自定义贴纸记录转换为 Sticker 对象（生成 Blob URL）
-function toCustomSticker(record: CustomStickerRecord): Sticker {
-  return {
-    id: record.id,
-    name: record.name,
-    url: URL.createObjectURL(record.blob),
-    source: 'custom',
-    localOnly: true,
-    mimeType: record.mimeType,
-    size: record.size,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
-}
-
-// 释放所有自定义贴纸的 Blob URL
-function revokeCustomStickerUrls() {
-  for (const sticker of customStickers.value) {
-    if (sticker.url?.startsWith('blob:')) {
-      URL.revokeObjectURL(sticker.url)
-    }
-  }
-}
-
-// 加载自定义贴纸列表
-async function loadCustomStickerState() {
-  customStickerError.value = ''
-  try {
-    const records = await listCustomStickerRecords()
-    if (chatDisposed) return
-    revokeCustomStickerUrls()
-    customStickers.value = records.map(toCustomSticker)
-    loadRecentEmojiState()
-  } catch (err: any) {
-    customStickerError.value = err?.message || '自定义表情加载失败'
-  }
-}
-
-function pickCustomSticker() {
-  customStickerError.value = ''
-  customStickerInputRef.value?.click()
-}
-
-async function onCustomStickerSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  try {
-    await addCustomStickerRecord(file)
-    await loadCustomStickerState()
-  } catch (err: any) {
-    customStickerError.value = err?.message || '添加自定义表情失败'
-  }
-}
-
-async function renameCustomSticker(sticker: Sticker) {
-  const nextName = window.prompt('表情名称', sticker.name)
-  if (nextName === null) return
-  try {
-    await renameCustomStickerRecord(sticker.id, nextName)
-    await loadCustomStickerState()
-  } catch (err: any) {
-    customStickerError.value = err?.message || '重命名失败'
-  }
-}
-
-async function removeCustomSticker(sticker: Sticker) {
-  if (!window.confirm(`删除表情"${sticker.name}"？`)) return
-  try {
-    await deleteCustomStickerRecord(sticker.id)
-    recentStickers.value = recentStickers.value.filter((item) => stickerStorageKey(item) !== stickerStorageKey(sticker))
-    localStorage.setItem(RECENT_STICKERS_KEY, JSON.stringify(recentStickers.value.map((item) => stickerStorageKey(item))))
-    await loadCustomStickerState()
-  } catch (err: any) {
-    customStickerError.value = err?.message || '删除失败'
-  }
-}
-
 function handleLocalCacheCleared() {
   chatStore.messages.clear()
   if (chatStore.currentConversation) {
@@ -3426,18 +3109,19 @@ function sendOutgoingMessage(msg: Message) {
 
 // 重试发送失败的消息
 function retryMessage(msg: Message) {
-  if (!msg.clientMsgId) return
+  if (!msg.clientMsgId || msg.messageType === 'STICKER') return
   sendOutgoingMessage(msg)
 }
 
 // 获取消息的回复预览文本
 function messageReplyText(msg: Message): string {
   if (msg.status === 'RECALLED') return '消息已撤回'
+  if (msg.messageType === 'TEXT') return emojiToPlainText(msg.displayContent || msg.content)
+  if (msg.messageType === 'STICKER') return '[表情已停用]'
   if (msg.displayContent) return msg.displayContent
   if (msg.messageType === 'IMAGE') return '[图片]'
   if (msg.messageType === 'FILE') return `[文件] ${getP2pInfo(msg.content)?.name || '旧版附件已停用'}`
   if (msg.messageType === 'FOLDER') return `[文件夹] ${getP2pInfo(msg.content)?.name || '旧版附件已停用'}`
-  if (msg.messageType === 'STICKER') return '[表情]'
   if (msg.messageType === 'SHAKE') return '[窗口抖动]'
   return msg.content || ''
 }
@@ -3875,7 +3559,7 @@ async function handleWsMessage(msg: WsMessage) {
       if (chatDisposed || authStore.currentUser?.userId !== receivingUserId) return
       if (!duplicate && receivedMessage.senderId !== receivingUserId && conv && shouldNotifyMessage(receivedMessage, conv, wasBeingRead)) {
         const body = settingsStore.notification.showPreview
-          ? receivedMessage.displayContent || receivedMessage.content
+          ? getMessagePreviewContent(receivedMessage)
           : '收到一条新消息'
         showDesktopNotification(getConversationName(conv) || getMessageSenderName(receivedMessage), body, receivedMessage.conversationId)
       }
@@ -4184,6 +3868,12 @@ async function handleLogout() {
 
 // 桌面常用快捷键：Ctrl+, 打开设置。
 function handleGlobalShortcut(event: KeyboardEvent) {
+  if (event.key === 'Escape' && showEmojiPanel.value) {
+    event.preventDefault()
+    closeEmojiPanel()
+    messageInputRef.value?.focus()
+    return
+  }
   if (event.repeat) return
   if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ',') {
     event.preventDefault()
@@ -4192,12 +3882,10 @@ function handleGlobalShortcut(event: KeyboardEvent) {
   }
 }
 
-// 组件挂载：加载贴纸、注册全局事件、初始化认证、加载设置和数据、启动 WebSocket
+// 组件挂载：注册全局事件、初始化认证、加载设置和数据、启动 WebSocket
 onMounted(async () => {
   window.addEventListener('focus', handleChatVisibility)
   document.addEventListener('visibilitychange', handleChatVisibility)
-  await loadCustomStickerState()
-  if (chatDisposed) return
   document.addEventListener('mousedown', handleDocumentMouseDown)
   window.addEventListener('mousemove', handleUserActivity)
   window.addEventListener('keydown', handleUserActivity)
@@ -4237,7 +3925,7 @@ onMounted(async () => {
 
 })
 
-// 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、贴纸 URL、WebSocket
+// 组件卸载：清理事件监听、定时器、附件、图片缓存、文件下载、WebSocket
 onUnmounted(() => {
   clearTimeout(menuFeedbackTimer)
   if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl)
@@ -4269,7 +3957,6 @@ onUnmounted(() => {
   attachmentDraftStore.clearAll()
   clearAuthenticatedImages()
   clearAuthenticatedAvatars()
-  revokeCustomStickerUrls()
   clearGroupAvatarSelection()
   void p2pTransferStore.dispose(attachmentTaskPersistence.pending())
   wsManager?.disconnect()
@@ -5218,29 +4905,6 @@ watch(
   opacity: 0.6;
 }
 
-.sticker-bubble {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-}
-
-.sticker-img {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
-}
-
-.sticker-error {
-  font-size: var(--font-xs);
-  color: var(--text-tertiary);
-}
-
-
-
-
-
 .message-time {
   font-size: var(--font-xs);
   color: var(--text-placeholder);
@@ -5487,7 +5151,7 @@ watch(
   outline: none;
 }
 
-.message-input:disabled {
+.message-input[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.72;
 }
@@ -5536,8 +5200,8 @@ watch(
   position: absolute;
   left: 0;
   bottom: calc(100% + 6px);
-  width: 320px;
-  max-height: 360px;
+  width: min(400px, calc(100vw - 32px));
+  max-height: min(460px, 75vh);
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -5545,141 +5209,6 @@ watch(
   padding: 10px;
   z-index: 35;
   overflow-y: auto;
-}
-
-.emoji-tabs,
-.emoji-group-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.emoji-tabs button,
-.emoji-group-tabs button {
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--bg-header);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  padding: 5px 10px;
-}
-
-.emoji-tabs button.active,
-.emoji-group-tabs button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.emoji-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.emoji-section-title {
-  font-size: var(--font-sm);
-  color: var(--text-tertiary);
-  margin-bottom: 6px;
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
-}
-
-.emoji-item {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: var(--bg-chat);
-  cursor: pointer;
-  font-size: 20px;
-}
-
-.emoji-item:hover {
-  background: var(--accent-bg-light);
-}
-
-.sticker-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.sticker-option {
-  border: none;
-  border-radius: 8px;
-  background: var(--bg-chat);
-  cursor: pointer;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.sticker-option:hover {
-  background: var(--accent-bg-light);
-}
-
-.sticker-option img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-}
-
-.sticker-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sticker-manage-btn {
-  border: none;
-  border-radius: 5px;
-  background: var(--accent-bg-light);
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 8px;
-}
-
-.custom-sticker-option {
-  min-width: 0;
-}
-
-.custom-sticker-actions {
-  display: flex;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.custom-sticker-actions button {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 3px;
-}
-
-.custom-sticker-actions button:hover {
-  color: var(--accent);
-}
-
-.sticker-empty,
-.sticker-error-text {
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 8px 0;
-}
-
-.sticker-error-text {
-  color: var(--danger-strong);
 }
 
 .mention-option {

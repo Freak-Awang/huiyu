@@ -262,7 +262,7 @@
               </div>
               <div class="setting-card-row">
                 <div class="setting-copy">
-                  <strong>最近表情和贴纸</strong>
+                  <strong>最近表情</strong>
                   <small>清除输入区的最近使用记录</small>
                 </div>
                 <button type="button" class="secondary-button compact-button" @click="clearRecentCache">清理</button>

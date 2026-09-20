@@ -5,9 +5,30 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./index', () => ({ default: {} }))
 
-import { getMessagePreviewContent, normalizeMessage } from './message'
+import { buildTextMessageContent, getMessagePreviewContent, normalizeMessage } from './message'
 
 describe('message API normalization', () => {
+  it.each([
+    JSON.stringify({ id: 'smile', name: '微笑', url: '/assets/smile.svg' }),
+    JSON.stringify({ id: 'custom-1', name: '自定义', source: 'custom', localOnly: true }),
+    'invalid legacy payload',
+  ])('keeps legacy sticker history readable after feature removal: %s', content => {
+    const message = normalizeMessage({ messageType: 'STICKER', content })
+    expect(message.content).toBe(content)
+    expect(message.displayContent).toBe('[表情已停用]')
+    expect(getMessagePreviewContent(message)).toBe('[表情已停用]')
+    expect(getMessagePreviewContent({ messageType: 'STICKER', content, displayContent: '旧缓存表情名称' })).toBe('[表情已停用]')
+  })
+  it('keeps Emoji tokens in TEXT payloads and forwarding while hiding them from previews', () => {
+    const text = '你好 [emoji:builtin_emoji_0001] [emoji:builtin_emoji_9999]'
+    const content = buildTextMessageContent(text, [], { messageId: '1', senderName: '甲', text: '引用 [emoji:builtin_emoji_0001]' })
+    const message = normalizeMessage({ messageType: 'TEXT', content })
+    expect(message.content).toBe(content)
+    expect(message.displayContent).toBe(text)
+    expect(JSON.parse(buildTextMessageContent(message.displayContent)).text).toBe(text)
+    expect(getMessagePreviewContent(message)).toBe('你好 [表情] [表情]')
+    expect(message.replyTo?.text).toContain('[emoji:builtin_emoji_0001]')
+  })
   afterEach(() => vi.unstubAllEnvs())
 
   it('normalizes sender avatar paths', () => {

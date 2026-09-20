@@ -2,8 +2,10 @@ import { downloadFileBlob } from '../api/file'
 import type { Message } from '../api/message'
 import { extractFileDownloadId } from './fileUrl'
 import { safeHttpUrl } from '../components/context-menu/builders'
+import { emojiToPlainText } from '../features/emoji/utils/emojiMessage'
 
 export async function copyMessageText(text: string) {
+  text = emojiToPlainText(text)
   if (window.imDesktop?.copyText) {
     if (!await window.imDesktop.copyText(text)) throw new Error('复制失败')
   } else await navigator.clipboard.writeText(text)

@@ -115,6 +115,7 @@ interface DesktopUpdateState {
 declare global {
   interface Window {
     imDesktop?: {
+      loadBuiltinEmojiManifest?: () => Promise<unknown>
       listDrafts?: (userId: string) => Promise<Record<string, import('../stores/conversationDrafts').ConversationDraft>>
       saveDraft?: (userId: string, conversationId: string, draft: import('../stores/conversationDrafts').ConversationDraft | null) => Promise<boolean>
       getVersion: () => Promise<string>

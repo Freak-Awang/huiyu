@@ -2,13 +2,13 @@
  * 最近使用记录工具
  *
  * 提供 localStorage 存储键名常量和缓存清理函数。
- * 用于管理"最近使用的表情"和"最近使用的贴纸"记录。
+ * 管理内置 Emoji 的最近使用记录，并在清理时移除旧版本遗留键。
  */
-export const RECENT_EMOJIS_KEY = 'im_recent_emojis'
-export const RECENT_STICKERS_KEY = 'im_recent_stickers'
+import { clearRecentEmoji } from '../features/emoji/composables/useRecentEmoji'
 
-/** 清空最近使用的表情和贴纸缓存 */
+/** 清空最近使用的表情缓存及旧版本遗留记录。 */
 export function clearRecentUsageCache() {
-  localStorage.removeItem(RECENT_EMOJIS_KEY)
-  localStorage.removeItem(RECENT_STICKERS_KEY)
+  clearRecentEmoji()
+  localStorage.removeItem('im_recent_emojis')
+  localStorage.removeItem('im_recent_stickers')
 }

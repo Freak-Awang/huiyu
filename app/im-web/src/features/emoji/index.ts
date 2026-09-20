@@ -1,0 +1,6 @@
+export { default as EmojiPicker } from './components/EmojiPicker.vue'
+export { default as EmojiRenderer } from './components/EmojiRenderer.vue'
+export { default as EmojiComposer } from './components/EmojiComposer.vue'
+export { emojiToPlainText, isEmojiOnlyMessage } from './utils/emojiMessage'
+export { clearRecentEmoji } from './composables/useRecentEmoji'
+export type { BuiltinEmoji, EmojiComposerHandle } from './types'

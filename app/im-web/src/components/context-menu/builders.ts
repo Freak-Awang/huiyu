@@ -51,7 +51,7 @@ export function buildMessageContextMenu(context: MessageMenuContext): ContextMen
   if (message.status === 'RECALLED') return [messageCommand(context, 'delete', '删除', false, true)]
   if (!message.messageId || ['SENDING', 'FAILED'].includes(message.status || '')) {
     return [messageCommand(context, 'copy', '复制'),
-      { ...messageCommand(context, 'retry', '重新发送'), visible: message.status === 'FAILED' && !!context.actions.retry },
+      { ...messageCommand(context, 'retry', '重新发送'), visible: message.status === 'FAILED' && message.messageType !== 'STICKER' && !!context.actions.retry },
       { ...messageCommand(context, 'delete', '删除', true, true), visible: message.status !== 'SENDING' && !!context.actions.delete }]
   }
   if (context.selectedText) return [messageCommand(context, 'copy', '复制'), ...sharing(context), ...tail(context)]

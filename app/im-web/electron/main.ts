@@ -276,6 +276,11 @@ function createMenu() {
 
 // ==================== IPC 处理器 ====================
 // 以下为渲染进程可调用的 IPC 接口，全部通过 assertMainWindowSender 校验来源
+// file:// fetch cannot read JSON. Expose only this bundled manifest, never a caller-supplied path.
+ipcMain.handle('emoji:builtin-manifest', async (event) => {
+  assertMainWindowSender(event)
+  return JSON.parse(await readFile(appIconPath('emoji/builtin/manifest.v1.json'), 'utf8')) as unknown
+})
 // 保持载荷窄且可序列化，不暴露原生对象给渲染进程
 
 /** 获取应用版本号 */

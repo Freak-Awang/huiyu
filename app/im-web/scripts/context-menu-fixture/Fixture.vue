@@ -5,7 +5,7 @@
     <section id="messages" @contextmenu="bubbled++">
       <article v-for="message in messages" :key="message.messageId" :id="`message-${message.messageId}`" @contextmenu="menu.openMessageMenu($event, message)">{{ message.displayContent }}</article>
     </section>
-    <textarea ref="input" id="editor" @contextmenu="menu.openInputMenu" aria-label="输入消息">测试输入文本</textarea>
+    <EmojiComposer ref="input" id="editor" v-model="editorText" @contextmenu="menu.openInputMenu" aria-label="输入消息" />
     <ContextMenu :dark="dark" @error="errors.push($event)" />
     <div id="outside">聊天背景保留默认右键行为</div>
   </main>
@@ -14,6 +14,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import ContextMenu from '../../src/components/context-menu/ContextMenu.vue'
 import { useChatContextMenus } from '../../src/components/context-menu/useChatContextMenus'
+import { EmojiComposer, type EmojiComposerHandle } from '../../src/features/emoji'
 import { closeContextMenu, openContextMenu, useContextMenu } from '../../src/components/context-menu/useContextMenu'
 import { normalizeMessage } from '../../src/api/message'
 import { normalizeConversation } from '../../src/api/conversation'
@@ -54,7 +55,8 @@ const messages = [
   normalizeMessage({ messageId: '102', conversationId: '10', senderId: '1', messageType: 'IMAGE', content: '{}', createdAt: new Date().toISOString(), status: 'SENT' }),
 ]
 chat.messages.set('10', messages)
-const input = ref<HTMLTextAreaElement | null>(null)
+const input = ref<EmojiComposerHandle | null>(null)
+const editorText = ref('测试输入文本')
 const dark = ref(false), bubbled = ref(0)
 const menu = useChatContextMenus({ input, reply: () => commands.push('reply'), recall: async () => { commands.push('recall') }, retry: () => commands.push('retry'),
   viewImage: () => commands.push('view'), download: async () => {}, profile: () => {}, chat: async () => {}, mention: () => {}, role: async () => {}, remove: async () => {}, transfer: async () => {}, forward: async () => {}, feedback: (text, error) => { if (error) errors.push(text) } })
@@ -119,12 +121,12 @@ onMounted(async () => {
       rightClick('message-100'); await pause(); chat.currentConversation = normalizeConversation({ conversationId: '11' }); await pause()
       check(!useContextMenu().session.value, 'conversation switch dismisses menu')
       chat.currentConversation = conversation
-      const editor = input.value!; editor.value = ''; editor.focus(); editor.setSelectionRange(0, 0)
+      const editor = input.value!; editorText.value = ''; await pause(); editor.focus(); editor.setSelectionRange(0, 0)
       rightClick('editor'); await pause()
       check(document.querySelectorAll('[role=menuitem][aria-disabled=true]').length === 6, 'empty input commands remain visible and disabled')
-      closeContextMenu(); editor.value = 'abcdef'; editor.focus(); editor.setSelectionRange(1, 4)
+      closeContextMenu(); editorText.value = 'abcdef'; await pause(); editor.focus(); editor.setSelectionRange(1, 4)
       rightClick('editor'); await pause(); choose('复制'); await pause()
-      check(commands.includes('copy') && editor.selectionStart === 1 && editor.selectionEnd === 4 && document.activeElement === editor, 'input action restores focus and selection')
+      check(copies.at(-1) === 'bcd' && editor.selectionStart === 1 && editor.selectionEnd === 4 && document.activeElement === editor.element, 'input action restores focus and selection')
       openContextMenu(new MouseEvent('contextmenu', { clientX: innerWidth - 10, clientY: innerHeight - 10 }), [{ id: 'sub', label: '转发到', children: [{ id: 'leaf', label: '最近联系人', action: () => { commands.push('submenu') } }] }]); await pause()
       key('ArrowRight'); await pause(); check(document.querySelectorAll('[role=menu]').length === 2, 'right arrow opens submenu')
       key('ArrowLeft'); await pause(); check(document.querySelectorAll('[role=menu]').length === 1, 'left arrow returns to parent')
@@ -155,6 +157,6 @@ onMounted(async () => {
 main { min-height: 100vh; padding: 32px; background: var(--bg-chat); color: var(--text-primary); }
 h1 { font-size: 21px; margin-bottom: 10px; } p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
 article { max-width: 380px; margin: 14px 0; padding: 16px; border-radius: 12px; background: var(--bg-surface); font-size: 14px; }
-textarea { display: block; width: 400px; max-width: 100%; margin: 24px 0; height: 84px; border: 1px solid var(--border); background: var(--bg-input-rest); color: var(--text-primary); padding: 12px; }
+.emoji-composer { display: block; width: 400px; max-width: 100%; margin: 24px 0; height: 84px; border: 1px solid var(--border); background: var(--bg-input-rest); color: var(--text-primary); padding: 12px; }
 #outside { color: var(--text-tertiary); font-size: 12px; }
 </style>

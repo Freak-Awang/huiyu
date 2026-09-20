@@ -5,6 +5,7 @@
 import http from './index'
 import type { P2pAttachmentContent } from '../utils/p2pProtocol'
 import { toServerUrl } from '../config/runtime'
+import { emojiToPlainText } from '../features/emoji/utils/emojiMessage'
 
 export function getMessagePolicy() {
   return http.get<{ recallWindowMs: number; serverTime: number }>('/api/messages/policy')
@@ -187,7 +188,7 @@ export function normalizeMessage(raw: RawMessage): Message {
     displayContent: messageType === 'IMAGE'
       ? '[图片]'
       : messageType === 'STICKER'
-        ? parseStickerDisplayName(content)
+        ? '[表情已停用]'
         : messageType === 'FILE'
           ? parseFileDisplayName(content)
           : messageType === 'FOLDER'
@@ -220,18 +221,6 @@ function normalizeMessageTime(value?: string | number | null): string {
     return `${raw}Z`
   }
   return raw
-}
-
-function parseStickerDisplayName(content: string): string {
-  try {
-    const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
-      return `[表情] ${parsed.name}`
-    }
-  } catch {
-    return '表情加载失败'
-  }
-  return '表情加载失败'
 }
 
 function parseFileDisplayName(content: string): string {
@@ -277,11 +266,12 @@ export function getMessagePreviewContent(message?: MessagePreviewSource | null):
     case 'FOLDER':
       return message.displayContent || parseFolderDisplayName(content)
     case 'STICKER':
-      return message.displayContent || parseStickerDisplayName(content)
+      // Read-only compatibility for messages sent before the sticker feature was removed.
+      return '[表情已停用]'
     case 'SHAKE':
       return '[窗口抖动]'
     case 'TEXT':
-      return message.displayContent || parseTextContent('TEXT', content).text
+      return emojiToPlainText(message.displayContent || parseTextContent('TEXT', content).text)
     default:
       return message.displayContent || content
   }

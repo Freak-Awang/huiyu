@@ -11,9 +11,10 @@ import { buildMessageContextMenu, buildConversationContextMenu, buildMemberConte
 import { openContextMenu, closeContextMenu, selectedMessageText } from './useContextMenu'
 import { copyMessageText, copyMessageImage, saveMessageImage, openMessageLink } from '../../utils/messageMenuActions'
 import { parseP2pAttachmentContent } from '../../utils/p2pProtocol'
+import type { EmojiComposerHandle } from '../../features/emoji/types'
 
 interface ChatMenuActions {
-  input: Ref<HTMLTextAreaElement | null>
+  input: Ref<EmojiComposerHandle | null>
   reply: (message: Message) => void
   recall: (message: Message) => Promise<void>
   retry: (message: Message) => void
@@ -173,18 +174,21 @@ export function useChatContextMenus(actions: ChatMenuActions) {
     const start = input.selectionStart, end = input.selectionEnd
     const conversationId = chat.currentConversation?.conversationId
     const hasSelection = start !== end
-    const editable = !input.disabled && !input.readOnly
-    const enabled = ref({ undo: editable && document.queryCommandEnabled('undo'), redo: editable && document.queryCommandEnabled('redo'),
+    const editable = !input.disabled
+    const enabled = ref({ undo: editable && input.canUndo, redo: editable && input.canRedo,
       cut: editable && hasSelection, copy: hasSelection, paste: false, selectAll: !!input.value.length })
     // Native clipboard inspection is local IPC, never a server request. Keep the menu visible while it resolves.
     void window.imDesktop?.clipboardState?.().then(state => { enabled.value.paste = editable && (state.text || state.image) }).catch(() => undefined)
     const run = async (command: InputCommand) => {
-      if (chat.currentConversation?.conversationId !== conversationId || !input.isConnected) return
+      if (chat.currentConversation?.conversationId !== conversationId || !input.element?.isConnected) return
       input.focus({ preventScroll: true })
       input.setSelectionRange(start, end)
       if (command === 'selectAll') { input.select(); return }
-      if (window.imDesktop?.editCommand) { await window.imDesktop.editCommand(command); return }
+      if (command === 'undo') { input.undo(); return }
+      if (command === 'redo') { input.redo(); return }
       if (command === 'copy') { await copyMessageText(input.value.slice(start, end)); return }
+      if (command === 'cut') { await copyMessageText(input.value.slice(start, end)); input.insertText(''); return }
+      if (window.imDesktop?.editCommand) { await window.imDesktop.editCommand(command); return }
       if (!document.execCommand(command)) throw new Error('浏览器未允许此操作，请使用键盘快捷键')
     }
     openContextMenu(event, () => buildInputContextMenu(enabled.value, run), '文本编辑')

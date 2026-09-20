@@ -51,6 +51,7 @@ function nextP2pWriteRequestId() {
 }
 
 contextBridge.exposeInMainWorld('imDesktop', {
+  loadBuiltinEmojiManifest: (): Promise<unknown> => ipcRenderer.invoke('emoji:builtin-manifest'),
   setP2pAccount: async (userId: string | null) => {
     for (const receiveId of p2pPorts.keys()) closeP2pPort(receiveId)
     return ipcRenderer.invoke('p2p:account', userId)

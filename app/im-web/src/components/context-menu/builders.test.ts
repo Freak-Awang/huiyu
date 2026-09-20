@@ -45,6 +45,10 @@ describe('dynamic message menus', () => {
       if (status === 'RECALLED') expect(result).toEqual(['delete'])
     }
   })
+  it('does not offer resend for discontinued sticker messages', () => {
+    const message = normalizeMessage({ messageId: '1', messageType: 'STICKER', status: 'FAILED', clientMsgId: 'legacy' })
+    expect(ids(buildMessageContextMenu(context({ message })))).toEqual(['copy', 'delete'])
+  })
   it('uses normal danger metadata and natural favorite labels', () => {
     const menu = buildMessageContextMenu(context({ canRecall: true, favorite: true }))
     expect(menu.find(item => item.id === 'favorite')?.label).toBe('取消收藏')

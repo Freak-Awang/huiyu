@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue'
 import type { ContextMenuItem } from './types'
+import { readableSelection } from '../../features/emoji/utils/emojiSerializer'
 
 interface MenuSession {
   id: number
@@ -43,7 +44,7 @@ export function selectedMessageText(element: HTMLElement): string {
   if (!selection || selection.isCollapsed || !selection.rangeCount) return ''
   const range = selection.getRangeAt(0)
   if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) return ''
-  return selection.toString()
+  return readableSelection(element) || ''
 }
 
 export function useContextMenu() { return { session, openContextMenu, closeContextMenu } }
