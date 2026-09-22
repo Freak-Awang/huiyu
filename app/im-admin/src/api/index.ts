@@ -12,6 +12,10 @@ const client = axios.create({
     headers: { 'Content-Type': 'application/json' },
 })
 
+function isLoginRequest(url?: string) {
+    return url?.split('?')[0] === '/api/auth/login'
+}
+
 // 请求拦截器：自动携带 token
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('token')
@@ -32,7 +36,7 @@ client.interceptors.response.use(
             }
             const message = body.message || '请求失败'
             ElMessage.error(message)
-            if (body.code === 401) {
+            if (body.code === 401 && !isLoginRequest(response.config.url)) {
                 localStorage.removeItem('token')
                 localStorage.removeItem('user')
                 router.push('/login')
@@ -49,6 +53,10 @@ client.interceptors.response.use(
             const msg = data?.message || data?.msg || '请求失败'
             switch (status) {
                 case 401:
+                    if (isLoginRequest(error.config?.url)) {
+                        ElMessage.error(data?.message || data?.msg || '用户名或密码错误')
+                        break
+                    }
                     ElMessage.error('登录已过期，请重新登录')
                     localStorage.removeItem('token')
                     localStorage.removeItem('user')

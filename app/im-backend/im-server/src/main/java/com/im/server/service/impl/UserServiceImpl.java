@@ -31,8 +31,8 @@ public class UserServiceImpl implements UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private static final int MAX_SIGNATURE_LENGTH = 128;
-    private static final int MIN_PASSWORD_LENGTH = 12;
-    private static final int MAX_PASSWORD_LENGTH = 128;
+    private static final int MIN_PASSWORD_LENGTH = 6;
+    private static final int MAX_PASSWORD_LENGTH = 18;
 
     @Autowired
     private UserMapper userMapper;
@@ -157,7 +157,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void updatePassword(Long userId, String oldPassword, String newPassword) {
         SysUser user = getById(userId);
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+        if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPassword())) {
             throw new BusinessException(400, "Current password is incorrect");
         }
         validateNewPassword(newPassword);
@@ -180,13 +180,13 @@ public class UserServiceImpl implements UserService {
     }
 
     private void validateNewPassword(String password) {
-        if (!StringUtils.hasText(password)
-                || password.length() < MIN_PASSWORD_LENGTH
-                || password.length() > MAX_PASSWORD_LENGTH) {
-            throw new BusinessException(
-                    400,
-                    "Password must contain between " + MIN_PASSWORD_LENGTH + " and "
-                            + MAX_PASSWORD_LENGTH + " characters");
+        // 与管理端一致：只检查空白，不修改密码本身（包括首尾空格）。
+        if (password == null || password.codePoints().allMatch(character ->
+                Character.isWhitespace(character) || Character.isSpaceChar(character) || character == 0xFEFF)) {
+            throw new BusinessException(400, "密码不能为空或全为空白");
+        }
+        if (password.length() < MIN_PASSWORD_LENGTH || password.length() > MAX_PASSWORD_LENGTH) {
+            throw new BusinessException(400, "密码需为6至18位");
         }
     }
 

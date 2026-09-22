@@ -11,6 +11,8 @@ import com.im.server.security.AuthenticatedUser;
 import com.im.server.security.TokenAuthenticationService;
 import com.im.server.service.AuthService;
 import com.im.server.websocket.WebSocketSessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,12 +20,18 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * 认证服务实现：处理登录认证、Token 签发/吊销及 WebSocket 会话联动。
  */
 @Service
 public class AuthServiceImpl implements AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
+    // 兼容现有 BCrypt 版本；提前识别空值、截断、明文及非法 cost，避免误报密码不匹配。
+    private static final Pattern BCRYPT_HASH = Pattern.compile(
+            "\\A\\$2[ayb]?\\$(0[4-9]|[12][0-9]|3[01])\\$[./0-9A-Za-z]{53}\\z");
 
     @Autowired
     private UserMapper userMapper;
@@ -52,12 +60,26 @@ public class AuthServiceImpl implements AuthService {
         wrapper.eq(SysUser::getUsername, request.getUsername());
         SysUser user = userMapper.selectOne(wrapper);
 
-        if (user == null || user.getStatus() != 1) {
-            throw new BusinessException(401, "用户名或密码错误");
+        if (user == null) {
+            throw loginFailed(request.getUsername(), null, "USER_NOT_FOUND");
         }
-
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException(401, "用户名或密码错误");
+        if (!Integer.valueOf(1).equals(user.getStatus())) {
+            throw loginFailed(request.getUsername(), user.getId(), "ACCOUNT_DISABLED");
+        }
+        if (user.getPassword() == null || !BCRYPT_HASH.matcher(user.getPassword()).matches()) {
+            throw loginFailed(request.getUsername(), user.getId(), "INVALID_PASSWORD_HASH");
+        }
+        boolean matches;
+        try {
+            // 登录不应用新密码长度规则，保留历史密码的校验能力。
+            matches = request.getPassword() != null
+                    && passwordEncoder.matches(request.getPassword(), user.getPassword());
+        } catch (IllegalArgumentException exception) {
+            // 编码器异常可能包含凭证，不能将异常或其 message 写入日志。
+            throw loginFailed(request.getUsername(), user.getId(), "INVALID_PASSWORD_HASH");
+        }
+        if (!matches) {
+            throw loginFailed(request.getUsername(), user.getId(), "PASSWORD_MISMATCH");
         }
 
         int tokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0;
@@ -71,6 +93,14 @@ public class AuthServiceImpl implements AuthService {
         response.setSignature(user.getSignature());
         response.setRole(user.getRole());
         return response;
+    }
+
+    private BusinessException loginFailed(String username, Long userId, String reason) {
+        // 限长并去除换行、控制字符，防止用户输入伪造日志记录。
+        String safeUsername = username == null ? "" : username.substring(0, Math.min(username.length(), 64))
+                .replaceAll("[\\p{Cntrl}\\p{Zl}\\p{Zp}]", "_");
+        log.warn("Login failed: reason={}, userId={}, username={}", reason, userId, safeUsername);
+        return new BusinessException(401, "用户名或密码错误");
     }
 
     /**

@@ -13,17 +13,25 @@ class SysUserSerializationTest {
 
     /**
      * 验证 SysUser 对象序列化为 JSON 后不包含 password 字段和哈希值，
-     * 确保 @JsonIgnore 注解生效。
+     * 确保 password 的 WRITE_ONLY 注解生效。
      */
     @Test
     void passwordHashIsNeverSerialized() throws Exception {
         SysUser user = new SysUser();
         user.setId(1L);
         user.setUsername("admin");
-        user.setPassword("$2a$10$hash"); // 应被 @JsonIgnore 忽略
+        user.setPassword("$2a$10$hash");
 
         String json = new ObjectMapper().writeValueAsString(user);
 
         assertThat(json).doesNotContain("password", "$2a$10$hash");
+    }
+
+    @Test
+    void creationRequestPreservesPasswordIncludingSpaces() throws Exception {
+        SysUser user = new ObjectMapper().readValue(
+                "{\"username\":\"sample\",\"password\":\" abcde \"}", SysUser.class);
+
+        assertThat(user.getPassword()).isEqualTo(" abcde ");
     }
 }
