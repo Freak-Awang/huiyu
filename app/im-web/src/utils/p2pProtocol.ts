@@ -5,8 +5,6 @@ export const P2P_CHUNK_SIZE = 64 * 1024
 export const P2P_ACK_WINDOW = 4 * 1024 * 1024
 export const P2P_BUFFER_HIGH_WATER = 8 * 1024 * 1024
 export const P2P_BUFFER_LOW_WATER = 4 * 1024 * 1024
-export const P2P_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
-export const P2P_MAX_FOLDER_SIZE = 20 * 1024 * 1024 * 1024
 export const P2P_MAX_FOLDER_FILES = 10_000
 export const P2P_MAX_FOLDER_DIRECTORIES = 10_000
 export const P2P_MANIFEST_TEXT_CHUNK = 12 * 1024
@@ -144,8 +142,8 @@ export async function prepareP2pFile(
   onProgress?: (progress: number) => void,
   signal?: AbortSignal,
 ) {
-  if (file.size < 0 || file.size > P2P_MAX_FILE_SIZE) {
-    throw new Error('文件超过 2 GiB')
+  if (!Number.isSafeInteger(file.size) || file.size < 0) {
+    throw new Error('文件大小无效')
   }
   const sha256 = await hashFile(file, onProgress, signal)
   const entry: P2pManifestEntry = {
@@ -174,18 +172,19 @@ export async function prepareP2pFolder(
     file,
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)
   const paths = new Set<string>()
-  const totalSize = normalized.reduce((sum, item) => sum + item.file.size, 0)
-  if (totalSize > P2P_MAX_FOLDER_SIZE) {
-    throw new Error('文件夹总大小超过 20 GiB')
+  let totalSize = 0
+  for (const item of normalized) {
+    if (!Number.isSafeInteger(item.file.size) || item.file.size < 0) {
+      throw new Error(`${item.path} 文件大小无效`)
+    }
+    totalSize += item.file.size
+    if (!Number.isSafeInteger(totalSize)) throw new Error('文件夹总大小超出可精确表示的范围')
   }
   let hashedBytes = 0
   const files: P2pSourceFile[] = []
   for (const [index, item] of normalized.entries()) {
     if (paths.has(item.path.toLowerCase())) throw new Error(`文件夹包含重复路径：${item.path}`)
     paths.add(item.path.toLowerCase())
-    if (item.file.size < 0 || item.file.size > P2P_MAX_FILE_SIZE) {
-      throw new Error(`${item.path} 超过 2 GiB`)
-    }
     const sha256 = await hashFile(item.file, (progress) => {
       onProgress?.(totalSize ? (hashedBytes + item.file.size * progress) / totalSize : 0)
     }, signal)
@@ -242,6 +241,10 @@ export function splitP2pManifest(manifest: P2pManifest) {
 
 /** Binary frame: uint32 file index + uint64 offset + uint32 payload size + payload. */
 export function encodeP2pDataFrame(fileIndex: number, offset: number, payload: ArrayBuffer) {
+  if (!Number.isInteger(fileIndex) || fileIndex < 0 || fileIndex >= P2P_MAX_FOLDER_FILES
+    || !Number.isSafeInteger(offset) || offset < 0
+    || payload.byteLength <= 0 || payload.byteLength > P2P_CHUNK_SIZE
+    || !Number.isSafeInteger(offset + payload.byteLength)) throw new Error('无效的 P2P 数据帧')
   const frame = new ArrayBuffer(16 + payload.byteLength)
   const view = new DataView(frame)
   view.setUint32(0, fileIndex, true)
@@ -256,9 +259,12 @@ export function decodeP2pDataFrame(frame: ArrayBuffer) {
   const view = new DataView(frame)
   const size = view.getUint32(12, true)
   if (size !== frame.byteLength - 16) throw new Error('P2P 数据帧长度不匹配')
+  const offset = view.getBigUint64(4, true)
+  if (view.getUint32(0, true) >= P2P_MAX_FOLDER_FILES || size <= 0 || size > P2P_CHUNK_SIZE
+    || offset + BigInt(size) > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('无效的 P2P 数据帧偏移或大小')
   return {
     fileIndex: view.getUint32(0, true),
-    offset: Number(view.getBigUint64(4, true)),
+    offset: Number(offset),
     payload: frame.slice(16),
   }
 }
@@ -271,7 +277,6 @@ export function parseP2pAttachmentContent(content: string): P2pAttachmentContent
       && (value.kind === 'file' || value.kind === 'folder')
       && typeof value.name === 'string' && value.name.length > 0
       && Number.isSafeInteger(value.totalSize) && value.totalSize >= (value.version === 1 ? 1 : 0)
-      && value.totalSize <= (value.kind === 'file' ? P2P_MAX_FILE_SIZE : P2P_MAX_FOLDER_SIZE)
       && Number.isInteger(value.fileCount) && value.fileCount >= (value.version === 1 ? 1 : 0)
       && value.fileCount <= P2P_MAX_FOLDER_FILES
       && (value.kind !== 'file' || value.fileCount === 1)
@@ -290,7 +295,7 @@ export function validateP2pManifestStructure(manifest: P2pManifest) {
   if (![1, 2].includes(manifest.version) || !['file', 'folder'].includes(manifest.kind)
     || !Array.isArray(manifest.files) || manifest.files.length !== manifest.fileCount
     || manifest.fileCount > P2P_MAX_FOLDER_FILES || !Number.isSafeInteger(manifest.totalSize)
-    || manifest.totalSize < 0 || manifest.totalSize > (manifest.kind === 'file' ? P2P_MAX_FILE_SIZE : P2P_MAX_FOLDER_SIZE)
+    || manifest.totalSize < 0
     || (manifest.kind === 'file' && manifest.fileCount !== 1)
     || (manifest.version === 1 && (manifest.totalSize <= 0 || manifest.fileCount <= 0))) {
     throw new Error('P2P 文件清单数量或大小无效')
@@ -308,12 +313,13 @@ export function validateP2pManifestStructure(manifest: P2pManifest) {
   for (const [index, entry] of manifest.files.entries()) {
     const safe = normalizeP2pRelativePath(entry.path)
     if (safe !== entry.path || entry.index !== index || !Number.isSafeInteger(entry.size)
-      || entry.size < (manifest.version === 1 ? 1 : 0) || entry.size > P2P_MAX_FILE_SIZE
+      || entry.size < (manifest.version === 1 ? 1 : 0)
       || !/^[a-f0-9]{64}$/i.test(entry.sha256) || paths.has(safe.toLowerCase())) {
       throw new Error(`P2P 文件条目无效：${entry.path}`)
     }
     paths.set(safe.toLowerCase(), 'file')
     total += entry.size
+    if (!Number.isSafeInteger(total)) throw new Error('P2P 文件清单总大小无效')
   }
   if (total !== manifest.totalSize) throw new Error('P2P 文件清单总大小不一致')
   for (const path of paths.keys()) {

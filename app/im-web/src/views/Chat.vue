@@ -635,7 +635,7 @@
                 <label
                   class="tool-btn"
                   :class="{ disabled: isSendingMessage }"
-                  title="发送文件（单文件最多 2GB，双方桌面端直传）"
+                  title="发送文件（双方桌面端直传）"
                   :aria-disabled="isSendingMessage"
                   role="button"
                   :tabindex="isSendingMessage ? -1 : 0"
@@ -649,7 +649,7 @@
                 <label
                   class="tool-btn"
                   :class="{ disabled: isSendingMessage }"
-                  title="发送文件夹（最多 20GB、10,000 个文件及 10,000 个目录）"
+                  title="发送文件夹（最多 10,000 个文件及 10,000 个目录）"
                   :aria-disabled="isSendingMessage"
                   role="button"
                   :tabindex="isSendingMessage ? -1 : 0"

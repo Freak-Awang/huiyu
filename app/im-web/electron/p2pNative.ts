@@ -146,8 +146,7 @@ class NativeClient {
     if (!payload || !/^p2p_[a-z0-9]+$/i.test(payload.transferId) || !['file', 'folder'].includes(payload.kind)
       || !Number.isSafeInteger(payload.totalSize) || payload.totalSize < 0 || !Number.isInteger(payload.fileCount) || payload.fileCount < 0
       || payload.fileCount > 10000 || (payload.directoryCount || 0) > 10000
-      || (payload.kind === 'file' && (payload.fileCount !== 1 || payload.totalSize > 2 * 1024 ** 3))
-      || (payload.kind === 'folder' && payload.totalSize > 20 * 1024 ** 3)) throw new Error('接收文件摘要无效')
+      || (payload.kind === 'file' && payload.fileCount !== 1)) throw new Error('接收文件摘要无效')
     if (safeP2pRelativePath(payload.name) !== payload.name || payload.name.includes('/')) throw new Error('文件名称不安全')
     const localPath = await this.chooseDestination(payload.kind, payload.name)
     if (!localPath) return { canceled: true, success: false }

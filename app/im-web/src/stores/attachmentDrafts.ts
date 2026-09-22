@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia'
 import { markRaw, ref } from 'vue'
 import { DIRECT_UPLOAD_MAX_SIZE } from '../api/file'
-import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE, P2P_MAX_FOLDER_DIRECTORIES } from '../utils/p2pProtocol'
+import { P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_DIRECTORIES } from '../utils/p2pProtocol'
 
 /** 附件类型：图片、普通文件或文件夹 */
 export type AttachmentDraftKind = 'image' | 'file' | 'folder'
@@ -154,7 +154,7 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
 
   /**
    * 向指定会话添加附件文件。
-   * 普通空文件保留；过滤无效图片、超大文件及重复文件，图片文件生成预览 URL。
+   * 普通空文件保留；过滤无效大小、超大图片及重复文件，图片文件生成预览 URL。
    * @param conversationId 会话 ID
    * @param files 待添加的文件数组
    * @param classification 分类方式；图片/文件入口应明确传值，拖拽等场景使用 auto
@@ -174,13 +174,16 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     for (const file of files) {
       const name = file.name || 'file'
       const kind = resolveDraftKind(file, classification)
-      const maxSize = kind === 'image' ? DIRECT_UPLOAD_MAX_SIZE : P2P_MAX_FILE_SIZE
+      if (!Number.isSafeInteger(file.size)) {
+        errors.push(`${name}：文件大小无效`)
+        continue
+      }
       if (file.size < 0 || (kind === 'image' && file.size === 0)) {
         errors.push(`${name}：文件为空`)
         continue
       }
-      if (file.size > maxSize) {
-        errors.push(`${name}：不能超过 ${formatLimit(maxSize)}`)
+      if (kind === 'image' && file.size > DIRECT_UPLOAD_MAX_SIZE) {
+        errors.push(`${name}：不能超过 ${formatLimit(DIRECT_UPLOAD_MAX_SIZE)}`)
         continue
       }
       const fileFingerprint = fingerprint(file)
@@ -236,8 +239,8 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     }
 
     for (const { path, file } of folder.files) {
-      if (file.size < 0 || file.size > P2P_MAX_FILE_SIZE) {
-        errors.push(`${path}：不能超过 ${formatLimit(P2P_MAX_FILE_SIZE)}`)
+      if (!Number.isSafeInteger(file.size) || file.size < 0) {
+        errors.push(`${path}：文件大小无效`)
       }
     }
     if ((folder.directories?.length || 0) > P2P_MAX_FOLDER_DIRECTORIES) errors.push(`${name}：目录数量不能超过 ${P2P_MAX_FOLDER_DIRECTORIES.toLocaleString()}`)
@@ -246,11 +249,11 @@ export const useAttachmentDraftStore = defineStore('attachmentDrafts', () => {
     }
 
     const totalSize = folder.files.reduce((sum, { file }) => sum + file.size, 0)
-    if (totalSize > P2P_MAX_FOLDER_SIZE) {
+    if (!Number.isSafeInteger(totalSize)) {
       return {
         added: [],
         duplicateCount: 0,
-        errors: [`${name}：总大小不能超过 ${formatLimit(P2P_MAX_FOLDER_SIZE)}`],
+        errors: [`${name}：总大小超出可精确表示的范围`],
       }
     }
     const probe: AttachmentDraft = {

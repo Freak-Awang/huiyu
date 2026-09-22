@@ -123,11 +123,60 @@ describe('P2P attachment protocol', () => {
     }
   })
 
-  it('rejects a folder as a whole if any file exceeds its limit or a directory conflicts', async () => {
-    await expect(prepareP2pFolder('docs', [
-      { path: 'valid', file: file('valid', 2) }, { path: 'large', file: file('large', 2 * 1024 ** 3 + 1) },
-    ])).rejects.toThrow(/2 GiB/)
+  it('rejects a folder as a whole if a directory conflicts', async () => {
     await expect(prepareP2pFolder('docs', [{ path: 'same', file: file('same', 0) }], undefined, undefined, ['same']))
       .rejects.toThrow(/条目无效/)
+  })
+
+  it('prepares, parses and validates large files and folders without a business size cap', async () => {
+    const largeFile = await prepareP2pFile(file('large.bin', 2 * 1024 ** 3 + 1))
+    const largeFolder = await prepareP2pFolder('large', [
+      { path: 'first.bin', file: file('first.bin', 12 * 1024 ** 3) },
+      { path: 'second.bin', file: file('second.bin', 12 * 1024 ** 3) },
+    ])
+    const largestSafe = await prepareP2pFile(file('safe.bin', Number.MAX_SAFE_INTEGER))
+    for (const source of [largeFile, largeFolder, largestSafe]) {
+      expect(() => validateP2pManifestStructure(source.manifest)).not.toThrow()
+      expect(await verifyP2pManifest(source.manifest)).toBe(true)
+      for (const version of [1, 2]) {
+        expect(parseP2pAttachmentContent(JSON.stringify({ ...p2pOfferSummary(source),
+          version, transferMode: 'p2p_lan', transferId: 'p2p_large' }))?.totalSize).toBe(source.manifest.totalSize)
+      }
+    }
+  })
+
+  it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects invalid sizes (%s) before hashing', async (size) => {
+    hashFileMock.mockClear()
+    await expect(prepareP2pFile(file('bad', size))).rejects.toThrow(/大小无效/)
+    await expect(prepareP2pFolder('bad', [{ path: 'bad', file: file('bad', size) }])).rejects.toThrow(/大小无效/)
+    expect(hashFileMock).not.toHaveBeenCalled()
+    const valid = await prepareP2pFile(file('valid', 1))
+    expect(() => validateP2pManifestStructure({ ...valid.manifest, totalSize: size })).toThrow()
+    expect(() => validateP2pManifestStructure({ ...valid.manifest, files: [{ ...valid.manifest.files[0], size }] })).toThrow()
+    expect(parseP2pAttachmentContent(JSON.stringify({ ...p2pOfferSummary(valid), transferMode: 'p2p_lan',
+      transferId: 'p2p_bad', totalSize: size }))).toBeNull()
+  })
+
+  it('rejects aggregate overflow before hashing', async () => {
+    hashFileMock.mockClear()
+    await expect(prepareP2pFolder('overflow', [
+      { path: 'a', file: file('a', Number.MAX_SAFE_INTEGER) }, { path: 'b', file: file('b', 1) },
+    ])).rejects.toThrow(/可精确表示/)
+    expect(hashFileMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsafe and overflowing binary offsets without rounding them', () => {
+    const payload = new Uint8Array([1]).buffer
+    for (const offset of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => encodeP2pDataFrame(0, offset, payload)).toThrow()
+    }
+    const frame = encodeP2pDataFrame(0, Number.MAX_SAFE_INTEGER - 1, payload)
+    expect(decodeP2pDataFrame(frame).offset).toBe(Number.MAX_SAFE_INTEGER - 1)
+    for (const offset of [BigInt(Number.MAX_SAFE_INTEGER), 2n ** 64n - 1n]) {
+      new DataView(frame).setBigUint64(4, offset, true)
+      expect(() => decodeP2pDataFrame(frame)).toThrow()
+    }
+    expect(() => encodeP2pDataFrame(0, 0, new ArrayBuffer(P2P_CHUNK_SIZE + 1))).toThrow()
+    expect(() => encodeP2pDataFrame(0, 0, new ArrayBuffer(0))).toThrow()
   })
 })

@@ -12,8 +12,8 @@ function summaryFrom(message: LocalMessageRecord): NativeP2pAttachmentSummary | 
     || !Number.isSafeInteger(value.totalSize) || value.totalSize! < 0
     || !Number.isInteger(value.fileCount) || value.fileCount! < 0
     || (value.version === 1 && (value.totalSize! <= 0 || value.fileCount! <= 0))
-    || (value.kind === 'file' && (message.messageType !== 'FILE' || value.fileCount !== 1 || value.totalSize! > 2 * 1024 ** 3))
-    || (value.kind === 'folder' && (message.messageType !== 'FOLDER' || value.fileCount! > 10_000 || value.totalSize! > 20 * 1024 ** 3))) return undefined
+    || (value.kind === 'file' && (message.messageType !== 'FILE' || value.fileCount !== 1))
+    || (value.kind === 'folder' && (message.messageType !== 'FOLDER' || value.fileCount! > 10_000))) return undefined
   const checksum = value.kind === 'file' ? value.sha256 : value.manifestSha256
   if (typeof checksum !== 'string' || !/^[a-f0-9]{64}$/i.test(checksum)) return undefined
   const directoryCount = value.directoryCount ?? 0

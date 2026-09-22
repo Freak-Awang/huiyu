@@ -14,6 +14,7 @@ import com.im.common.entity.ImMessageDelivery;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.PageResult;
+import com.im.server.config.P2pTransferProperties;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
 import com.im.server.mapper.MessageDeliveryMapper;
@@ -753,7 +754,8 @@ public class MessageServiceImpl implements MessageService {
                 || transferId.length() > 64
                 || name.isBlank() || name.length() > 255
                 || !expectedKind.equals(kind)
-                || totalSize < 0 || fileCount < 0 || directoryCount < 0
+                || !root.path("totalSize").isIntegralNumber() || !root.path("totalSize").canConvertToLong()
+                || totalSize < 0 || totalSize > P2pTransferProperties.MAX_SAFE_BYTE_COUNT || fileCount < 0 || directoryCount < 0
                 || (version == 1 && (totalSize == 0 || fileCount == 0 || directoryCount != 0))
                 || ("file".equals(expectedKind) && (fileCount != 1 || directoryCount != 0))
                 || !hash.matches("(?i)^[0-9a-f]{64}$")) {

@@ -6,7 +6,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 const environment = vi.hoisted(() => ({ directory: '', handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(), save: vi.fn(), open: vi.fn(async () => ''), reveal: vi.fn() }))
 vi.mock('electron', () => ({ app: { getPath: () => environment.directory }, BrowserWindow: {}, MessageChannelMain: {},
   ipcMain: { handle: (name: string, action: (...args: unknown[]) => Promise<unknown>) => environment.handlers.set(name, action) },
-  dialog: { showSaveDialog: environment.save }, shell: { openPath: environment.open, showItemInFolder: environment.reveal },
+  dialog: { showSaveDialog: environment.save, showOpenDialog: environment.save }, shell: { openPath: environment.open, showItemInFolder: environment.reveal },
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (text: string) => Buffer.from('sealed:' + Buffer.from(text).toString('base64')),
     decryptString: (data: Buffer) => Buffer.from(data.toString().slice(7), 'base64').toString() },
 }))
@@ -39,6 +39,12 @@ async function outgoing() {
   return { path, source: sources[0]! }
 }
 describe('P2P menu file capabilities', () => {
+  it.each(['file', 'folder'] as const)('allows a large %s summary to reach destination selection', async (kind) => {
+    environment.save.mockResolvedValueOnce({ canceled: true })
+    expect(await invoke('p2p:receive-start', { version: 2, transferMode: 'p2p_lan', transferId: 'p2p_large',
+      kind, name: 'large', totalSize: 24 * 1024 ** 3, fileCount: 1, directoryCount: 0 })).toEqual({ canceled: true, success: false })
+    expect(environment.save).toHaveBeenCalledOnce()
+  })
   it('opens and reveals only a known source and refuses paths passed as task IDs', async () => {
     const { path } = await outgoing()
     await invoke('p2p:open-result', 'send1')

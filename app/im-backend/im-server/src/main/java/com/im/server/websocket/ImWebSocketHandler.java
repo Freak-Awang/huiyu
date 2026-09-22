@@ -1013,18 +1013,17 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void validateP2pLimits(String kind, long totalSize, int fileCount, int directoryCount, int version) {
-        if (totalSize < 0 || fileCount < 0 || directoryCount < 0
+        if (totalSize < 0 || totalSize > P2pTransferProperties.MAX_SAFE_BYTE_COUNT || fileCount < 0 || directoryCount < 0
                 || (version == 1 && (totalSize == 0 || fileCount == 0 || directoryCount != 0))) {
-            throw new BusinessException(400, "P2P attachment is empty");
+            throw new BusinessException(400, "Invalid P2P attachment size or entry counts");
         }
         if ("file".equals(kind)) {
-            if (fileCount != 1 || directoryCount != 0 || totalSize > p2pProperties.getMaxFileSize()) {
-                throw new BusinessException(413, "P2P file exceeds the size limit");
+            if (fileCount != 1 || directoryCount != 0) {
+                throw new BusinessException(400, "Invalid P2P file entry counts");
             }
             return;
         }
-        if (fileCount > p2pProperties.getMaxFolderFiles() || directoryCount > p2pProperties.getMaxFolderDirectories()
-                || totalSize > p2pProperties.getMaxFolderSize()) {
+        if (fileCount > p2pProperties.getMaxFolderFiles() || directoryCount > p2pProperties.getMaxFolderDirectories()) {
             throw new BusinessException(413, "P2P folder exceeds the transfer limit");
         }
     }

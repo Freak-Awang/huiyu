@@ -13,7 +13,6 @@ export interface ReceiveManifest {
   manifestSha256: string
 }
 const CHECKPOINT = 4 * 1024 * 1024
-const MAX_FILE = 2 * 1024 ** 3
 type Progress = (event: { receiveId: string; phase: 'verifying' | 'committing'; processedBytes: number; totalBytes: number; sequence?: number }) => void
 type ReceiverTask = NativeP2pTask & {
   destinationParentRealPath?: string
@@ -50,7 +49,8 @@ export function validateReceiveManifest(manifest: ReceiveManifest, task: Pick<Na
   if (![1, 2].includes(manifest?.version) || !Array.isArray(manifest.files)
     || manifest.files.length !== task.fileCount || manifest.fileCount !== task.fileCount
     || manifest.totalSize !== task.totalSize || manifest.kind !== task.kind || manifest.name !== task.name
-    || task.fileCount > 10000 || task.totalSize > (task.kind === 'file' ? MAX_FILE : 20 * 1024 ** 3)
+    || task.fileCount > 10000 || !Number.isSafeInteger(task.totalSize) || task.totalSize < 0
+    || (manifest.version === 1 && (task.totalSize === 0 || task.fileCount === 0))
     || (task.kind === 'file' && task.fileCount !== 1) || manifestHash(manifest) !== manifest.manifestSha256) throw new Error('文件清单校验失败')
   const directories = manifest.version === 2 ? manifest.directories : []
   if (!Array.isArray(directories) || directories.length !== (task.directoryCount || 0) || directories.length > 10000
@@ -65,9 +65,10 @@ export function validateReceiveManifest(manifest: ReceiveManifest, task: Pick<Na
   for (const [index, entry] of manifest.files.entries()) {
     const safe = safeP2pRelativePath(entry.path)
     if (safe !== entry.path || entry.index !== index || !Number.isSafeInteger(entry.size)
-      || entry.size < (manifest.version === 1 ? 1 : 0) || entry.size > MAX_FILE
+      || entry.size < (manifest.version === 1 ? 1 : 0)
       || !/^[0-9a-f]{64}$/i.test(entry.sha256) || paths.has(safe.toLowerCase())) throw new Error(`文件条目无效：${entry.path}`)
     paths.set(safe.toLowerCase(), 'file'); total += entry.size
+    if (!Number.isSafeInteger(total)) throw new Error('文件清单总大小无效')
   }
   if (total !== task.totalSize) throw new Error('文件总大小不一致')
   for (const path of paths.keys()) {

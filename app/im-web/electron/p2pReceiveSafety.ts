@@ -36,10 +36,11 @@ export function assertP2pWriteBounds(
   chunkSize: number,
   maxChunkSize: number,
 ) {
-  if (!Number.isSafeInteger(expectedOffset) || !Number.isSafeInteger(requestedOffset)
+  if (!Number.isSafeInteger(declaredSize) || declaredSize < 0
+    || !Number.isSafeInteger(expectedOffset) || expectedOffset < 0 || !Number.isSafeInteger(requestedOffset)
     || requestedOffset !== expectedOffset || !Number.isSafeInteger(chunkSize)
     || chunkSize <= 0 || chunkSize > maxChunkSize
-    || expectedOffset + chunkSize > declaredSize) {
+    || chunkSize > declaredSize - expectedOffset) {
     throw new Error('Invalid P2P write request')
   }
 }

@@ -1,12 +1,27 @@
 # 内置 Emoji V1 交付报告
 
-验证日期：2026-09-20。实际项目位置为 `E:\CodeX\linghui-im\app\im-web`。
+验证日期：2026-09-21。实际项目位置为 `E:\CodeX\linghui-im\app\im-web`。
 
 ## 完成范围
 
-已接入内置 PNG Emoji、5 个分类（含最近）、最近 40 项、固定尺寸虚拟网格、可视化原子输入、光标恢复、整颗删除、草稿恢复、Token 序列化/解析、消息渲染、纯表情放大、引用/转发/复制兼容，以及 Electron 运行资源。
+已接入内置 PNG Emoji、“最近 / 表情”两个入口、最近 40 项、固定尺寸虚拟网格、可视化原子输入、光标恢复、整颗删除、草稿恢复、Token 序列化/解析、消息渲染、纯表情放大、引用/转发/复制兼容，以及 Electron 运行资源。
 
-按后续要求删除 food、nature、new、object、people、travel 六个文件夹及其中 3104 张 PNG；保留 smile、activity、symbol、flag 共 736 张。同步精简 manifest、分类按钮和路径白名单。保留项的 ID、order 和路径不变；旧消息中已删除的表情降级为 `[表情]`，原 Token 仍可往返，最近使用记录自动过滤删除项。
+按用户最终整理结果，仅保留 smile 目录中的 141 张 PNG（原笑脸 120 张、从其他分类移入 21 张）。按内容分为八组连续排列，文件名整理为 `emoji_0001.png`～`emoji_0141.png`，order 为 1～141；分组不增加界面标签。消息 ID 保持原值，图片内容未修改。旧消息中已删除的表情降级为 `[表情]`，原 Token 仍可往返，最近记录过滤删除项并保留移入图片的原 ID。
+
+### 2026-09-21 重命名记录
+
+执行前保存原文件名、原清单路径、消息 ID、旧/新顺序、分组和 SHA-256，完整映射见 [rename-2026-09-21.json](rename-2026-09-21.json)。采用临时文件名进行两阶段重命名，逐张核对新文件与执行前哈希一致。用户修改过的原 `emoji_0549.png` 保持原始字节，现为 `emoji_0128.png`，ID 仍为 `builtin_emoji_0549`。
+
+| 内容组 | 数量 | 新文件编号 |
+| --- | ---: | --- |
+| 开心亲近 | 23 | 0001–0023 |
+| 俏皮装扮 | 21 | 0024–0044 |
+| 思考困倦 | 20 | 0045–0064 |
+| 惊讶不适 | 23 | 0065–0087 |
+| 难过愤怒 | 18 | 0088–0105 |
+| 趣味角色 | 15 | 0106–0120 |
+| 符号文字 | 12 | 0121–0132 |
+| 庆祝旗帜 | 9 | 0133–0141 |
 
 沿用现有 TEXT 消息 JSON、发送确认/失败重试、Pinia 草稿、@ 提及、附件托盘和上下文菜单。后端 API、数据库和 WebSocket 协议未修改；本次未新增 V2 能力。
 
@@ -59,6 +74,7 @@ scripts/emoji-fixture/
   chat-preload.cjs
   tsconfig.json
 docs/emoji/builtin-emoji-v1.md
+docs/emoji/rename-2026-09-21.json
 ```
 
 修改：
@@ -81,9 +97,9 @@ package.json
 scripts/context-menu-fixture/Fixture.vue
 ```
 
-资源：使用 `public/emoji/builtin/manifest.v1.json` 和 `images/` 中保留的 736 张 PNG，未重编号、替换或生成图片。该目录只有 manifest 和 images，不含 README/CSV。
+资源：使用 `public/emoji/builtin/manifest.v1.json` 和 `images/smile/` 中保留的 141 张 PNG。仅重命名图片文件、更新清单顺序，未重编消息 ID、替换或生成图片。运行目录只有 manifest 和 images，不含开发文档或重命名映射。
 
-删除：移除上述六个 Emoji 资源文件夹及全部图片，以及 `src/constants/stickers.ts`、`src/utils/customStickers.ts`、`src/assets/stickers/`（6 张 SVG）。移除了 Chat 中旧 Unicode 选择器和大表情模块的逻辑及样式。没有改动依赖或锁文件。
+删除：所有非 smile 的 Emoji 分类目录及其清单入口已移除。此前已删除 `src/constants/stickers.ts`、`src/utils/customStickers.ts`、`src/assets/stickers/`（6 张 SVG）及旧 Unicode 选择器、大表情模块逻辑和样式。没有改动依赖或锁文件。
 
 ## 2. 架构
 
@@ -91,7 +107,7 @@ scripts/context-menu-fixture/Fixture.vue
 | --- | --- |
 | Catalog | manifest 是唯一清单。模块级 Promise 缓存并共享加载结果；构建 ID Map、分类 Map，分类数组冻结并按 order 排序。失败也缓存，防止消息组件重试风暴。 |
 | URL | `getBuiltinEmojiUrl` 统一验证资源路径，使用 Vite `BASE_URL`。不 import/glob 全部图片。 |
-| Picker | 默认无最近记录时选笑脸；分类按钮有中文 title/aria-label。连续选择保持打开，现有 Chat 处理 Esc、点击外部、再次点击和会话切换关闭。 |
+| Picker | 默认无最近记录时选“表情”，另有“最近”入口；按钮有中文 title/aria-label。连续选择保持打开，现有 Chat 处理 Esc、点击外部、再次点击和会话切换关闭。 |
 | Virtual Grid | 44px 单元格；按实际容器宽度算列数，300px 可视区、前后各 4 行 overscan；占位总高度加平移定位，仅挂载可见项。ResizeObserver 在卸载时断开。 |
 | Recent | `linghui.im.emoji.recent.v1` 保存 ID 数组，去重置顶，最多 40 个，读取时按当前 catalog 过滤失效 ID。存储失败不影响输入。 |
 | Composer | 轻量 contenteditable；普通文字为 Text Node，Emoji 为 `contenteditable=false` 的 span。保留最后有效 Range，恢复焦点和光标；按序列化偏移复用既有 @ 和菜单逻辑。 |
@@ -136,29 +152,31 @@ scripts/context-menu-fixture/Fixture.vue
 
 ## 4. 性能与资源检查
 
-- manifest 736 项，PNG 736 张，全部验证为 160×160。ID、file、order 唯一，分类合法、文件路径存在且不越界；目录、文件集合及分类计数与 manifest 一致。
-- 分类数量：smile 129、symbol 260、activity 78、flag 269。
-- 保持原 ID 空缺，未重编号；`builtin_emoji_0674` 仍不存在，new 中的 `builtin_emoji_3841` 已删除，flag 中的 `builtin_emoji_3833` 保留。
-- 虚拟网格用于所有分类，真实 UI 回归测得 flag 快速跨区滚动时同时存在 85～128 个表情按钮；单元测试仍用 2319 个合成数据验证大列表。
+- manifest 141 项，PNG 141 张，全部验证为 160×160。ID、file、order 唯一；目录、文件集合、总数及分类计数一致；文件编号与显示顺序连续。
+- 唯一资源分类为 smile，显示名“表情”。资源校验根据 manifest 与实际文件核对数量，不锁死当前总数；额外验证了合法单图清单可通过，错误总数、分类数量、顺序和缺图均失败。
+- 文件编号与消息 ID 相互独立。例如 `builtin_emoji_0346` 指向新 `emoji_0121.png`；已删除的 ID 0118 不会因新 `emoji_0118.png` 存在而被复用，该文件实际对应原 ID 0127。
+- 真实 UI 回归测得完整表情集合快速滚动时挂载 85～128 个按钮；单元测试仍用 2319 个合成数据验证大列表。
 - 图片均配置 lazy/async/draggable=false；关闭的空编辑器不请求 manifest 或 PNG。只有打开面板、出现 token 才按需加载 catalog/图片。
 - 多个 Renderer、Composer 和反复开关 Picker 共享 **1 次 manifest 加载**。
 - 反复开关后 ResizeObserver 关闭时为 0、打开时为 1；切换会话后 Composer 的 selectionchange 监听器始终为 1。
 - 生产 Chat 集成测试确认 Picker/recent 更新前后的原消息 HTMLElement 是同一对象。
-- 本次软件渲染的离屏测试中，flag 快速跳滚的帧间隔 P95 为 18ms；它包含下一帧等待及图片解码，不能等同于真实显卡环境的 FPS 测量。未做持续数小时堆内存 soak 测试。
+- 本次离屏回归快速跳滚的帧间隔 P95 为 18ms；它包含下一帧等待及图片解码，不能等同于真实显卡环境的 FPS 测量。未做持续数小时堆内存 soak 测试。
 
 ## 5. 实际测试结果
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm run verify` | 成功。含 renderer build、Electron tsc、Vitest；39 个文件、355 项测试全部通过。 |
-| `npm run validate:emoji` | 成功。736 项及 736 PNG 的完整资源校验。 |
+| `npm run verify` | 成功。含 renderer build、Electron tsc、Vitest；39 个文件、361 项测试全部通过。 |
+| `npm run validate:emoji` | 成功。141 项及 141 PNG 的完整资源校验。 |
 | `node scripts/validate-emoji-assets.mjs dist/emoji/builtin` | 成功。dist 资源也完整。 |
-| `npm run test:emoji-ui -- --packaged` | 成功。73 项真实 Electron 39.8.10 / Chromium / Vue 检查，使用精简后的 app.asar 内资源；覆盖直接打开 Emoji、历史贴纸占位及关闭重发入口。 |
+| `npm run test:emoji-ui -- --packaged` | 成功。77 项真实 Electron 39.8.10 / Chromium / Vue 检查，使用重命名后的 app.asar 内资源；覆盖原 ID 图片映射、草稿恢复、发送、最近记录、删除 ID 不复用及旧贴纸兼容。 |
 | `npm run test:emoji-ui -- --dev` | 首次完整接入时通过 67 项；本次资源精简未重复运行 HTTP 回归。 |
 | `node scripts/test-context-menu-ui.mjs` | 首次完整接入时通过 33 项；本次资源精简未重复运行独立菜单回归。 |
 | `git diff --check` | 成功。 |
 
 Vitest 覆盖文本/单个/连续/混排/未知/非法/不完整 Token、parse/serialize 往返、纯表情尺寸、recent 去重/上限/过滤、catalog 缓存/并发/失败、URL 和虚拟网格，以及消息协议的保留。后续删除功能补充检查：删除项的 Token 往返、最近记录过滤、已删除分类路径拒绝、历史内置/自定义/损坏贴纸消息的占位及预览、失败旧贴纸禁止重发。
+
+本次重命名补充逐项审计：全部保留 ID 的新路径、显示顺序、SHA-256 与执行前记录一致。固定检查原 ID 0346、0549 和 0127 分别映射新文件 0121、0128 和 0118，删除 ID 0118、0121 仍不可用。真实界面验证移入表情的历史渲染、最近记录、草稿和发送保留原 ID。
 
 真实 Chromium 检查 DOM 序列化/还原、中间位置和连续插入、Backspace/Delete、撤销/重做、原生文本输入与退格、剪贴板纯文本、IME 组合事件、两种发送快捷键、图片失败、manifest 失败、所有分类数据、滚动、监听器释放、file URL 解码。
 
@@ -168,7 +186,7 @@ Vitest 覆盖文本/单个/连续/混排/未知/非法/不完整 Token、parse/s
 
 ## 6. Build 与安装包
 
-`npm run build:renderer` 已成功。最终构建目录 `dist/emoji/builtin/` 包含精简后的 manifest 和 736 张 PNG。
+`npm run build:renderer` 已成功。最终构建目录 `dist/emoji/builtin/` 包含精简后的 manifest 和 141 张 PNG。
 
 原样 `npm run build:desktop` 在本机 npm 11.16.0 下失败，原因是 `npm list --all --json --long` 退出 1 且无 JSON，导致 electron-builder 报 `No JSON content found in output`。使用临时 npm 10 后，又遇到 GitHub Electron 下载连接超时。这些均为实际发生的环境问题。
 
@@ -183,7 +201,7 @@ $env:npm_config_cache = Join-Path (Get-Location) '.cache/npm'
 
 生成：`release/ArtTalk-Setup-0.0.22-x64.exe`、blockmap、`release/win-unpacked/`。
 
-已检查实际 `release/win-unpacked/resources/app.asar`：manifest 及全部 736 PNG 与源文件逐字节一致，每张均为 160×160；六个已删除分类的路径均不存在。Electron 回归把资源 base 指向 app.asar 内 dist，实际读取 manifest 并解码显示其中 PNG。
+已检查实际 `release/win-unpacked/resources/app.asar`：manifest 与源文件逐字节一致，全部 141 PNG 的 SHA-256 与重命名前的审计记录一致，每张均为 160×160；仅有 smile 分类，渲染器 JS/CSS 与最新 dist 一致，开发文档及重命名映射未进入安装包。Electron 回归把资源 base 指向 app.asar 内 dist，实际读取 manifest 并解码显示其中 PNG。
 
 移除大表情后重新生成安装包，确认包内渲染器 JS/CSS 与最新 dist 一致，旧“大表情/我的表情”界面、IndexedDB 模块和贴纸网格样式已不在构建产物中，旧贴纸资源目录也不存在。
 

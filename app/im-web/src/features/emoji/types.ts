@@ -1,4 +1,4 @@
-export type EmojiCategory = 'smile' | 'symbol' | 'activity' | 'flag'
+export type EmojiCategory = 'smile'
 export type EmojiPickerCategory = EmojiCategory | 'recent'
 
 export interface BuiltinEmoji {

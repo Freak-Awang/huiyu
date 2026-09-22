@@ -18,6 +18,7 @@ const shortcut = ref<'enter' | 'ctrlEnter'>('enter')
 const received = computed(() => sent.value.map(content => normalizeMessage({ content, messageType: 'TEXT' })))
 const recent = useRecentEmoji()
 const token = '[emoji:builtin_emoji_0001]'
+const movedToken = '[emoji:builtin_emoji_0346]'
 const results: string[] = []
 function check(condition: unknown, label: string): void { if (!condition) throw new Error(label); results.push(label) }
 async function settle(): Promise<void> { await nextTick(); await new Promise(requestAnimationFrame); await nextTick() }
@@ -51,9 +52,10 @@ onMounted(() => {
       check(!document.querySelector('img') && performance.getEntriesByType('resource').every(entry => !entry.name.includes('/emoji/builtin/')), 'closed editor loads no manifest or PNGs')
       clearRecentEmoji()
       await showPicker()
-      check(document.querySelector('[role=tab][aria-selected=true]')?.getAttribute('aria-label') === '笑脸', 'empty recents open smile category')
-      check((await loadEmojiCatalog()).byId.size === 736 && getEmojisByCategory('flag').length === 269, 'all retained manifest items available without guessing IDs')
-      check(Array.from(document.querySelectorAll('[role=tab]')).map(tab => tab.getAttribute('aria-label')).join(',') === '最近,笑脸,活动,符号,旗帜', 'picker only exposes retained categories and recent')
+      check(document.querySelector('[role=tab][aria-selected=true]')?.getAttribute('aria-label') === '表情', 'empty recents open the full Emoji collection')
+      const catalog = await loadEmojiCatalog()
+      check(catalog.byId.size === getEmojisByCategory('smile').length && document.querySelector('.builtin-emoji-heading span')?.textContent === String(catalog.byId.size), 'all manifest items available in the full collection without guessing IDs')
+      check(Array.from(document.querySelectorAll('[role=tab]')).map(tab => tab.getAttribute('aria-label')).join(',') === '最近,表情', 'picker only exposes recent and the full collection')
       await setText('你好')
       editor.value!.setSelectionRange(1, 1)
       ;(document.querySelector('.builtin-emoji-item') as HTMLButtonElement).click()
@@ -82,16 +84,16 @@ onMounted(() => {
       await setText(`前\n${token}\n后\n`)
       check(serializeComposer(editor.value!.element!) === drafts.text.value, 'DOM serializer preserves text, atomic emoji and trailing newlines')
       const scratch = document.createElement('div')
-      for (const text of ['', '\n', '\n\n', ` \n${token}\n\n末尾`, '[emoji:builtin_emoji_9999]', '[emoji:builtin_emoji_0812]', '<script>alert(1)</scr' + 'ipt>']) {
+      for (const text of ['', '\n', '\n\n', ` \n${token}\n\n末尾`, '[emoji:builtin_emoji_9999]', '[emoji:builtin_emoji_0812]', '[emoji:builtin_emoji_0118]', movedToken, '<script>alert(1)</scr' + 'ipt>']) {
         hydrateFromSerializedMessage(scratch, text)
         check(serializeComposer(scratch) === text, `hydrate/serialize round trip: ${JSON.stringify(text)}`)
       }
-      await setText(`你好${token}`)
+      await setText(`你好${token}${movedToken}`)
       const captured = drafts.snapshot('one')
       conversation.value = 'two'; open.value = false; await settle()
       check(drafts.text.value === '' && !editor.value!.element!.querySelector('img') && !open.value, 'conversation switch isolates draft, selection and picker')
       editor.value!.insertText('第二会话'); await settle(); conversation.value = 'one'; await settle()
-      check(drafts.text.value === captured.text && editor.value!.element!.querySelectorAll('img').length === 1, 'returning restores the serialized emoji draft as image')
+      check(drafts.text.value === captured.text && editor.value!.element!.querySelectorAll('img').length === 2 && editor.value!.element!.querySelector<HTMLImageElement>('[data-emoji-id="builtin_emoji_0346"] img')?.src.endsWith('/images/smile/emoji_0121.png'), 'returning restores stable IDs from a draft using their renamed images')
       const beforeIME = sent.value.length
       editor.value!.element!.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
       key('Enter', { isComposing: true }); key('Enter', { keyCode: 229 })
@@ -103,25 +105,28 @@ onMounted(() => {
       check(drafts.text.value === `${captured.text}\n`, 'Shift+Enter inserts a single newline')
       editor.value!.insertText('下一行'); key('Enter'); await settle()
       check(received.value.at(-1)?.displayContent === `${captured.text}\n下一行` && drafts.text.value === '' && !editor.value!.element!.hasChildNodes(), 'send retains TEXT JSON tokens and clears editor DOM')
-      check(JSON.parse(sent.value.at(-1)!).text.includes(token) && !sent.value.at(-1)!.includes('images/'), 'server payload contains only stable token, never PNG paths')
+      check(JSON.parse(sent.value.at(-1)!).text.includes(movedToken) && !sent.value.at(-1)!.includes('[emoji:builtin_emoji_0121]') && !sent.value.at(-1)!.includes('images/'), 'server payload retains the original ID after image renaming, never the new filename number')
       check(getMessagePreviewContent(received.value.at(-1)).includes('[表情]'), 'reply/list previews hide tokens')
       check(JSON.parse(buildTextMessageContent(received.value.at(-1)!.displayContent)).text.includes(token), 'forwarding retains original tokens')
       shortcut.value = 'ctrlEnter'; await setText('设置快捷键'); key('Enter'); await settle()
       check(drafts.text.value === '设置快捷键\n', 'Ctrl+Enter setting leaves Enter as newline')
       key('Enter', { ctrlKey: true }); await settle(); check(drafts.text.value === '', 'Ctrl+Enter setting sends correctly')
-      samples.value = [token, token.repeat(3), token.repeat(4), `你好 ${token}`, '[emoji:builtin_emoji_9999]', '<img src=x onerror=alert(1)>', '历史[emoji:builtin_emoji_0812]']
+      samples.value = [token, token.repeat(3), token.repeat(4), `你好 ${token}`, '[emoji:builtin_emoji_9999]', '<img src=x onerror=alert(1)>', '历史[emoji:builtin_emoji_0812]', `${movedToken}[emoji:builtin_emoji_0549][emoji:builtin_emoji_3569]`, '[emoji:builtin_emoji_0118]']
       await settle()
       const renders = document.querySelectorAll<HTMLElement>('.sample .emoji-renderer')
       check(['48px', '40px', '32px', '1.35em'].every((size, index) => renders[index]!.style.getPropertyValue('--emoji-size') === size), 'pure Emoji sizes are 48/40/32 and mixed text uses 1.35em')
       check(renders[4]!.textContent === '[表情]' && !renders[4]!.querySelector('img'), 'unknown tokens fall back without broken images')
       check(renders[5]!.textContent === samples.value[5] && !renders[5]!.querySelector('img'), 'renderer escapes malicious message text')
       check(renders[6]!.textContent === '历史[表情]' && !renders[6]!.querySelector('img'), 'deleted category tokens render history fallback without requesting removed images')
+      const movedImages = Array.from(renders[7]!.querySelectorAll('img'))
+      check(movedImages.length === 3 && movedImages.every((image, index) => image.src.endsWith(`/images/smile/emoji_${['0121', '0128', '0141'][index]}.png`)), 'history resolves moved symbol and flag IDs to their renamed files')
+      check(renders[8]!.textContent === '[表情]' && !renders[8]!.querySelector('img'), 'deleted ID 0118 falls back even though the new file emoji_0118.png exists')
       const mixed = renders[3]!
       const selected = document.createRange(); selected.selectNodeContents(mixed); window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(selected)
       check(readableSelection(mixed) === '你好 [表情]', 'message selection copies Emoji as readable text')
       const broken = renders[0]!.querySelector('img')!; broken.dispatchEvent(new Event('error')); await settle()
       check(renders[0]!.textContent === '[表情]' && !renders[0]!.querySelector('img'), 'image errors show fallback instead of broken image')
-      await showPicker(); category('旗帜'); await settle()
+      await showPicker(); category('表情'); await settle()
       const viewport = document.querySelector<HTMLElement>('.builtin-emoji-viewport')!
       const counts: number[] = []
       const frameGaps: number[] = []
@@ -133,16 +138,18 @@ onMounted(() => {
         frameGaps.push(performance.now() - started)
         counts.push(document.querySelectorAll('.builtin-emoji-item').length)
       }
-      check(Math.max(...counts) <= 128 && Math.min(...counts) > 0, `flag virtual grid DOM min=${Math.min(...counts)}, max=${Math.max(...counts)}, p95 frame=${Math.round(frameGaps.sort((a,b)=>a-b)[23]!)}ms`)
+      check(Math.max(...counts) <= 128 && Math.min(...counts) > 0, `full collection virtual grid DOM min=${Math.min(...counts)}, max=${Math.max(...counts)}, p95 frame=${Math.round(frameGaps.sort((a,b)=>a-b)[23]!)}ms`)
       check(document.querySelector('.builtin-emoji-grid img:last-of-type') !== null, 'fast scrolling leaves visible content')
-      category('笑脸'); await settle(); check(document.querySelector('.builtin-emoji-viewport')!.scrollTop === 0, 'category change resets scroll offset')
+      category('最近'); await settle(); category('表情'); await settle(); check(document.querySelector('.builtin-emoji-viewport')!.scrollTop === 0, 'switching between recent and full collection resets scroll offset')
       const closedCounts: number[] = []
       for (let i = 0; i < 4; i++) { open.value = false; await settle(); closedCounts.push(window.emojiLifetimes().resize); await showPicker() }
       check(closedCounts.every(count => count === 0) && window.emojiLifetimes().resize === 1, 'picker closes disconnect ResizeObserver without growth on reopen')
       check(window.emojiLifetimes().selection === 1, 'conversation remounts keep exactly one composer selectionchange listener')
       clearRecentEmoji(); recent.rememberEmoji('builtin_emoji_0001'); recent.rememberEmoji('builtin_emoji_0002'); recent.rememberEmoji('builtin_emoji_0001')
       check(recent.ids.value.join(',') === 'builtin_emoji_0001,builtin_emoji_0002', 'recent selection moves duplicates to front')
-      category('最近'); await settle(); check(document.querySelectorAll('.builtin-emoji-item').length === 2, 'recent category shows only remembered items')
+      recent.rememberEmoji('builtin_emoji_0346'); recent.rememberEmoji('builtin_emoji_0118')
+      category('最近'); await settle()
+      check(document.querySelectorAll('.builtin-emoji-item').length === 3 && recent.ids.value[0] === 'builtin_emoji_0346' && document.querySelector<HTMLImageElement>('.builtin-emoji-item img')?.src.endsWith('/images/smile/emoji_0121.png'), 'recent remembers moved IDs with renamed images and rejects deleted IDs')
       await drafts.flush()
       return results
     },
@@ -161,7 +168,7 @@ onMounted(() => {
       samples.value = []; await settle()
       samples.value = [token, token.repeat(3), token.repeat(4), `你好 ${token} 今天怎么样`]
       await setText(`你好 ${token} 今天怎么样`)
-      await showPicker(); category('旗帜'); await settle()
+      await showPicker(); category('表情'); await settle()
       const images = Array.from(document.querySelectorAll('img'))
       await Promise.all(images.map(image => image.decode().catch(() => undefined)))
       await settle()

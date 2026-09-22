@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { DIRECT_UPLOAD_MAX_SIZE } from '../api/file'
-import { P2P_MAX_FILE_SIZE, P2P_MAX_FOLDER_FILES, P2P_MAX_FOLDER_SIZE } from '../utils/p2pProtocol'
+import { P2P_MAX_FOLDER_FILES } from '../utils/p2pProtocol'
 import { useAttachmentDraftStore } from './attachmentDrafts'
 
 vi.mock('../api/index', () => ({ default: {} }))
@@ -71,7 +71,7 @@ describe('AttachmentDraftStore', () => {
     ])
   })
 
-  it('accepts zero-byte files, rejects oversized files and ignores duplicates', () => {
+  it('accepts empty and large files, preserves the image limit and ignores duplicates', () => {
     const store = useAttachmentDraftStore()
     const report = file('report.pdf', 10, 'application/pdf')
     store.addFiles('conversation-1', [report])
@@ -79,13 +79,13 @@ describe('AttachmentDraftStore', () => {
       report,
       file('empty.txt', 0, 'text/plain'),
       file('huge.png', DIRECT_UPLOAD_MAX_SIZE + 1, 'image/png'),
-      file('huge.bin', P2P_MAX_FILE_SIZE + 1, 'application/octet-stream'),
+      file('huge.bin', 2 * 1024 ** 3 + 1, 'application/octet-stream'),
     ])
 
-    expect(result.added.map((draft) => draft.name)).toEqual(['empty.txt'])
+    expect(result.added.map((draft) => draft.name)).toEqual(['empty.txt', 'huge.bin'])
     expect(result.duplicateCount).toBe(1)
-    expect(result.errors).toHaveLength(2)
-    expect(store.draftsFor('conversation-1')).toHaveLength(2)
+    expect(result.errors).toHaveLength(1)
+    expect(store.draftsFor('conversation-1')).toHaveLength(3)
   })
 
   it('keeps conversations isolated and releases resources when cleared', () => {
@@ -130,7 +130,7 @@ describe('AttachmentDraftStore', () => {
     expect(duplicate.duplicateCount).toBe(1)
   })
 
-  it('preserves empty folders and rejects the entire folder containing an oversized file', () => {
+  it('preserves empty folders and accepts folders containing a large file', () => {
     const store = useAttachmentDraftStore()
     const empty = store.addFolder('conversation-1', { name: 'empty', files: [] })
     expect(empty.added).toHaveLength(1)
@@ -141,15 +141,15 @@ describe('AttachmentDraftStore', () => {
       files: [
         { path: 'ok.txt', file: file('ok.txt', 10) },
         { path: 'zero.txt', file: file('zero.txt', 0) },
-        { path: 'huge.bin', file: file('huge.bin', P2P_MAX_FILE_SIZE + 1) },
+        { path: 'huge.bin', file: file('huge.bin', 2 * 1024 ** 3 + 1) },
       ],
     })
-    expect(result.added).toEqual([])
-    expect(result.errors).toHaveLength(1)
-    expect(store.draftsFor('conversation-1').map((draft) => draft.name)).toEqual(['empty'])
+    expect(result.added).toHaveLength(1)
+    expect(result.errors).toEqual([])
+    expect(store.draftsFor('conversation-1').map((draft) => draft.name)).toEqual(['empty', 'mixed'])
   })
 
-  it('enforces the shared P2P folder count and aggregate size limits', () => {
+  it('keeps the folder count limit but allows totals over 20 GiB', () => {
     const store = useAttachmentDraftStore()
     const tooMany = store.addFolder('conversation-1', {
       name: 'many',
@@ -160,15 +160,29 @@ describe('AttachmentDraftStore', () => {
     expect(tooMany.added).toEqual([])
     expect(tooMany.errors[0]).toContain(P2P_MAX_FOLDER_FILES.toLocaleString())
 
-    const perFileSize = P2P_MAX_FILE_SIZE
-    const tooLarge = store.addFolder('conversation-1', {
+    const perFileSize = 4 * 1024 ** 3 + 1
+    const large = store.addFolder('conversation-1', {
       name: 'large',
-      files: Array.from({ length: Math.floor(P2P_MAX_FOLDER_SIZE / perFileSize) + 1 }, (_, index) => ({
+      files: Array.from({ length: 6 }, (_, index) => ({
         path: `${index}.bin`, file: file(`${index}.bin`, perFileSize),
       })),
     })
-    expect(tooLarge.added).toEqual([])
-    expect(tooLarge.errors[0]).toContain('20GB')
+    expect(large.added[0].size).toBe(6 * perFileSize)
+    expect(large.errors).toEqual([])
+  })
+
+  it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects invalid file sizes (%s)', (size) => {
+    const store = useAttachmentDraftStore()
+    expect(store.addFiles('a', [file('invalid.bin', size)]).added).toEqual([])
+    expect(store.addFolder('a', { name: 'invalid', files: [{ path: 'invalid.bin', file: file('invalid.bin', size) }] }).added).toEqual([])
+  })
+
+  it('rejects folder totals that cannot be represented exactly', () => {
+    const result = useAttachmentDraftStore().addFolder('a', { name: 'overflow', files: [
+      { path: 'a', file: file('a', Number.MAX_SAFE_INTEGER) }, { path: 'b', file: file('b', 1) },
+    ] })
+    expect(result.added).toEqual([])
+    expect(result.errors[0]).toContain('可精确表示')
   })
   it('preserves zero-byte files and nested empty directories', () => {
     const store = useAttachmentDraftStore()

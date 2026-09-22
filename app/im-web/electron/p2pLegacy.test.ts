@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const environment = vi.hoisted(() => ({ directory: '', inspected: [] as string[] }))
+const environment = vi.hoisted(() => ({ directory: '', inspected: [] as string[], sizes: new Map<string, number>() }))
 vi.mock('electron', () => ({
   app: { getPath: () => environment.directory },
   safeStorage: {
@@ -17,7 +17,12 @@ vi.mock('electron', () => ({
 }))
 vi.mock('node:fs/promises', async (original) => {
   const real = await original<typeof import('node:fs/promises')>()
-  return { ...real, stat: async (path: string) => { environment.inspected.push(String(path)); return real.stat(path) } }
+  return { ...real, stat: async (path: string) => {
+    environment.inspected.push(String(path))
+    const info = await real.stat(path)
+    const size = environment.sizes.get(String(path))
+    return size === undefined ? info : Object.assign(Object.create(Object.getPrototypeOf(info)), info, { size })
+  } }
 })
 
 import { listLocalP2pMessages, upsertLocalMessage, type LocalMessageRecord } from './localMessages'
@@ -40,6 +45,7 @@ describe('legacy P2P completed path migration', () => {
   beforeEach(async () => {
     environment.directory = await mkdtemp(join(tmpdir(), 'arttalk-p2p-legacy-test-'))
     environment.inspected = []
+    environment.sizes.clear()
     storage = new P2pTaskStorage(environment.directory)
     await storage.load('account-a')
   })
@@ -84,15 +90,26 @@ describe('legacy P2P completed path migration', () => {
   it('preserves received folders with one metadata lookup and no synthetic full manifest', async () => {
     const folder = join(environment.directory, 'received-folder')
     await mkdir(folder)
-    const original = summaryPatch(message('folder', { messageType: 'FOLDER' }), { kind: 'folder', fileCount: 2, totalSize: 20, manifestSha256: 'b'.repeat(64), sha256: undefined })
+    const original = summaryPatch(message('folder', { messageType: 'FOLDER' }), { kind: 'folder', fileCount: 2, totalSize: 24 * 1024 ** 3, manifestSha256: 'b'.repeat(64), sha256: undefined })
     await upsertLocalMessage('account-a', original)
     await writeIndex({ p2p_folder: folder })
     const [record] = await migrateLegacyP2pResults('account-a', environment.directory, storage)
     expect(record.kind).toBe('folder')
+    expect(record.totalSize).toBe(24 * 1024 ** 3)
     expect(record.finalPath).toBe(folder)
     expect(record.manifest).toBeUndefined()
     expect(record.content?.manifestSha256).toBe('b'.repeat(64))
     expect(environment.inspected).toEqual([folder])
+  })
+
+  it('imports large completed files without losing their original size', async () => {
+    const path = await file('large.bin')
+    const size = 4 * 1024 ** 3 + 17
+    environment.sizes.set(path, size)
+    await upsertLocalMessage('account-a', summaryPatch(message('large'), { totalSize: size }))
+    await writeIndex({ p2p_large: path })
+    const [record] = await migrateLegacyP2pResults('account-a', environment.directory, storage)
+    expect(record).toMatchObject({ localPath: path, totalSize: size, transferredBytes: size, status: 'completed' })
   })
 
   it('does not duplicate migration or replace an existing newer receive task', async () => {

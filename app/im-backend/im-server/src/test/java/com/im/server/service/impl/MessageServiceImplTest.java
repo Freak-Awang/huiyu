@@ -191,6 +191,27 @@ class MessageServiceImplTest {
         verify(messageMapper).insert(any(ImMessage.class));
     }
 
+    @Test
+    void authenticatedP2pOfferPreservesLargeFileSizes() {
+        arrangeSend("member", 1);
+        SendMessageRequest request = validP2pFileMessageRequest();
+        request.setContent(request.getContent().replace("\"totalSize\":5", "\"totalSize\":9007199254740991"));
+        assertThat(messageService.sendP2pMessage(10L, request).getContent()).contains("9007199254740991");
+        verifyNoInteractions(fileMetadataService);
+    }
+
+    @Test
+    void authenticatedP2pOfferRejectsInvalidAndUnsafeByteCounts() {
+        when(conversationMemberMapper.selectOne(any())).thenReturn(member(10L, "member"));
+        for (String size : List.of("-1", "0.5", "9007199254740992", "9223372036854775808")) {
+            SendMessageRequest request = validP2pFileMessageRequest();
+            request.setContent(request.getContent().replace("\"totalSize\":5", "\"totalSize\":" + size));
+            assertThatThrownBy(() -> messageService.sendP2pMessage(10L, request))
+                    .isInstanceOf(BusinessException.class).hasMessage("Invalid P2P file message content");
+        }
+        verifyNoInteractions(messageMapper, fileMetadataService);
+    }
+
     /**
      * 验证合法的图片消息（含 fileId/url/fileName/fileSize/contentType）发送成功。
      */

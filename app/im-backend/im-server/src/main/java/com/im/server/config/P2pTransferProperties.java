@@ -5,15 +5,15 @@ import org.springframework.stereotype.Component;
 
 /**
  * 局域网 P2P 文件传输配置。文件正文不会经过服务端，这些限制仅用于
- * 约束信令和消息元数据，避免客户端构造超大传输任务。
+ * 约束信令和清单条目数量，不限制文件或文件夹的传输字节数。
  */
 @Component
 @ConfigurationProperties(prefix = "p2p.file-transfer")
 public class P2pTransferProperties {
 
     private boolean enabled = true;
-    private long maxFileSize = 2_147_483_648L;
-    private long maxFolderSize = 21_474_836_480L;
+    /** JSON byte counts must remain exactly representable by desktop JavaScript clients. */
+    public static final long MAX_SAFE_BYTE_COUNT = 9_007_199_254_740_991L;
     private int maxFolderFiles = 10_000;
     private int maxFolderDirectories = 10_000;
     private int maxSignalBytes = 65_536;
@@ -24,22 +24,6 @@ public class P2pTransferProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-    }
-
-    public long getMaxFileSize() {
-        return maxFileSize;
-    }
-
-    public void setMaxFileSize(long maxFileSize) {
-        this.maxFileSize = maxFileSize;
-    }
-
-    public long getMaxFolderSize() {
-        return maxFolderSize;
-    }
-
-    public void setMaxFolderSize(long maxFolderSize) {
-        this.maxFolderSize = maxFolderSize;
     }
 
     public int getMaxFolderFiles() {

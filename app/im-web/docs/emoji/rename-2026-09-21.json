@@ -1,0 +1,1417 @@
+{
+  "date": "2026-09-21",
+  "packId": "builtin",
+  "total": 141,
+  "entries": [
+    {
+      "id": "builtin_emoji_0001",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0001.png",
+      "originalManifestFile": "images/smile/emoji_0001.png",
+      "originalOrder": 1,
+      "file": "images/smile/emoji_0001.png",
+      "order": 1,
+      "sha256": "24b0e5bae917897d4e2ca769e59d500a10e4232a8541f1e4317277df7c4c00f1"
+    },
+    {
+      "id": "builtin_emoji_0002",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0002.png",
+      "originalManifestFile": "images/smile/emoji_0002.png",
+      "originalOrder": 2,
+      "file": "images/smile/emoji_0002.png",
+      "order": 2,
+      "sha256": "45f2519ed530de9bbf6c8b051fc7e6159ca8e7e1460f770306917a69b89ad05b"
+    },
+    {
+      "id": "builtin_emoji_0003",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0003.png",
+      "originalManifestFile": "images/smile/emoji_0003.png",
+      "originalOrder": 3,
+      "file": "images/smile/emoji_0003.png",
+      "order": 3,
+      "sha256": "17b724e39976a84af53527208331f0bc59b1748f9dac66aba1cd1d239206f37d"
+    },
+    {
+      "id": "builtin_emoji_0004",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0004.png",
+      "originalManifestFile": "images/smile/emoji_0004.png",
+      "originalOrder": 4,
+      "file": "images/smile/emoji_0004.png",
+      "order": 4,
+      "sha256": "ca1f5254abc21d841434e22ec331b4d8006660a7fb57d329015e9202b12e7bce"
+    },
+    {
+      "id": "builtin_emoji_0005",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0005.png",
+      "originalManifestFile": "images/smile/emoji_0005.png",
+      "originalOrder": 5,
+      "file": "images/smile/emoji_0005.png",
+      "order": 5,
+      "sha256": "f4860be3b259b8815831145ef1af38d720959b06e985d26e685b0788eabb8cfc"
+    },
+    {
+      "id": "builtin_emoji_0006",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0006.png",
+      "originalManifestFile": "images/smile/emoji_0006.png",
+      "originalOrder": 6,
+      "file": "images/smile/emoji_0006.png",
+      "order": 6,
+      "sha256": "05c2d6de1752dfac90c3dfc8aea17f266643cccc12225e68830e5acf71bc7c70"
+    },
+    {
+      "id": "builtin_emoji_0007",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0007.png",
+      "originalManifestFile": "images/smile/emoji_0007.png",
+      "originalOrder": 7,
+      "file": "images/smile/emoji_0007.png",
+      "order": 7,
+      "sha256": "5e325dcb695b809eea98c684f3bbcc8769d1c3aa9499699db4d82c8827422834"
+    },
+    {
+      "id": "builtin_emoji_0008",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0008.png",
+      "originalManifestFile": "images/smile/emoji_0008.png",
+      "originalOrder": 8,
+      "file": "images/smile/emoji_0008.png",
+      "order": 8,
+      "sha256": "1ee014546ae894f0c3406b452240081d8e5deed5149dc11e00e5a296f9050ebb"
+    },
+    {
+      "id": "builtin_emoji_0009",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0009.png",
+      "originalManifestFile": "images/smile/emoji_0009.png",
+      "originalOrder": 9,
+      "file": "images/smile/emoji_0009.png",
+      "order": 9,
+      "sha256": "f13fcb119ef2fac157ac84be302d5f0ed377fac27f64cc69955c2cd73e86f985"
+    },
+    {
+      "id": "builtin_emoji_0012",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0012.png",
+      "originalManifestFile": "images/smile/emoji_0012.png",
+      "originalOrder": 12,
+      "file": "images/smile/emoji_0010.png",
+      "order": 10,
+      "sha256": "2744d281f8a3651dc60f847f1fa4d8f7306d5f71eb592eec4399e03c5c83e1e8"
+    },
+    {
+      "id": "builtin_emoji_0013",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0013.png",
+      "originalManifestFile": "images/smile/emoji_0013.png",
+      "originalOrder": 13,
+      "file": "images/smile/emoji_0011.png",
+      "order": 11,
+      "sha256": "827e298ca1e289b00929e4f0b1bfda6ef09e90b5d35ea444f9f2a167232cb4d0"
+    },
+    {
+      "id": "builtin_emoji_0014",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0014.png",
+      "originalManifestFile": "images/smile/emoji_0014.png",
+      "originalOrder": 14,
+      "file": "images/smile/emoji_0012.png",
+      "order": 12,
+      "sha256": "03efc83c9742bdf623436d4a685adc5bacc4be9a6682327bf430d6f14132887b"
+    },
+    {
+      "id": "builtin_emoji_0015",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0015.png",
+      "originalManifestFile": "images/smile/emoji_0015.png",
+      "originalOrder": 15,
+      "file": "images/smile/emoji_0013.png",
+      "order": 13,
+      "sha256": "708775731f59b0adbfa18bd11b3988624bd489b29e23b1527c1970b313bec745"
+    },
+    {
+      "id": "builtin_emoji_0016",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0016.png",
+      "originalManifestFile": "images/smile/emoji_0016.png",
+      "originalOrder": 16,
+      "file": "images/smile/emoji_0014.png",
+      "order": 14,
+      "sha256": "5ea3210729a05876ca02ad600622afb82e6bdc35face93ee2008dc34f2dc0b27"
+    },
+    {
+      "id": "builtin_emoji_0017",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0017.png",
+      "originalManifestFile": "images/smile/emoji_0017.png",
+      "originalOrder": 17,
+      "file": "images/smile/emoji_0015.png",
+      "order": 15,
+      "sha256": "fd934a8b61d2cfd1006d69d377945c8a67abd782f93ca4a661fecb143e8c028e"
+    },
+    {
+      "id": "builtin_emoji_0018",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0018.png",
+      "originalManifestFile": "images/smile/emoji_0018.png",
+      "originalOrder": 18,
+      "file": "images/smile/emoji_0016.png",
+      "order": 16,
+      "sha256": "92c2a6d2d8b5aeb2c50dd63792dc76537d3a0878277e1ae32797618aae7918ea"
+    },
+    {
+      "id": "builtin_emoji_0019",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0019.png",
+      "originalManifestFile": "images/smile/emoji_0019.png",
+      "originalOrder": 19,
+      "file": "images/smile/emoji_0017.png",
+      "order": 17,
+      "sha256": "1d71df8d68467b0f11ed7213013a720eff21cfaf62da8eab26ede8b263c642c3"
+    },
+    {
+      "id": "builtin_emoji_0020",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0020.png",
+      "originalManifestFile": "images/smile/emoji_0020.png",
+      "originalOrder": 20,
+      "file": "images/smile/emoji_0018.png",
+      "order": 18,
+      "sha256": "1e6db52f5c3613154815624aa835ff3a2c006a53fb50efbce67303716bef5c6d"
+    },
+    {
+      "id": "builtin_emoji_0021",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0021.png",
+      "originalManifestFile": "images/smile/emoji_0021.png",
+      "originalOrder": 21,
+      "file": "images/smile/emoji_0019.png",
+      "order": 19,
+      "sha256": "410abcbc3d7011a1e5fe4d1cdd35e8497a81beddd8d1cafeae0ce7825c7ad566"
+    },
+    {
+      "id": "builtin_emoji_0022",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0022.png",
+      "originalManifestFile": "images/smile/emoji_0022.png",
+      "originalOrder": 22,
+      "file": "images/smile/emoji_0020.png",
+      "order": 20,
+      "sha256": "30d3e05b3390c0f688a2663883d283418de3d5e059822f999b4254d298bb0bb3"
+    },
+    {
+      "id": "builtin_emoji_0023",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0023.png",
+      "originalManifestFile": "images/smile/emoji_0023.png",
+      "originalOrder": 23,
+      "file": "images/smile/emoji_0021.png",
+      "order": 21,
+      "sha256": "02f33cd6a746617f2ed7ec0108d33ff6171dc8ca9095d026ec60622fceb56809"
+    },
+    {
+      "id": "builtin_emoji_0030",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0030.png",
+      "originalManifestFile": "images/smile/emoji_0030.png",
+      "originalOrder": 30,
+      "file": "images/smile/emoji_0022.png",
+      "order": 22,
+      "sha256": "bc88d7f26c3d46e4402f2f6629d4982f87fbaf02c9eace749a6278219dcddbb8"
+    },
+    {
+      "id": "builtin_emoji_0086",
+      "group": "开心亲近",
+      "sourceFile": "images/smile/emoji_0086.png",
+      "originalManifestFile": "images/smile/emoji_0086.png",
+      "originalOrder": 86,
+      "file": "images/smile/emoji_0023.png",
+      "order": 23,
+      "sha256": "2a5725832bf18c8c813a99f0aeb06898d3ca15ebe33cd5012ae21879efb799ae"
+    },
+    {
+      "id": "builtin_emoji_0010",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0010.png",
+      "originalManifestFile": "images/smile/emoji_0010.png",
+      "originalOrder": 10,
+      "file": "images/smile/emoji_0024.png",
+      "order": 24,
+      "sha256": "7ba115e22ed31c89942048ee4358488b38ef19c194babd797b0a167d7b825ae4"
+    },
+    {
+      "id": "builtin_emoji_0011",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0011.png",
+      "originalManifestFile": "images/smile/emoji_0011.png",
+      "originalOrder": 11,
+      "file": "images/smile/emoji_0025.png",
+      "order": 25,
+      "sha256": "594ec67e3da6758cd7110112c9db29706ac16ef60db4b510457c41964683a055"
+    },
+    {
+      "id": "builtin_emoji_0024",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0024.png",
+      "originalManifestFile": "images/smile/emoji_0024.png",
+      "originalOrder": 24,
+      "file": "images/smile/emoji_0026.png",
+      "order": 26,
+      "sha256": "6e2be1b74c02d05b94b092451513a2b403123ee24cb821e657a8e9ef0056ab70"
+    },
+    {
+      "id": "builtin_emoji_0025",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0025.png",
+      "originalManifestFile": "images/smile/emoji_0025.png",
+      "originalOrder": 25,
+      "file": "images/smile/emoji_0027.png",
+      "order": 27,
+      "sha256": "588aefa01404429543f049236766bea04290a9aaf3bcb6d731eb83d68eb5a496"
+    },
+    {
+      "id": "builtin_emoji_0026",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0026.png",
+      "originalManifestFile": "images/smile/emoji_0026.png",
+      "originalOrder": 26,
+      "file": "images/smile/emoji_0028.png",
+      "order": 28,
+      "sha256": "8928378dd87c1f7b3087db7f60a516dffeaf719c9573d31a3d53200f619c92f7"
+    },
+    {
+      "id": "builtin_emoji_0027",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0027.png",
+      "originalManifestFile": "images/smile/emoji_0027.png",
+      "originalOrder": 27,
+      "file": "images/smile/emoji_0029.png",
+      "order": 29,
+      "sha256": "d7dfd205ec50970fa8ad2722bfa08bef5375924c840fca81e3cb77afb9879140"
+    },
+    {
+      "id": "builtin_emoji_0028",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0028.png",
+      "originalManifestFile": "images/smile/emoji_0028.png",
+      "originalOrder": 28,
+      "file": "images/smile/emoji_0030.png",
+      "order": 30,
+      "sha256": "772b2a05e2d5086b96b35e47f25b9251c54f8480df2f8f2662f1641d649cdae5"
+    },
+    {
+      "id": "builtin_emoji_0029",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0029.png",
+      "originalManifestFile": "images/smile/emoji_0029.png",
+      "originalOrder": 29,
+      "file": "images/smile/emoji_0031.png",
+      "order": 31,
+      "sha256": "ece1d830ee3cd913dc3b594027fc4414e342ad1e3b5a38d603916041a9152517"
+    },
+    {
+      "id": "builtin_emoji_0031",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0031.png",
+      "originalManifestFile": "images/smile/emoji_0031.png",
+      "originalOrder": 31,
+      "file": "images/smile/emoji_0032.png",
+      "order": 32,
+      "sha256": "fff42f81d249dd1baa945004f641f9d25531e2b1d7d49b455c2956d37de0ac64"
+    },
+    {
+      "id": "builtin_emoji_0032",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0032.png",
+      "originalManifestFile": "images/smile/emoji_0032.png",
+      "originalOrder": 32,
+      "file": "images/smile/emoji_0033.png",
+      "order": 33,
+      "sha256": "88261bdb952b294235069d576f64e5ad0191ada84cef0f1542cb41c102ac8a32"
+    },
+    {
+      "id": "builtin_emoji_0033",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0033.png",
+      "originalManifestFile": "images/smile/emoji_0033.png",
+      "originalOrder": 33,
+      "file": "images/smile/emoji_0034.png",
+      "order": 34,
+      "sha256": "b187063e77be085935c6da6fd224d3c6aca658eea4cd9a66e0778f3347334348"
+    },
+    {
+      "id": "builtin_emoji_0036",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0036.png",
+      "originalManifestFile": "images/smile/emoji_0036.png",
+      "originalOrder": 36,
+      "file": "images/smile/emoji_0035.png",
+      "order": 35,
+      "sha256": "0b4eef96fe98cf5636ef75b41658e8d24e3a7b7c7c22bf2e214e10030ecbc48a"
+    },
+    {
+      "id": "builtin_emoji_0044",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0044.png",
+      "originalManifestFile": "images/smile/emoji_0044.png",
+      "originalOrder": 44,
+      "file": "images/smile/emoji_0036.png",
+      "order": 36,
+      "sha256": "1785c6892bc62792c2234652ea9b645ba4b9d0177a7aa83384cdce7ba79ed2d9"
+    },
+    {
+      "id": "builtin_emoji_0049",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0049.png",
+      "originalManifestFile": "images/smile/emoji_0049.png",
+      "originalOrder": 49,
+      "file": "images/smile/emoji_0037.png",
+      "order": 37,
+      "sha256": "ec5c61254b946c2ae53be3b6265c934a30c4535d9c6bb83b38cb4f58e6775e95"
+    },
+    {
+      "id": "builtin_emoji_0056",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0056.png",
+      "originalManifestFile": "images/smile/emoji_0056.png",
+      "originalOrder": 56,
+      "file": "images/smile/emoji_0038.png",
+      "order": 38,
+      "sha256": "095532a55224932fc3b354fced545e8c376626e670f3529418fc43c81348556c"
+    },
+    {
+      "id": "builtin_emoji_0070",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0070.png",
+      "originalManifestFile": "images/smile/emoji_0070.png",
+      "originalOrder": 70,
+      "file": "images/smile/emoji_0039.png",
+      "order": 39,
+      "sha256": "549b4698099f24a2051b9105017765480aed7d417ab608b87d6a78d1592d119b"
+    },
+    {
+      "id": "builtin_emoji_0071",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0071.png",
+      "originalManifestFile": "images/smile/emoji_0071.png",
+      "originalOrder": 71,
+      "file": "images/smile/emoji_0040.png",
+      "order": 40,
+      "sha256": "93fc053d3681223c1e1dbe3a7cc2ea462c88193d32613d855a81c5a0a2b0ab47"
+    },
+    {
+      "id": "builtin_emoji_0072",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0072.png",
+      "originalManifestFile": "images/smile/emoji_0072.png",
+      "originalOrder": 72,
+      "file": "images/smile/emoji_0041.png",
+      "order": 41,
+      "sha256": "107006b6ea16aeb486c50cd347dc122ce3b41dd93989160c9c6e3a9a4705b257"
+    },
+    {
+      "id": "builtin_emoji_0073",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0073.png",
+      "originalManifestFile": "images/smile/emoji_0073.png",
+      "originalOrder": 73,
+      "file": "images/smile/emoji_0042.png",
+      "order": 42,
+      "sha256": "90c9e52ac7eaaad1f5a28552eebb01ff57aee58b6d067ba198d0e46beab0cad4"
+    },
+    {
+      "id": "builtin_emoji_0074",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0074.png",
+      "originalManifestFile": "images/smile/emoji_0074.png",
+      "originalOrder": 74,
+      "file": "images/smile/emoji_0043.png",
+      "order": 43,
+      "sha256": "98ab6991784f293887d572c77ed4c24ea57a714c2299c4868706a73594417044"
+    },
+    {
+      "id": "builtin_emoji_0075",
+      "group": "俏皮装扮",
+      "sourceFile": "images/smile/emoji_0075.png",
+      "originalManifestFile": "images/smile/emoji_0075.png",
+      "originalOrder": 75,
+      "file": "images/smile/emoji_0044.png",
+      "order": 44,
+      "sha256": "a052478a25b0a963d29466e91a1bdb0daba1fee770b0dc666b1e895ffb041680"
+    },
+    {
+      "id": "builtin_emoji_0034",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0034.png",
+      "originalManifestFile": "images/smile/emoji_0034.png",
+      "originalOrder": 34,
+      "file": "images/smile/emoji_0045.png",
+      "order": 45,
+      "sha256": "3b370f86374f4af3a4b7499b112cc8a5fb3de6565b3b6e1fdd751580d77295ea"
+    },
+    {
+      "id": "builtin_emoji_0035",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0035.png",
+      "originalManifestFile": "images/smile/emoji_0035.png",
+      "originalOrder": 35,
+      "file": "images/smile/emoji_0046.png",
+      "order": 46,
+      "sha256": "44021f79ce617afc1c569541eaa5d30b5e6d20819873a45e14fff97337d8de6f"
+    },
+    {
+      "id": "builtin_emoji_0037",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0037.png",
+      "originalManifestFile": "images/smile/emoji_0037.png",
+      "originalOrder": 37,
+      "file": "images/smile/emoji_0047.png",
+      "order": 47,
+      "sha256": "11f10572657e2a48f42f6cc2ed4ec9aa3b21d5397816074e8c97bd60d32cdc5d"
+    },
+    {
+      "id": "builtin_emoji_0038",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0038.png",
+      "originalManifestFile": "images/smile/emoji_0038.png",
+      "originalOrder": 38,
+      "file": "images/smile/emoji_0048.png",
+      "order": 48,
+      "sha256": "78989faf1a6ba212d05db5d2f1e729746b0dc0056f078c61de16b4f204045bfd"
+    },
+    {
+      "id": "builtin_emoji_0039",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0039.png",
+      "originalManifestFile": "images/smile/emoji_0039.png",
+      "originalOrder": 39,
+      "file": "images/smile/emoji_0049.png",
+      "order": 49,
+      "sha256": "ebd0f4a0335b9d788cd4cb7503796680d36768444ca80ba910c51a5154baa2d2"
+    },
+    {
+      "id": "builtin_emoji_0040",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0040.png",
+      "originalManifestFile": "images/smile/emoji_0040.png",
+      "originalOrder": 40,
+      "file": "images/smile/emoji_0050.png",
+      "order": 50,
+      "sha256": "d0466fdb87a5257f48ad7ab6b6c44dac25f9a3d8b39a88913245e2408a52c88e"
+    },
+    {
+      "id": "builtin_emoji_0041",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0041.png",
+      "originalManifestFile": "images/smile/emoji_0041.png",
+      "originalOrder": 41,
+      "file": "images/smile/emoji_0051.png",
+      "order": 51,
+      "sha256": "209170a6d798479c2ed816438a4eaa71de0d0dbf98bbb26e7a645ecac2f2456c"
+    },
+    {
+      "id": "builtin_emoji_0042",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0042.png",
+      "originalManifestFile": "images/smile/emoji_0042.png",
+      "originalOrder": 42,
+      "file": "images/smile/emoji_0052.png",
+      "order": 52,
+      "sha256": "a07d4670e5f3a137670e55513e0aa6bca33684ebcc041028c906dc6023d0adcd"
+    },
+    {
+      "id": "builtin_emoji_0043",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0043.png",
+      "originalManifestFile": "images/smile/emoji_0043.png",
+      "originalOrder": 43,
+      "file": "images/smile/emoji_0053.png",
+      "order": 53,
+      "sha256": "dd8f16ca1ba094a07b27ac6d83ade941fcea96dd67b3ddaf63fb4da81f0d46f9"
+    },
+    {
+      "id": "builtin_emoji_0045",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0045.png",
+      "originalManifestFile": "images/smile/emoji_0045.png",
+      "originalOrder": 45,
+      "file": "images/smile/emoji_0054.png",
+      "order": 54,
+      "sha256": "53c1275e0335b2cf4a01853d261e7ed4a2e9271fef6b016cd57ac79a394fb11f"
+    },
+    {
+      "id": "builtin_emoji_0046",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0046.png",
+      "originalManifestFile": "images/smile/emoji_0046.png",
+      "originalOrder": 46,
+      "file": "images/smile/emoji_0055.png",
+      "order": 55,
+      "sha256": "1e5beacdb9dea739c74b84ee69f7c7ada33edac780c0becbed295fc4e858b1a5"
+    },
+    {
+      "id": "builtin_emoji_0047",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0047.png",
+      "originalManifestFile": "images/smile/emoji_0047.png",
+      "originalOrder": 47,
+      "file": "images/smile/emoji_0056.png",
+      "order": 56,
+      "sha256": "eea69e567f5d2f890bb720f86eb557609afebfdc45a84950a60bb621b2b7f40d"
+    },
+    {
+      "id": "builtin_emoji_0048",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0048.png",
+      "originalManifestFile": "images/smile/emoji_0048.png",
+      "originalOrder": 48,
+      "file": "images/smile/emoji_0057.png",
+      "order": 57,
+      "sha256": "c06652b53247dc7a0b76243732468342ed1ce365cbd69825ae95fb62a6f1d565"
+    },
+    {
+      "id": "builtin_emoji_0051",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0051.png",
+      "originalManifestFile": "images/smile/emoji_0051.png",
+      "originalOrder": 51,
+      "file": "images/smile/emoji_0058.png",
+      "order": 58,
+      "sha256": "837b28e7e5928eb562b2b2cc8a25a00b4478a0747cb1a4c1efc045d31499b968"
+    },
+    {
+      "id": "builtin_emoji_0052",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0052.png",
+      "originalManifestFile": "images/smile/emoji_0052.png",
+      "originalOrder": 52,
+      "file": "images/smile/emoji_0059.png",
+      "order": 59,
+      "sha256": "096318c87c9e4b4c856231df2d2c7288bd92a42446d79bf1195f1d4030b57c45"
+    },
+    {
+      "id": "builtin_emoji_0053",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0053.png",
+      "originalManifestFile": "images/smile/emoji_0053.png",
+      "originalOrder": 53,
+      "file": "images/smile/emoji_0060.png",
+      "order": 60,
+      "sha256": "08a31cddd558c3e0fc765ab4b015b4cdb62e43a8d8fb7638a289ee733b93a0dc"
+    },
+    {
+      "id": "builtin_emoji_0054",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0054.png",
+      "originalManifestFile": "images/smile/emoji_0054.png",
+      "originalOrder": 54,
+      "file": "images/smile/emoji_0061.png",
+      "order": 61,
+      "sha256": "fb5f4f303f110149b677bd5db2c56fa5f632d8479952790ae7431256d1afa8e9"
+    },
+    {
+      "id": "builtin_emoji_0055",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0055.png",
+      "originalManifestFile": "images/smile/emoji_0055.png",
+      "originalOrder": 55,
+      "file": "images/smile/emoji_0062.png",
+      "order": 62,
+      "sha256": "e04e3a4e58814a431fca96f587ece2d29421ce2138f5103a048b4c695cb8eff3"
+    },
+    {
+      "id": "builtin_emoji_0057",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0057.png",
+      "originalManifestFile": "images/smile/emoji_0057.png",
+      "originalOrder": 57,
+      "file": "images/smile/emoji_0063.png",
+      "order": 63,
+      "sha256": "738addc182071a1e4e4b732e89d6ad1d210abbf9987c2d41add4bdf14f1bfa73"
+    },
+    {
+      "id": "builtin_emoji_0101",
+      "group": "思考困倦",
+      "sourceFile": "images/smile/emoji_0101.png",
+      "originalManifestFile": "images/smile/emoji_0101.png",
+      "originalOrder": 101,
+      "file": "images/smile/emoji_0064.png",
+      "order": 64,
+      "sha256": "1d3ae8fcc012661631d3eb85090971f1acef199ea9060830fe13284ec3f7fb42"
+    },
+    {
+      "id": "builtin_emoji_0050",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0050.png",
+      "originalManifestFile": "images/smile/emoji_0050.png",
+      "originalOrder": 50,
+      "file": "images/smile/emoji_0065.png",
+      "order": 65,
+      "sha256": "5f34565f0bc9b49cc503ddc815268d04429c857a8cc384ddc75de393ebe1a2af"
+    },
+    {
+      "id": "builtin_emoji_0058",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0058.png",
+      "originalManifestFile": "images/smile/emoji_0058.png",
+      "originalOrder": 58,
+      "file": "images/smile/emoji_0066.png",
+      "order": 66,
+      "sha256": "f1df832582100f05c6e65e3826e5ebe86a63cc12677745a58b0219e9f863b302"
+    },
+    {
+      "id": "builtin_emoji_0059",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0059.png",
+      "originalManifestFile": "images/smile/emoji_0059.png",
+      "originalOrder": 59,
+      "file": "images/smile/emoji_0067.png",
+      "order": 67,
+      "sha256": "860fd67ef9a1b2a93087f40bb17571aec75328fa0710c8815084cde77f23adcb"
+    },
+    {
+      "id": "builtin_emoji_0060",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0060.png",
+      "originalManifestFile": "images/smile/emoji_0060.png",
+      "originalOrder": 60,
+      "file": "images/smile/emoji_0068.png",
+      "order": 68,
+      "sha256": "fb5a2eaefc5fb6649ad32fc549fe70b7564ca5786231bb2a264d50bcf87d8d54"
+    },
+    {
+      "id": "builtin_emoji_0061",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0061.png",
+      "originalManifestFile": "images/smile/emoji_0061.png",
+      "originalOrder": 61,
+      "file": "images/smile/emoji_0069.png",
+      "order": 69,
+      "sha256": "854726e78fa3a3e93eebf2e11cfd7b8090bb25717017b5d67ea6d78d08f1be99"
+    },
+    {
+      "id": "builtin_emoji_0062",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0062.png",
+      "originalManifestFile": "images/smile/emoji_0062.png",
+      "originalOrder": 62,
+      "file": "images/smile/emoji_0070.png",
+      "order": 70,
+      "sha256": "cf7dc9e8206df6c4db7b2166aa8c3dc52f5edb9ddf9ad1ca610221c075fffa7c"
+    },
+    {
+      "id": "builtin_emoji_0063",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0063.png",
+      "originalManifestFile": "images/smile/emoji_0063.png",
+      "originalOrder": 63,
+      "file": "images/smile/emoji_0071.png",
+      "order": 71,
+      "sha256": "2dbc057d72abeb7c42f2393fd486e5e06f9335fab2406c2a38481fb43539d4ca"
+    },
+    {
+      "id": "builtin_emoji_0064",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0064.png",
+      "originalManifestFile": "images/smile/emoji_0064.png",
+      "originalOrder": 64,
+      "file": "images/smile/emoji_0072.png",
+      "order": 72,
+      "sha256": "04b5441428fb5ced7b6d5ce1b3f63af8ebebc0f5f5218dbe261a33e12f1dc3f2"
+    },
+    {
+      "id": "builtin_emoji_0065",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0065.png",
+      "originalManifestFile": "images/smile/emoji_0065.png",
+      "originalOrder": 65,
+      "file": "images/smile/emoji_0073.png",
+      "order": 73,
+      "sha256": "df1d4cb1b51351088a436cf2b3ff822b582de59c046b83c24208ae3ea7c5dae3"
+    },
+    {
+      "id": "builtin_emoji_0066",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0066.png",
+      "originalManifestFile": "images/smile/emoji_0066.png",
+      "originalOrder": 66,
+      "file": "images/smile/emoji_0074.png",
+      "order": 74,
+      "sha256": "9dbd50577a7b0974636cc7bf5dc9d182c7c8a824d6f1d561580e7d4e5ad3fd8b"
+    },
+    {
+      "id": "builtin_emoji_0067",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0067.png",
+      "originalManifestFile": "images/smile/emoji_0067.png",
+      "originalOrder": 67,
+      "file": "images/smile/emoji_0075.png",
+      "order": 75,
+      "sha256": "0548562f2e181a8346baab657ca13fd8e38755a868e9ee09389d9017b0c389dd"
+    },
+    {
+      "id": "builtin_emoji_0068",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0068.png",
+      "originalManifestFile": "images/smile/emoji_0068.png",
+      "originalOrder": 68,
+      "file": "images/smile/emoji_0076.png",
+      "order": 76,
+      "sha256": "7b8c19f58f4afa23278c5505eb99a27efc3bbb6f340be81d7397350b5422bc18"
+    },
+    {
+      "id": "builtin_emoji_0069",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0069.png",
+      "originalManifestFile": "images/smile/emoji_0069.png",
+      "originalOrder": 69,
+      "file": "images/smile/emoji_0077.png",
+      "order": 77,
+      "sha256": "81fec2ba091c08f1ff65f6f9ae8cbe0983293b656fd3e54dea751aaa001286ba"
+    },
+    {
+      "id": "builtin_emoji_0081",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0081.png",
+      "originalManifestFile": "images/smile/emoji_0081.png",
+      "originalOrder": 81,
+      "file": "images/smile/emoji_0078.png",
+      "order": 78,
+      "sha256": "39358ba50ecb543e8743b015efe85e7413957628408bbf61bb6d2f65e11c59ad"
+    },
+    {
+      "id": "builtin_emoji_0082",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0082.png",
+      "originalManifestFile": "images/smile/emoji_0082.png",
+      "originalOrder": 82,
+      "file": "images/smile/emoji_0079.png",
+      "order": 79,
+      "sha256": "314741d99f20a3c955542b4df421d6db07407338fe69a41f329cade4515b65a3"
+    },
+    {
+      "id": "builtin_emoji_0083",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0083.png",
+      "originalManifestFile": "images/smile/emoji_0083.png",
+      "originalOrder": 83,
+      "file": "images/smile/emoji_0080.png",
+      "order": 80,
+      "sha256": "c0b698877f3734391fb2d230c4623727673f12df75f9aa0ed6940b297cdc4bb6"
+    },
+    {
+      "id": "builtin_emoji_0084",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0084.png",
+      "originalManifestFile": "images/smile/emoji_0084.png",
+      "originalOrder": 84,
+      "file": "images/smile/emoji_0081.png",
+      "order": 81,
+      "sha256": "ceda3fdf4eba0e452e6ab8134ff5c8cefdb65820452369a7b1c465429b2befd3"
+    },
+    {
+      "id": "builtin_emoji_0087",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0087.png",
+      "originalManifestFile": "images/smile/emoji_0087.png",
+      "originalOrder": 87,
+      "file": "images/smile/emoji_0082.png",
+      "order": 82,
+      "sha256": "c558874fd8202dbe1a1d99080a2d986af77ce3c9f1974dc9eba79c3c2f513b8f"
+    },
+    {
+      "id": "builtin_emoji_0088",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0088.png",
+      "originalManifestFile": "images/smile/emoji_0088.png",
+      "originalOrder": 88,
+      "file": "images/smile/emoji_0083.png",
+      "order": 83,
+      "sha256": "e2909a9ba95c485c101b8416e1705cb7a9a5ba622ed460ebd12ae9651468d1f1"
+    },
+    {
+      "id": "builtin_emoji_0089",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0089.png",
+      "originalManifestFile": "images/smile/emoji_0089.png",
+      "originalOrder": 89,
+      "file": "images/smile/emoji_0084.png",
+      "order": 84,
+      "sha256": "c855454ca4bd2166fb46b0a0f66deb31293d8e60eaaeb84c3207af49feb8c05d"
+    },
+    {
+      "id": "builtin_emoji_0090",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0090.png",
+      "originalManifestFile": "images/smile/emoji_0090.png",
+      "originalOrder": 90,
+      "file": "images/smile/emoji_0085.png",
+      "order": 85,
+      "sha256": "eefebb4da354f13a3ec7b158cb20e48b1952b788ebcc6e9c1323fa718963c1c1"
+    },
+    {
+      "id": "builtin_emoji_0091",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0091.png",
+      "originalManifestFile": "images/smile/emoji_0091.png",
+      "originalOrder": 91,
+      "file": "images/smile/emoji_0086.png",
+      "order": 86,
+      "sha256": "2e84ae0c106e32e025cc3be8337d62d14ed51efc73b39b7b9450ca42cbcf3603"
+    },
+    {
+      "id": "builtin_emoji_0094",
+      "group": "惊讶不适",
+      "sourceFile": "images/smile/emoji_0094.png",
+      "originalManifestFile": "images/smile/emoji_0094.png",
+      "originalOrder": 94,
+      "file": "images/smile/emoji_0087.png",
+      "order": 87,
+      "sha256": "a78fc4826120a16d3f221b0428c966d135b07d9fd00f87cde33e2feb2dafdcd1"
+    },
+    {
+      "id": "builtin_emoji_0076",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0076.png",
+      "originalManifestFile": "images/smile/emoji_0076.png",
+      "originalOrder": 76,
+      "file": "images/smile/emoji_0088.png",
+      "order": 88,
+      "sha256": "e328b5d1743eebc3cd69d5f88b9bf0205c8bf632625cde56253ce8c1b66b04d9"
+    },
+    {
+      "id": "builtin_emoji_0077",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0077.png",
+      "originalManifestFile": "images/smile/emoji_0077.png",
+      "originalOrder": 77,
+      "file": "images/smile/emoji_0089.png",
+      "order": 89,
+      "sha256": "1b8e6d06475b1487785f98ac802174d717801620be8fd6a2f61300fbaacba01b"
+    },
+    {
+      "id": "builtin_emoji_0078",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0078.png",
+      "originalManifestFile": "images/smile/emoji_0078.png",
+      "originalOrder": 78,
+      "file": "images/smile/emoji_0090.png",
+      "order": 90,
+      "sha256": "b32c6f74c7228d0dcf2c2919ffa3abd584442f517ff4bc6a2297eacf7afa9b3e"
+    },
+    {
+      "id": "builtin_emoji_0079",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0079.png",
+      "originalManifestFile": "images/smile/emoji_0079.png",
+      "originalOrder": 79,
+      "file": "images/smile/emoji_0091.png",
+      "order": 91,
+      "sha256": "537c96115a6003845000e512d4822a98cb9a38447392fe64fe6c8d49978dd7f9"
+    },
+    {
+      "id": "builtin_emoji_0080",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0080.png",
+      "originalManifestFile": "images/smile/emoji_0080.png",
+      "originalOrder": 80,
+      "file": "images/smile/emoji_0092.png",
+      "order": 92,
+      "sha256": "4277159d1f0f2771510782e4fd45a9e03b5e322a482ea99dee38bdba75f0c863"
+    },
+    {
+      "id": "builtin_emoji_0085",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0085.png",
+      "originalManifestFile": "images/smile/emoji_0085.png",
+      "originalOrder": 85,
+      "file": "images/smile/emoji_0093.png",
+      "order": 93,
+      "sha256": "dcb53abe0c31f6be814f2dbc21b89fd250f90dfdaa193ac0c59b35707823bfbf"
+    },
+    {
+      "id": "builtin_emoji_0092",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0092.png",
+      "originalManifestFile": "images/smile/emoji_0092.png",
+      "originalOrder": 92,
+      "file": "images/smile/emoji_0094.png",
+      "order": 94,
+      "sha256": "db0dab1c8c8f754f5a61eb4536c0e329a17e61ad02270c1eb7cdce29e8b22c1d"
+    },
+    {
+      "id": "builtin_emoji_0093",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0093.png",
+      "originalManifestFile": "images/smile/emoji_0093.png",
+      "originalOrder": 93,
+      "file": "images/smile/emoji_0095.png",
+      "order": 95,
+      "sha256": "f20eb1dbece0b8116c9d1bbae3bcacf836467f1a48854ef8b0028d43046be808"
+    },
+    {
+      "id": "builtin_emoji_0095",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0095.png",
+      "originalManifestFile": "images/smile/emoji_0095.png",
+      "originalOrder": 95,
+      "file": "images/smile/emoji_0096.png",
+      "order": 96,
+      "sha256": "c8addc3171b7e15a877d375aa54d84e95766830cfac9357c4a9118ed427dc647"
+    },
+    {
+      "id": "builtin_emoji_0096",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0096.png",
+      "originalManifestFile": "images/smile/emoji_0096.png",
+      "originalOrder": 96,
+      "file": "images/smile/emoji_0097.png",
+      "order": 97,
+      "sha256": "2f1fa01f684e6c83f5805a36492777d379cc410153e02d52b997fca1fa3a702c"
+    },
+    {
+      "id": "builtin_emoji_0097",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0097.png",
+      "originalManifestFile": "images/smile/emoji_0097.png",
+      "originalOrder": 97,
+      "file": "images/smile/emoji_0098.png",
+      "order": 98,
+      "sha256": "368a6182dc12f70ec4aa7441ee9deb5f86ac148a1744a03362aa8586179a200b"
+    },
+    {
+      "id": "builtin_emoji_0098",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0098.png",
+      "originalManifestFile": "images/smile/emoji_0098.png",
+      "originalOrder": 98,
+      "file": "images/smile/emoji_0099.png",
+      "order": 99,
+      "sha256": "18ef6cc07158cfc98b628fc7970a656b86b95ed87609a160ac8562d0d0520005"
+    },
+    {
+      "id": "builtin_emoji_0099",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0099.png",
+      "originalManifestFile": "images/smile/emoji_0099.png",
+      "originalOrder": 99,
+      "file": "images/smile/emoji_0100.png",
+      "order": 100,
+      "sha256": "c1bf31d289bb5aa72efd38dacec74edf761895c8897038151148762559973e2d"
+    },
+    {
+      "id": "builtin_emoji_0100",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0100.png",
+      "originalManifestFile": "images/smile/emoji_0100.png",
+      "originalOrder": 100,
+      "file": "images/smile/emoji_0101.png",
+      "order": 101,
+      "sha256": "b85efcb672e948b42431cdfee6773b9189f51d7065f7d08ebec67ff51f45185b"
+    },
+    {
+      "id": "builtin_emoji_0102",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0102.png",
+      "originalManifestFile": "images/smile/emoji_0102.png",
+      "originalOrder": 102,
+      "file": "images/smile/emoji_0102.png",
+      "order": 102,
+      "sha256": "9a2962bf48512463e63e56b65a927dc7ef61b9a0c253ccdb2d8c86b13d9008e9"
+    },
+    {
+      "id": "builtin_emoji_0103",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0103.png",
+      "originalManifestFile": "images/smile/emoji_0103.png",
+      "originalOrder": 103,
+      "file": "images/smile/emoji_0103.png",
+      "order": 103,
+      "sha256": "4ee3c7d2562bb999d59f78349cbb903bb0f09a1c58662767b96b843b86f79673"
+    },
+    {
+      "id": "builtin_emoji_0104",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0104.png",
+      "originalManifestFile": "images/smile/emoji_0104.png",
+      "originalOrder": 104,
+      "file": "images/smile/emoji_0104.png",
+      "order": 104,
+      "sha256": "0cd282a1303c05820ea7c869b04fdd650302bb2a5d30fc0727ff740f9d14a34a"
+    },
+    {
+      "id": "builtin_emoji_0105",
+      "group": "难过愤怒",
+      "sourceFile": "images/smile/emoji_0105.png",
+      "originalManifestFile": "images/smile/emoji_0105.png",
+      "originalOrder": 105,
+      "file": "images/smile/emoji_0105.png",
+      "order": 105,
+      "sha256": "a95a9cabb0ea19ad13d75ca87149110e6ed1d8e8c43dc883c6def8a110a555ab"
+    },
+    {
+      "id": "builtin_emoji_0106",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0106.png",
+      "originalManifestFile": "images/smile/emoji_0106.png",
+      "originalOrder": 106,
+      "file": "images/smile/emoji_0106.png",
+      "order": 106,
+      "sha256": "93bb59b0351832e5839c259172485968df983f4df1275735b804b95759db8fdc"
+    },
+    {
+      "id": "builtin_emoji_0107",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0107.png",
+      "originalManifestFile": "images/smile/emoji_0107.png",
+      "originalOrder": 107,
+      "file": "images/smile/emoji_0107.png",
+      "order": 107,
+      "sha256": "f0d2e7572e74ffdc3a9101f3cb35bd4436d97301805771f5773537969c4b205c"
+    },
+    {
+      "id": "builtin_emoji_0108",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0108.png",
+      "originalManifestFile": "images/smile/emoji_0108.png",
+      "originalOrder": 108,
+      "file": "images/smile/emoji_0108.png",
+      "order": 108,
+      "sha256": "8e61cbb96a208b16a3f282567fcc8ae6c129293abbe4cbdfed92bef29e71dca0"
+    },
+    {
+      "id": "builtin_emoji_0109",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0109.png",
+      "originalManifestFile": "images/smile/emoji_0109.png",
+      "originalOrder": 109,
+      "file": "images/smile/emoji_0109.png",
+      "order": 109,
+      "sha256": "dea3df89ad8ff420e3912fdcf77be487f2414747ba6b8edb8657a16d1f5c7bc2"
+    },
+    {
+      "id": "builtin_emoji_0110",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0110.png",
+      "originalManifestFile": "images/smile/emoji_0110.png",
+      "originalOrder": 110,
+      "file": "images/smile/emoji_0110.png",
+      "order": 110,
+      "sha256": "57bc93e4de7b309a7a17acd4315ddbebb250e5000ce0d5e9be2bf3c579392c0b"
+    },
+    {
+      "id": "builtin_emoji_0111",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0111.png",
+      "originalManifestFile": "images/smile/emoji_0111.png",
+      "originalOrder": 111,
+      "file": "images/smile/emoji_0111.png",
+      "order": 111,
+      "sha256": "1d51460622fa33067a6a652ff33c9a0b5e91119fa01ed659803a2047eec6c13d"
+    },
+    {
+      "id": "builtin_emoji_0112",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0112.png",
+      "originalManifestFile": "images/smile/emoji_0112.png",
+      "originalOrder": 112,
+      "file": "images/smile/emoji_0112.png",
+      "order": 112,
+      "sha256": "c0f86f2d67e1c912dfce7300360d93593dfbb6d7601fea02f7a24be403eafab3"
+    },
+    {
+      "id": "builtin_emoji_0113",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0113.png",
+      "originalManifestFile": "images/smile/emoji_0113.png",
+      "originalOrder": 113,
+      "file": "images/smile/emoji_0113.png",
+      "order": 113,
+      "sha256": "4cdd7d1dd6fc63067850188ef9ed4f620b0200e3dd695e024050995a89bb21cd"
+    },
+    {
+      "id": "builtin_emoji_0114",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0114.png",
+      "originalManifestFile": "images/smile/emoji_0114.png",
+      "originalOrder": 114,
+      "file": "images/smile/emoji_0114.png",
+      "order": 114,
+      "sha256": "74b6078d7a6344db5c36bd555f121a33fa0d09916eeb66cd5dceb82c5ff0ddeb"
+    },
+    {
+      "id": "builtin_emoji_0115",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0115.png",
+      "originalManifestFile": "images/smile/emoji_0115.png",
+      "originalOrder": 115,
+      "file": "images/smile/emoji_0115.png",
+      "order": 115,
+      "sha256": "5a0c69dfb1edc28ff84b37d5f82e9c72a7ac25bc4fb5397ad96bf01b69e3a441"
+    },
+    {
+      "id": "builtin_emoji_0116",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0116.png",
+      "originalManifestFile": "images/smile/emoji_0116.png",
+      "originalOrder": 116,
+      "file": "images/smile/emoji_0116.png",
+      "order": 116,
+      "sha256": "bd7082534a09e8aae3b5e6b69b414b80721928729dcb1f8c1c165cef6fb7d9ac"
+    },
+    {
+      "id": "builtin_emoji_0117",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0117.png",
+      "originalManifestFile": "images/smile/emoji_0117.png",
+      "originalOrder": 117,
+      "file": "images/smile/emoji_0117.png",
+      "order": 117,
+      "sha256": "db98a4db6ebcedef70bd115dcca4aef6fce1fd685ba96799dc5d097d16a20f37"
+    },
+    {
+      "id": "builtin_emoji_0127",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0127.png",
+      "originalManifestFile": "images/smile/emoji_0127.png",
+      "originalOrder": 127,
+      "file": "images/smile/emoji_0118.png",
+      "order": 118,
+      "sha256": "b5a4f610ad36dea5eaaca9e683e837d66ead215b7f62726fb758b71c8320f22d"
+    },
+    {
+      "id": "builtin_emoji_0128",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0128.png",
+      "originalManifestFile": "images/smile/emoji_0128.png",
+      "originalOrder": 128,
+      "file": "images/smile/emoji_0119.png",
+      "order": 119,
+      "sha256": "404aef6ac7d42cf5349f7535effa0d0d6e9451bdc04349612047063286116068"
+    },
+    {
+      "id": "builtin_emoji_0129",
+      "group": "趣味角色",
+      "sourceFile": "images/smile/emoji_0129.png",
+      "originalManifestFile": "images/smile/emoji_0129.png",
+      "originalOrder": 129,
+      "file": "images/smile/emoji_0120.png",
+      "order": 120,
+      "sha256": "fd23a180a392dc2b021c171fcd1191a5bd0e26d91b5098d1a7542640894aa6a6"
+    },
+    {
+      "id": "builtin_emoji_0346",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0346.png",
+      "originalManifestFile": "images/symbol/emoji_0346.png",
+      "originalOrder": 346,
+      "file": "images/smile/emoji_0121.png",
+      "order": 121,
+      "sha256": "605cb72c5e2e75b8488b5a373a3084fe1410b3af19178fa91c82cbe919d64faf"
+    },
+    {
+      "id": "builtin_emoji_0361",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0361.png",
+      "originalManifestFile": "images/symbol/emoji_0361.png",
+      "originalOrder": 361,
+      "file": "images/smile/emoji_0122.png",
+      "order": 122,
+      "sha256": "b987a69b7f2cf399d33bb167fd61c19b69431e91a99c9e107ebe420032cfd577"
+    },
+    {
+      "id": "builtin_emoji_0365",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0365.png",
+      "originalManifestFile": "images/symbol/emoji_0365.png",
+      "originalOrder": 365,
+      "file": "images/smile/emoji_0123.png",
+      "order": 123,
+      "sha256": "f184225747b731e9388b05f4f9ff7c6b8c2138a5c583456419689f99c047e4a3"
+    },
+    {
+      "id": "builtin_emoji_0368",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0368.png",
+      "originalManifestFile": "images/symbol/emoji_0368.png",
+      "originalOrder": 368,
+      "file": "images/smile/emoji_0124.png",
+      "order": 124,
+      "sha256": "b6edda33e8eecf423b441b9f5cd3126d52dfe045ab72265c5f758d388c8629fc"
+    },
+    {
+      "id": "builtin_emoji_0495",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0495.png",
+      "originalManifestFile": "images/symbol/emoji_0495.png",
+      "originalOrder": 495,
+      "file": "images/smile/emoji_0125.png",
+      "order": 125,
+      "sha256": "cd1a35a4b979b1b7432d2ca0c0887afe36e568cdb597ea34e5ad8b0abf4d6f33"
+    },
+    {
+      "id": "builtin_emoji_0540",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0540.png",
+      "originalManifestFile": "images/symbol/emoji_0540.png",
+      "originalOrder": 540,
+      "file": "images/smile/emoji_0126.png",
+      "order": 126,
+      "sha256": "2acf4c3ce124d4fb6cec2eb43142f88a60cf64ffa397582791d8a8d7f6e43470"
+    },
+    {
+      "id": "builtin_emoji_0548",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0548.png",
+      "originalManifestFile": "images/symbol/emoji_0548.png",
+      "originalOrder": 548,
+      "file": "images/smile/emoji_0127.png",
+      "order": 127,
+      "sha256": "fa86da659c31b3e1793a65b4b50ae19172508b1d1d6157dc10e130b976deced3"
+    },
+    {
+      "id": "builtin_emoji_0549",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0549.png",
+      "originalManifestFile": "images/symbol/emoji_0549.png",
+      "originalOrder": 549,
+      "file": "images/smile/emoji_0128.png",
+      "order": 128,
+      "sha256": "ec2a52ee8ee44dfa5fd0c2a17862182c3c422ca62e26022a52d9b9e9c354ff64"
+    },
+    {
+      "id": "builtin_emoji_0550",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0550.png",
+      "originalManifestFile": "images/symbol/emoji_0550.png",
+      "originalOrder": 550,
+      "file": "images/smile/emoji_0129.png",
+      "order": 129,
+      "sha256": "a8b382625a8231d5f1d05605e1bdaba584218a33ee105acd7a3dcda7853b4a5b"
+    },
+    {
+      "id": "builtin_emoji_0553",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0553.png",
+      "originalManifestFile": "images/symbol/emoji_0553.png",
+      "originalOrder": 553,
+      "file": "images/smile/emoji_0130.png",
+      "order": 130,
+      "sha256": "a291890545da48ae4b43b2d5562ec09683ed752e626bb5b65dabdcdc0094559c"
+    },
+    {
+      "id": "builtin_emoji_0554",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0554.png",
+      "originalManifestFile": "images/symbol/emoji_0554.png",
+      "originalOrder": 554,
+      "file": "images/smile/emoji_0131.png",
+      "order": 131,
+      "sha256": "573228e3e6895e095206960434ed406a10bd88ef179efebd2f9716729557dc55"
+    },
+    {
+      "id": "builtin_emoji_0558",
+      "group": "符号文字",
+      "sourceFile": "images/smile/emoji_0558.png",
+      "originalManifestFile": "images/symbol/emoji_0558.png",
+      "originalOrder": 558,
+      "file": "images/smile/emoji_0132.png",
+      "order": 132,
+      "sha256": "cf21adc84f84599859a2e3e76489517a54b537d5e6fc0576564a794c5f8c95c9"
+    },
+    {
+      "id": "builtin_emoji_0597",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0597.png",
+      "originalManifestFile": "images/activity/emoji_0597.png",
+      "originalOrder": 597,
+      "file": "images/smile/emoji_0133.png",
+      "order": 133,
+      "sha256": "b79a5526af6f604f1c7047ccc4f7ddb4b3bec44ce1ff76f03e148d1b1ddb16c3"
+    },
+    {
+      "id": "builtin_emoji_0598",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0598.png",
+      "originalManifestFile": "images/activity/emoji_0598.png",
+      "originalOrder": 598,
+      "file": "images/smile/emoji_0134.png",
+      "order": 134,
+      "sha256": "11399fcc5ebe5e5aaf3b98678629165bcdd6072a9c13402c89204e020b7521c9"
+    },
+    {
+      "id": "builtin_emoji_0599",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0599.png",
+      "originalManifestFile": "images/activity/emoji_0599.png",
+      "originalOrder": 599,
+      "file": "images/smile/emoji_0135.png",
+      "order": 135,
+      "sha256": "781938ae1d9eaa69c7487ff3d3773f80ed5c65f6dc4e302af34e153e9926f483"
+    },
+    {
+      "id": "builtin_emoji_0600",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0600.png",
+      "originalManifestFile": "images/activity/emoji_0600.png",
+      "originalOrder": 600,
+      "file": "images/smile/emoji_0136.png",
+      "order": 136,
+      "sha256": "928988483dcb9f15dca5abbfddf221d1fa6e58fa81676a89ba7cc3e6eefd183d"
+    },
+    {
+      "id": "builtin_emoji_0603",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0603.png",
+      "originalManifestFile": "images/activity/emoji_0603.png",
+      "originalOrder": 603,
+      "file": "images/smile/emoji_0137.png",
+      "order": 137,
+      "sha256": "1da7a6dbce04d9fa2eb6323dccfc7b681d9722d8f2703576289125fbe84d9fa7"
+    },
+    {
+      "id": "builtin_emoji_0604",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_0604.png",
+      "originalManifestFile": "images/activity/emoji_0604.png",
+      "originalOrder": 604,
+      "file": "images/smile/emoji_0138.png",
+      "order": 138,
+      "sha256": "eef193b816b44918ab20a6ba1b52deac4b79dd55447a0db9dc1ad5e796f3cf12"
+    },
+    {
+      "id": "builtin_emoji_3565",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_3565.png",
+      "originalManifestFile": "images/flag/emoji_3565.png",
+      "originalOrder": 3565,
+      "file": "images/smile/emoji_0139.png",
+      "order": 139,
+      "sha256": "e6de1305298ec889cf01ca066f8417eeed1c5254e32530264656c78c58842f68"
+    },
+    {
+      "id": "builtin_emoji_3566",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_3566.png",
+      "originalManifestFile": "images/flag/emoji_3566.png",
+      "originalOrder": 3566,
+      "file": "images/smile/emoji_0140.png",
+      "order": 140,
+      "sha256": "b719bebfd4f5edb427d321451523adfbbb3b11fdfbbdab5001587dd38adf05d9"
+    },
+    {
+      "id": "builtin_emoji_3569",
+      "group": "庆祝旗帜",
+      "sourceFile": "images/smile/emoji_3569.png",
+      "originalManifestFile": "images/flag/emoji_3569.png",
+      "originalOrder": 3569,
+      "file": "images/smile/emoji_0141.png",
+      "order": 141,
+      "sha256": "ce5f77ada400cc7d2554f9b1cb30486a7019b1d667c398c09aa4f3dc745a5883"
+    }
+  ]
+}

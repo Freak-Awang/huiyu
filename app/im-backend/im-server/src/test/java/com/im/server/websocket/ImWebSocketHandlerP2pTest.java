@@ -16,6 +16,9 @@ import com.im.server.service.P2pShareService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -167,6 +170,43 @@ class ImWebSocketHandlerP2pTest {
         handler.handleTextMessage(sender, new TextMessage("{\"cmd\":\"P2P_OFFER_CREATE\",\"seq\":7,\"data\":" + data + "}"));
         assertThat(responseFor(sender, "P2P_OFFER_CREATE").path("data").path("code").asInt()).isEqualTo(413);
         handler.handleTextMessage(sender, new TextMessage("{\"cmd\":\"P2P_OFFER_CREATE\",\"seq\":8,\"data\":{\"manifest\":{\"files\":[]}}}"));
+        assertThat(responseFor(sender, "P2P_OFFER_CREATE").path("data").path("code").asInt()).isEqualTo(400);
+        verify(messageService, never()).sendP2pMessage(any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"file,2147483649", "file,25769803776", "folder,25769803776", "file,9007199254740991", "folder,9007199254740991"})
+    void acceptsLargeOffersWithoutChangingTheByteCount(String kind, long size) throws Exception {
+        WebSocketSession sender = session("sender", 10L, true);
+        arrangeConversation(sender);
+        when(messageService.sendP2pMessage(eq(10L), any())).thenAnswer(invocation -> {
+            com.im.common.dto.SendMessageRequest request = invocation.getArgument(1);
+            ImMessage message = new ImMessage(); message.setId(100L); message.setSenderId(10L);
+            message.setConversationId(20L); message.setContent(request.getContent()); message.setStatus("SENT");
+            return message;
+        });
+        org.mockito.Mockito.doAnswer(invocation -> objectMapper.readTree(((ImMessage) invocation.getArgument(0)).getContent()))
+                .when(shareService).metadata(any());
+        when(shareService.requireActive(any())).thenReturn(share());
+        String hashField = "file".equals(kind) ? "sha256" : "manifestSha256";
+        String data = "{\"version\":2,\"conversationId\":20,\"kind\":\"" + kind + "\",\"name\":\"large\","
+                + "\"totalSize\":" + size + ",\"fileCount\":1,\"directoryCount\":0,\"" + hashField + "\":\"" + "a".repeat(64) + "\"}";
+        handler.handleTextMessage(sender, new TextMessage("{\"cmd\":\"P2P_OFFER_CREATE\",\"seq\":7,\"data\":" + data + "}"));
+        JsonNode response = responseFor(sender, "P2P_OFFER_CREATE");
+        assertThat(response.path("data").path("ok").asBoolean()).isTrue();
+        JsonNode content = objectMapper.readTree(response.path("data").path("content").asText());
+        assertThat(content.path("totalSize").asLong()).isEqualTo(size);
+        if ("file".equals(kind)) assertThat(content.path("fileSize").asLong()).isEqualTo(size);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "0.5", "9007199254740992", "9223372036854775808"})
+    void rejectsUnrepresentableOfferSizesBeforeCreatingAMessage(String size) throws Exception {
+        WebSocketSession sender = session("sender", 10L, true);
+        arrangeConversation(sender);
+        String data = "{\"version\":2,\"conversationId\":20,\"kind\":\"file\",\"name\":\"invalid\","
+                + "\"totalSize\":" + size + ",\"fileCount\":1,\"directoryCount\":0,\"sha256\":\"" + "a".repeat(64) + "\"}";
+        handler.handleTextMessage(sender, new TextMessage("{\"cmd\":\"P2P_OFFER_CREATE\",\"seq\":7,\"data\":" + data + "}"));
         assertThat(responseFor(sender, "P2P_OFFER_CREATE").path("data").path("code").asInt()).isEqualTo(400);
         verify(messageService, never()).sendP2pMessage(any(), any());
     }

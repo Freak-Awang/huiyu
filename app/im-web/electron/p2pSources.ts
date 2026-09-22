@@ -57,8 +57,6 @@ export interface P2pSourceStoreOptions {
   onProgress?: (value: { sourceId: string; progress: number; phase: string }) => void
 }
 
-const MAX_FILE_SIZE = 2 * 1024 ** 3
-const MAX_FOLDER_SIZE = 20 * 1024 ** 3
 const MAX_ENTRIES = 10_000
 const MAX_CHUNK_SIZE = 64 * 1024
 const MAX_MANIFEST_BYTES = 16 * 1024 ** 2
@@ -126,15 +124,14 @@ export async function scanP2pSource(path: string, sourceId = `src_${randomUUID()
       children.sort(comparePaths)
       for (const child of children) await visit(join(nativePath, child), `${normalized}/${child}`)
     } else if (info.isFile()) {
-      if (!Number.isSafeInteger(info.size) || info.size > MAX_FILE_SIZE) {
-        throw new Error(`文件超过 2 GiB：${rawRelative}`)
+      if (!Number.isSafeInteger(info.size) || info.size < 0) {
+        throw new Error(`文件大小无效：${rawRelative}`)
       }
       files.push({ path: nativePath, relativePath: normalized, size: info.size,
         mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, dev: info.dev, ino: info.ino })
       totalSize += info.size
-      if (files.length > MAX_ENTRIES || totalSize > MAX_FOLDER_SIZE) {
-        throw new Error('文件夹超过 10000 个文件或 20 GiB')
-      }
+      if (files.length > MAX_ENTRIES) throw new Error('文件夹超过 10000 个文件')
+      if (!Number.isSafeInteger(totalSize)) throw new Error('文件夹总大小超出可精确表示的范围')
     } else throw new Error(`文件夹包含不支持的特殊条目：${rawRelative}`)
   }
   await access(rootPath, constants.R_OK)
@@ -388,7 +385,7 @@ export class P2pSourceStore {
     const file = record.files[fileIndex]
     if (!record.manifest || !this.validated.has(sourceId) || !Number.isSafeInteger(fileIndex) || !file
       || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length)
-      || length <= 0 || length > MAX_CHUNK_SIZE || offset + length > file.size) {
+      || length <= 0 || length > MAX_CHUNK_SIZE || length > file.size - offset) {
       throw new Error('无效的源文件分片读取请求')
     }
     await this.checkSourceFile(file)

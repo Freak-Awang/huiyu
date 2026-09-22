@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { parseEmojiMessage } from './utils/emojiParser'
 import { emojiMessageSize, emojiToPlainText, isEmojiOnlyMessage, serializeEmojiSegments } from './utils/emojiMessage'
 import { getBuiltinEmojiUrl } from './utils/emojiUrl'
@@ -10,6 +11,9 @@ import { createEmojiCatalog } from './composables/useEmojiCatalog'
 import type { EmojiManifest } from './types'
 
 const manifest = JSON.parse(readFileSync(new URL('../../../public/emoji/builtin/manifest.v1.json', import.meta.url), 'utf8')) as EmojiManifest
+const renameAudit = JSON.parse(readFileSync(new URL('../../../docs/emoji/rename-2026-09-21.json', import.meta.url), 'utf8')) as {
+  entries: { id: string; file: string; order: number; sha256: string }[]
+}
 const token = '[emoji:builtin_emoji_0001]'
 
 describe('Emoji parser and segment serialization', () => {
@@ -24,7 +28,7 @@ describe('Emoji parser and segment serialization', () => {
       { type: 'emoji', id: 'builtin_emoji_0001' }, { type: 'text', text: 'def' },
     ])
   })
-  it.each([token, `${token}${token}`, `你好 ${token}\n今天 ${token}`, '[emoji:builtin_emoji_9999]', '[emoji:builtin_emoji_0674]', '[emoji:builtin_emoji_0812]'])('round trips valid and unknown IDs: %s', text => {
+  it.each([token, `${token}${token}`, `你好 ${token}\n今天 ${token}`, '[emoji:builtin_emoji_9999]', '[emoji:builtin_emoji_0674]', '[emoji:builtin_emoji_0812]', '[emoji:builtin_emoji_0118]'])('round trips valid and unknown IDs: %s', text => {
     expect(serializeEmojiSegments(parseEmojiMessage(text))).toBe(text)
     expect(emojiToPlainText(text)).not.toContain('builtin_emoji')
   })
@@ -57,10 +61,10 @@ describe('Recent Emoji', () => {
     expect(normalizeRecentEmoji([null, 1, {}, 'builtin_emoji_9999', ...ids, ids[0]], exists)).toEqual(ids.slice(0, 40))
     expect(normalizeRecentEmoji({}, exists)).toEqual([])
   })
-  it('discards deleted categories from saved recents while retaining available IDs', () => {
+  it('filters deleted IDs but retains recents moved from other categories', () => {
     const catalog = createEmojiCatalog(manifest)
-    expect(normalizeRecentEmoji(['builtin_emoji_0812', 'builtin_emoji_0001', 'builtin_emoji_3841', 'builtin_emoji_3833'], id => catalog.byId.has(id)))
-      .toEqual(['builtin_emoji_0001', 'builtin_emoji_3833'])
+    expect(normalizeRecentEmoji(['builtin_emoji_0812', 'builtin_emoji_0001', 'builtin_emoji_0118', 'builtin_emoji_0346', 'builtin_emoji_3833', 'builtin_emoji_0549', 'builtin_emoji_3569'], id => catalog.byId.has(id)))
+      .toEqual(['builtin_emoji_0001', 'builtin_emoji_0346', 'builtin_emoji_0549', 'builtin_emoji_3569'])
   })
 })
 
@@ -68,14 +72,31 @@ describe('Manifest catalog and resource URLs', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
   it('indexes only manifest IDs and preserves category order, including the 674 gap', () => {
     const result = createEmojiCatalog(manifest)
-    expect(result.byId.size).toBe(736)
+    expect(result.byId.size).toBe(manifest.items.length)
     expect(result.byId.has('builtin_emoji_0674')).toBe(false)
     expect(result.byId.has('builtin_emoji_3841')).toBe(false)
     expect(result.byId.has('builtin_emoji_0812')).toBe(false)
-    expect(result.byId.get('builtin_emoji_3833')).toMatchObject({ category: 'flag', order: 3833, file: 'images/flag/emoji_3833.png' })
-    expect([...result.byCategory.keys()].sort()).toEqual(['activity', 'flag', 'smile', 'symbol'])
-    expect(result.byCategory.get('flag')).toHaveLength(269)
-    expect(Object.isFrozen(result.byCategory.get('flag'))).toBe(true)
+    expect(result.byId.has('builtin_emoji_3833')).toBe(false)
+    expect([...result.byCategory.keys()]).toEqual(['smile'])
+    expect(result.byCategory.get('smile')).toHaveLength(manifest.items.length)
+    expect(Object.isFrozen(result.byCategory.get('smile'))).toBe(true)
+  })
+  it('preserves every audited ID, content hash and display order after renaming', () => {
+    const result = createEmojiCatalog(manifest)
+    expect(manifest.items.map(item => item.id)).toEqual(renameAudit.entries.map(entry => entry.id))
+    for (const entry of renameAudit.entries) {
+      expect(result.byId.get(entry.id)).toMatchObject({ category: 'smile', file: entry.file, order: entry.order })
+      const bytes = readFileSync(new URL(`../../../public/emoji/builtin/${entry.file}`, import.meta.url))
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.sha256)
+    }
+  })
+  it('does not infer message IDs from the new consecutive filenames', () => {
+    const result = createEmojiCatalog(manifest)
+    expect(result.byId.get('builtin_emoji_0346')).toMatchObject({ file: 'images/smile/emoji_0121.png', order: 121 })
+    expect(result.byId.get('builtin_emoji_0549')).toMatchObject({ file: 'images/smile/emoji_0128.png', order: 128 })
+    expect(result.byId.get('builtin_emoji_0127')).toMatchObject({ file: 'images/smile/emoji_0118.png', order: 118 })
+    expect(result.byId.has('builtin_emoji_0118')).toBe(false)
+    expect(result.byId.has('builtin_emoji_0121')).toBe(false)
   })
   it('rejects duplicate IDs, paths, invalid categories and path traversal', () => {
     const first = manifest.items[0]!
@@ -90,7 +111,7 @@ describe('Manifest catalog and resource URLs', () => {
     expect(() => getBuiltinEmojiUrl('https://bad.test/a.png')).toThrow()
     expect(new URL(getBuiltinEmojiUrl('images/smile/emoji_0001.png', './'), 'file:///C:/App/dist/index.html').href).toBe('file:///C:/App/dist/emoji/builtin/images/smile/emoji_0001.png')
   })
-  it.each(['food', 'nature', 'new', 'object', 'people', 'travel'])('rejects paths in deleted category %s', category => {
+  it.each(['food', 'nature', 'new', 'object', 'people', 'travel', 'activity', 'symbol', 'flag'])('rejects paths in deleted category %s', category => {
     expect(() => getBuiltinEmojiUrl(`images/${category}/emoji_0001.png`)).toThrow()
   })
   it('shares one in-flight request and caches its result', async () => {
@@ -105,7 +126,7 @@ describe('Manifest catalog and resource URLs', () => {
     expect(loadEmojiCatalog()).toBe(a)
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(getEmojiById('builtin_emoji_0001')?.file).toBe(manifest.items[0]?.file)
-    expect(getEmojisByCategory('flag')).toHaveLength(269)
+    expect(getEmojisByCategory('smile')).toHaveLength(manifest.items.length)
     expect(hasEmoji('builtin_emoji_0674')).toBe(false)
   })
   it('uses the fixed Electron bridge for file pages', async () => {
@@ -114,7 +135,7 @@ describe('Manifest catalog and resource URLs', () => {
     vi.stubGlobal('window', { location: { protocol: 'file:' }, imDesktop: { loadBuiltinEmojiManifest: bridge } })
     vi.stubGlobal('fetch', fetch)
     const { loadEmojiCatalog } = await import('./composables/useEmojiCatalog')
-    expect((await loadEmojiCatalog()).byId.size).toBe(736)
+    expect((await loadEmojiCatalog()).byId.size).toBe(manifest.items.length)
     expect(bridge).toHaveBeenCalledTimes(1)
     expect(fetch).not.toHaveBeenCalled()
   })
