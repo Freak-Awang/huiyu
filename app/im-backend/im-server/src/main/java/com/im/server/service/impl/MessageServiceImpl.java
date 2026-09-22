@@ -14,6 +14,7 @@ import com.im.common.entity.ImMessageDelivery;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
 import com.im.common.result.PageResult;
+import com.im.common.util.ServerTime;
 import com.im.server.config.P2pTransferProperties;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
@@ -413,7 +414,7 @@ public class MessageServiceImpl implements MessageService {
             if (lastReadMessageId != null) {
                 data.put("lastReadMessageId", lastReadMessageId);
             }
-            data.put("readTime", readTime != null ? readTime.toString() : null);
+            data.put("readTime", ServerTime.toIsoString(readTime));
             data.putPOJO("readMessageIds", readMessageIds);
             String payload = objectMapper.writeValueAsString(root);
             for (ImConversationMember member : members) {
@@ -466,7 +467,7 @@ public class MessageServiceImpl implements MessageService {
             data.put("content", message.getContent());
             data.put("status", message.getStatus());
             data.put("clientMsgId", message.getClientMsgId());
-            data.put("createdAt", message.getCreateTime() != null ? message.getCreateTime().toString() : null);
+            data.put("createdAt", ServerTime.toIsoString(message.getCreateTime()));
             String payload = objectMapper.writeValueAsString(root);
             for (ImConversationMember member : members) {
                 if (sessionManager.isOnline(member.getUserId())) {

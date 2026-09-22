@@ -1,5 +1,7 @@
 package com.im.common.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.im.common.config.ServerLocalDateTimeSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -37,6 +39,7 @@ public class ConversationVO {
 
     private String lastMessage; // 最后一条消息摘要
 
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime lastMessageTime; // 最后一条消息时间
 
     private Integer unreadCount; // 未读消息数

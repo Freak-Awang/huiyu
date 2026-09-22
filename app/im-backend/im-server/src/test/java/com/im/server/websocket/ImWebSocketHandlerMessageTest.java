@@ -3,6 +3,7 @@ package com.im.server.websocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.im.common.entity.ImMessage;
+import com.im.common.entity.ImConversationMember;
 import com.im.common.exception.BusinessException;
 import com.im.server.config.P2pTransferProperties;
 import com.im.server.mapper.ConversationMapper;
@@ -18,6 +19,10 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.util.Map;
+import java.util.List;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +34,7 @@ class ImWebSocketHandlerMessageTest {
     private MessageService messages;
     private WebSocketSessionManager sessions;
     private WebSocketSession session;
+    private ConversationMemberMapper members;
     private ImWebSocketHandler handler;
 
     @BeforeEach
@@ -37,8 +43,9 @@ class ImWebSocketHandlerMessageTest {
         sessions = mock(WebSocketSessionManager.class);
         session = mock(WebSocketSession.class);
         when(session.getAttributes()).thenReturn(Map.of("userId", 10L));
+        members = mock(ConversationMemberMapper.class);
         handler = new ImWebSocketHandler(mock(StringRedisTemplate.class), messages,
-                mock(ConversationMapper.class), mock(ConversationMemberMapper.class),
+                mock(ConversationMapper.class), members,
                 mock(MessageMapper.class), mock(UserMapper.class), sessions,
                 new P2pTransferRegistry(), new P2pTransferProperties(), json,
                 mock(com.im.server.service.P2pShareService.class));
@@ -80,11 +87,21 @@ class ImWebSocketHandlerMessageTest {
         stored.setClientMsgId("c1");
         stored.setMessageType("TEXT");
         stored.setContent("hello");
+        stored.setCreateTime(LocalDateTime.of(2026, 9, 22, 15, 38));
+        ImConversationMember recipient = new ImConversationMember();
+        recipient.setUserId(11L);
+        when(members.selectList(any())).thenReturn(List.of(recipient));
+        when(sessions.isOnline(11L)).thenReturn(true);
         when(messages.sendMessage(eq(10L), any())).thenReturn(stored);
         JsonNode reply = send("{\"conversationId\":20,\"clientMsgId\":\"c1\",\"content\":\"hello\"}");
         assertThat(reply.path("cmd").asText()).isEqualTo("MESSAGE_ACK");
         assertThat(reply.path("data").path("messageId").asLong()).isEqualTo(501L);
         assertThat(reply.path("data").path("clientMsgId").asText()).isEqualTo("c1");
+        ArgumentCaptor<String> received = ArgumentCaptor.forClass(String.class);
+        verify(sessions).sendToUser(eq(11L), received.capture());
+        String createdAt = json.readTree(received.getValue()).path("data").path("createdAt").asText();
+        assertThat(OffsetDateTime.parse(createdAt).toInstant())
+                .isEqualTo(stored.getCreateTime().atZone(ZoneId.systemDefault()).toInstant());
     }
 
     private JsonNode send(String data) throws Exception {

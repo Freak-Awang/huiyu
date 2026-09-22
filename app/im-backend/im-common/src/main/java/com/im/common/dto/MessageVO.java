@@ -1,5 +1,7 @@
 package com.im.common.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.im.common.config.ServerLocalDateTimeSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -30,6 +32,7 @@ public class MessageVO {
 
     private String clientMsgId; // 客户端消息ID（去重与幂等用）
 
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime createTime; // 发送时间
 
     private Integer readCount; // 已读人数
@@ -38,5 +41,6 @@ public class MessageVO {
 
     private Integer readStatus; // 当前用户已读状态：0-未读，1-已读
 
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime readTime; // 当前用户已读时间
 }

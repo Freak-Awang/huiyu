@@ -4,6 +4,7 @@
  */
 import http from './index'
 import { toServerUrl } from '../config/runtime'
+import { normalizeChatTime } from '../utils/chatTime'
 import type { AxiosProgressEvent } from 'axios'
 
 /**
@@ -161,9 +162,11 @@ export function normalizeConversation(raw: RawConversation): Conversation {
           senderName: '',
           content: rawLastMessage,
           messageType: 'TEXT',
-          createdAt: lastMessageTime,
+          createdAt: normalizeChatTime(lastMessageTime),
         }
-      : rawLastMessage || null
+      : rawLastMessage
+        ? { ...rawLastMessage, createdAt: normalizeChatTime(rawLastMessage.createdAt || lastMessageTime) }
+        : null
 
   const members =
     raw.members?.map((member) => ({
@@ -189,8 +192,8 @@ export function normalizeConversation(raw: RawConversation): Conversation {
     members,
     memberCount: raw.memberCount ?? members.length,
     pinned: Boolean(raw.pinned ?? raw.isPinned),
-    createdAt: raw.createdAt || raw.createTime || '',
-    updatedAt: raw.updatedAt || raw.updateTime || lastMessageTime || '',
+    createdAt: normalizeChatTime(raw.createdAt || raw.createTime),
+    updatedAt: normalizeChatTime(raw.updatedAt || raw.updateTime || lastMessageTime),
     unreadCount: raw.unreadCount || 0,
     mentionUnreadCount: raw.mentionUnreadCount || 0,
     muted: Boolean(raw.muted ?? raw.isMuted),

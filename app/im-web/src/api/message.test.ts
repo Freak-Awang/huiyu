@@ -6,8 +6,38 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./index', () => ({ default: {} }))
 
 import { buildTextMessageContent, getMessagePreviewContent, normalizeMessage } from './message'
+import { normalizeConversation } from './conversation'
+import { formatChatTime } from '../utils/chatTime'
 
 describe('message API normalization', () => {
+  it.each(['2026-09-22T15:38:00', '2026-09-22T15:38:00+08:00', '2026-09-22T07:38:00Z'])(
+    'keeps live messages, history, cache and both conversation preview shapes consistent: %s', time => {
+      const live = normalizeMessage({ createdAt: time })
+      const history = normalizeMessage({ createTime: time })
+      const cached = normalizeMessage(live)
+      const summary = normalizeConversation({ lastMessage: '11', lastMessageTime: time })
+      const nested = normalizeConversation({ lastMessage: {
+        messageId: '1', senderId: '2', senderName: '景泰', content: '11', messageType: 'TEXT', createdAt: time,
+      } })
+      const times = [live.createdAt, history.createdAt, cached.createdAt,
+        summary.lastMessage?.createdAt, nested.lastMessage?.createdAt]
+      expect(new Set(times).size).toBe(1)
+      const now = new Date(2026, 8, 22, 16, 0)
+      expect(new Set(times.map(value => formatChatTime(value, now))).size).toBe(1)
+      if (!time.endsWith('Z') && !time.includes('+')) {
+        expect(formatChatTime(live.createdAt, now)).toBe('15:38')
+      }
+    },
+  )
+
+  it('uses the stored message time instead of a later WebSocket delivery timestamp', () => {
+    const message = normalizeMessage({
+      createdAt: '2026-09-22T15:38:00+08:00',
+      timestamp: Date.parse('2026-09-22T08:00:00Z'),
+    })
+    expect(message.createdAt).toBe('2026-09-22T07:38:00.000Z')
+  })
+
   it.each([
     JSON.stringify({ id: 'smile', name: '微笑', url: '/assets/smile.svg' }),
     JSON.stringify({ id: 'custom-1', name: '自定义', source: 'custom', localOnly: true }),

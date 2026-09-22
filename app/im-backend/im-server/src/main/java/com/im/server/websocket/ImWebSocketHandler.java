@@ -11,6 +11,7 @@ import com.im.common.entity.ImMessage;
 import com.im.common.entity.ImP2pShare;
 import com.im.common.entity.SysUser;
 import com.im.common.exception.BusinessException;
+import com.im.common.util.ServerTime;
 import com.im.server.config.P2pTransferProperties;
 import com.im.server.mapper.ConversationMapper;
 import com.im.server.mapper.ConversationMemberMapper;
@@ -523,7 +524,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             response.put("status", message.getStatus());
             response.put("shareState", share.getState());
             response.put("revision", share.getRevision());
-            response.put("createdAt", message.getCreateTime() != null ? message.getCreateTime().toString() : null);
+            response.put("createdAt", ServerTime.toIsoString(message.getCreateTime()));
             sendCommand(session, CMD_P2P_OFFER_CREATE, seq, response);
             pushMessageToConversationMembers(message.getConversationId(), senderId, message);
         } catch (BusinessException e) {
@@ -811,7 +812,7 @@ public class ImWebSocketHandler extends TextWebSocketHandler {
             receiveData.put("content", msg.getContent());
             receiveData.put("clientMsgId", msg.getClientMsgId());
             receiveData.put("status", msg.getStatus());
-            receiveData.put("createdAt", msg.getCreateTime() != null ? msg.getCreateTime().toString() : null);
+            receiveData.put("createdAt", ServerTime.toIsoString(msg.getCreateTime()));
             receiveData.put("timestamp", System.currentTimeMillis());
 
             String messageJson = objectMapper.writeValueAsString(receiveMsg);

@@ -1186,6 +1186,7 @@ import { useAuthStore, type UserInfo } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useConversationDrafts, type ConversationDraft } from '../stores/conversationDrafts'
 import { createMessageSender } from '../utils/messageSender'
+import { formatChatTime as formatTime } from '../utils/chatTime'
 import { isChatForeground, isConversationBeingRead } from '../utils/chatAttention'
 import { useSettingsStore } from '../stores/settings'
 import { useUserProfileStore, type UserProfileSnapshot } from '../stores/userProfiles'
@@ -3524,13 +3525,7 @@ async function handleWsMessage(msg: WsMessage) {
     case 'MESSAGE_RECEIVE': {
       // Incoming messages update conversation state, ACK delivery, optionally notify, then only auto-scroll if user was at bottom.
       const data = msg.data
-      const receivedMessage = normalizeMessage({
-        ...data,
-        createdAt:
-          data.createdAt ||
-          data.createTime ||
-          (data.timestamp ? new Date(Number(data.timestamp)).toISOString() : undefined),
-      })
+      const receivedMessage = normalizeMessage(data)
       const isCurrentConversation =
         chatStore.currentConversation?.conversationId === receivedMessage.conversationId
       const wasAtBottom = isCurrentConversation && isMessageAreaNearBottom()
@@ -3798,18 +3793,6 @@ async function startSingleChat(user: any) {
 // Utility
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 10)
-}
-
-function formatTime(ts?: string): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  if (d.toDateString() === now.toDateString()) return time
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  if (d.toDateString() === yesterday.toDateString()) return `昨天 ${time}`
-  return `${d.getMonth() + 1}/${d.getDate()} ${time}`
 }
 
 function formatFileSize(size: number): string {

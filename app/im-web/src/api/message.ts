@@ -6,6 +6,7 @@ import http from './index'
 import type { P2pAttachmentContent } from '../utils/p2pProtocol'
 import { toServerUrl } from '../config/runtime'
 import { emojiToPlainText } from '../features/emoji/utils/emojiMessage'
+import { normalizeChatTime } from '../utils/chatTime'
 
 export function getMessagePolicy() {
   return http.get<{ recallWindowMs: number; serverTime: number }>('/api/messages/policy')
@@ -171,7 +172,7 @@ interface RawMessagePage {
  * @returns 规范化后的 Message 对象
  */
 export function normalizeMessage(raw: RawMessage): Message {
-  const timestamp = normalizeMessageTime(raw.createdAt || raw.createTime || raw.timestamp)
+  const timestamp = normalizeChatTime(raw.createdAt || raw.createTime || raw.timestamp)
   const content = raw.content || ''
   const parsedText = parseTextContent(raw.messageType || 'TEXT', content)
   const messageType = raw.messageType || 'TEXT'
@@ -204,23 +205,8 @@ export function normalizeMessage(raw: RawMessage): Message {
     readCount: Number(raw.readCount || 0),
     recipientCount: Number(raw.recipientCount || 0),
     readStatus: raw.readStatus === true ? 1 : Number(raw.readStatus || 0),
-    readTime: raw.readTime || undefined,
+    readTime: normalizeChatTime(raw.readTime) || undefined,
   }
-}
-
-function normalizeMessageTime(value?: string | number | null): string {
-  if (value === undefined || value === null || value === '') return ''
-  if (typeof value === 'number') return new Date(value).toISOString()
-
-  const raw = String(value)
-  if (/^\d+$/.test(raw)) return new Date(Number(raw)).toISOString()
-  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) return raw
-
-  // Backend LocalDateTime values are emitted without a timezone; the server runs in UTC.
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
-    return `${raw}Z`
-  }
-  return raw
 }
 
 function parseFileDisplayName(content: string): string {
