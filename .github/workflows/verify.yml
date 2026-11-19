@@ -34,24 +34,33 @@ jobs:
         working-directory: app/im-web
         run: npm ci
 
-      - name: Build IM web
+      - name: Test IM web
         working-directory: app/im-web
-        run: |
-          npm test
-          npm run build
-          npm run build:electron
-          npm audit --omit=dev --audit-level=high
+        run: npm test
+
+      - name: Build IM web and Electron
+        working-directory: app/im-web
+        run: npm run build && npm run build:electron
+
+      - name: Audit IM web production dependencies
+        working-directory: app/im-web
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Install admin dependencies
         working-directory: app/im-admin
         run: npm ci
 
+      - name: Test admin
+        working-directory: app/im-admin
+        run: npm test
+
       - name: Build admin
         working-directory: app/im-admin
-        run: |
-          npm test
-          npm run build
-          npm audit --omit=dev --audit-level=high
+        run: npm run build
+
+      - name: Audit admin production dependencies
+        working-directory: app/im-admin
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Validate PowerShell scripts
         shell: pwsh

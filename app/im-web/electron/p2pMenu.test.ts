@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,10 +17,12 @@ import type { P2pSourceDescriptor } from './p2pSources'
 const sender = { id: 1, once: vi.fn(), send: vi.fn(), isDestroyed: () => false }
 const event = { sender } as unknown as IpcMainInvokeEvent
 let close: () => Promise<void>
+let tempRoot: string
 function invoke<T>(name: string, ...args: unknown[]) { return environment.handlers.get(name)!(event, ...args) as Promise<T> }
 beforeEach(async () => {
   vi.clearAllMocks()
-  environment.directory = await mkdtemp(join(tmpdir(), 'arttalk-p2p-menu-test-'))
+  tempRoot = await realpath(tmpdir())
+  environment.directory = await mkdtemp(join(tempRoot, 'arttalk-p2p-menu-test-'))
   const native = registerP2pHandlers({ assertTrusted: () => {}, getWindow: () => undefined, getStorageDirectory: () => environment.directory })
   close = native.suspendAll
   await invoke('p2p:account', '1')
@@ -28,7 +30,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await close()
   const path = resolve(environment.directory)
-  if (dirname(path).toLowerCase() !== resolve(tmpdir()).toLowerCase() || !basename(path).startsWith('arttalk-p2p-menu-test-')) throw new Error('Unsafe test cleanup')
+  if (dirname(path) !== tempRoot || !basename(path).startsWith('arttalk-p2p-menu-test-')) throw new Error('Unsafe test cleanup')
   await rm(path, { recursive: true, force: true })
 })
 async function outgoing() {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,7 +17,7 @@ describe('native P2P sources', () => {
   })
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'arttalk-p2p-source-test-'))
+    directory = await mkdtemp(join(await realpath(tmpdir()), 'arttalk-p2p-source-test-'))
     persisted = new Map()
     progress = vi.fn()
     store = setup()
@@ -75,6 +75,15 @@ describe('native P2P sources', () => {
     await mkdir(folder)
     await symlink(target, join(folder, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
     await expect(scanP2pSource(folder)).rejects.toThrow(/链接/)
+  })
+
+  it('rejects a file selected through a linked ancestor', async () => {
+    const target = join(directory, 'target')
+    const link = join(directory, 'linked')
+    await mkdir(target)
+    await writeFile(join(target, 'source.txt'), 'content')
+    await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir')
+    await expect(scanP2pSource(join(link, 'source.txt'))).rejects.toThrow(/链接/)
   })
 
   it('rejects normalization collisions and unsafe names', async () => {

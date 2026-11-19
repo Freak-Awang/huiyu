@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -67,17 +67,19 @@ import type { NativeTask } from './p2pTaskStorage'
 
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 describe('native P2P large-file boundaries', () => {
+  let tempRoot: string
   let directory: string
   let receivers: P2pReceiver[]
   beforeEach(async () => {
     disk.files.clear(); disk.reads = []; disk.writes = []; disk.truncates = []; disk.streams = []
     receivers = []
-    directory = await mkdtemp(join(tmpdir(), 'arttalk-p2p-large-test-'))
+    tempRoot = await realpath(tmpdir())
+    directory = await mkdtemp(join(tempRoot, 'arttalk-p2p-large-test-'))
   })
   afterEach(async () => {
     for (const receiver of receivers) await receiver.suspend('manual')
     const path = resolve(directory)
-    if (dirname(path).toLowerCase() !== resolve(tmpdir()).toLowerCase() || !basename(path).startsWith('arttalk-p2p-large-test-')) throw new Error('Unsafe test cleanup')
+    if (dirname(path) !== tempRoot || !basename(path).startsWith('arttalk-p2p-large-test-')) throw new Error('Unsafe test cleanup')
     await rm(path, { recursive: true, force: true })
   })
   async function virtualFile(name: string, size: number, sample = Buffer.from('abc')) {
